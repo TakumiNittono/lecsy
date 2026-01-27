@@ -9,36 +9,47 @@ export function createClient() {
     {
       cookies: {
         getAll() {
-          return document.cookie.split('; ').map(cookie => {
-            const [name, ...rest] = cookie.split('=')
-            return { 
-              name: name.trim(), 
-              value: decodeURIComponent(rest.join('=')) 
-            }
-          }).filter(cookie => cookie.name)
+          const cookies: Array<{ name: string; value: string }> = []
+          if (typeof document !== 'undefined') {
+            document.cookie.split('; ').forEach(cookie => {
+              const [name, ...rest] = cookie.split('=')
+              if (name) {
+                cookies.push({
+                  name: name.trim(),
+                  value: decodeURIComponent(rest.join('='))
+                })
+              }
+            })
+          }
+          return cookies
         },
         setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
+          if (typeof document === 'undefined') return
+          
           cookiesToSet.forEach(({ name, value, options }) => {
-            const cookieOptions: string[] = []
+            const parts: string[] = []
             
-            // デフォルト値を設定
-            const path = options?.path || '/'
-            const maxAge = options?.maxAge || 60 * 60 * 24 * 365 // 1年
+            // 値
+            parts.push(`${name}=${encodeURIComponent(value)}`)
+            
+            // オプション
+            if (options?.path) parts.push(`path=${options.path}`)
+            if (options?.maxAge) parts.push(`max-age=${options.maxAge}`)
+            if (options?.expires) parts.push(`expires=${options.expires}`)
+            
+            // SameSite (重要: LaxまたはNone)
             const sameSite = options?.sameSite || 'Lax'
-            const secure = options?.secure !== undefined ? options.secure : window.location.protocol === 'https:'
+            parts.push(`SameSite=${sameSite}`)
             
-            cookieOptions.push(`path=${path}`)
-            cookieOptions.push(`max-age=${maxAge}`)
-            cookieOptions.push(`SameSite=${sameSite}`)
-            if (secure) {
-              cookieOptions.push('Secure')
-            }
-            if (options?.domain) {
-              cookieOptions.push(`domain=${options.domain}`)
+            // Secure (HTTPSの場合)
+            if (options?.secure !== false && window.location.protocol === 'https:') {
+              parts.push('Secure')
             }
             
-            const cookieString = `${name}=${encodeURIComponent(value)}; ${cookieOptions.join('; ')}`
-            document.cookie = cookieString
+            // Domain
+            if (options?.domain) parts.push(`domain=${options.domain}`)
+            
+            document.cookie = parts.join('; ')
           })
         },
       },
