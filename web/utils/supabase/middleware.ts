@@ -27,6 +27,11 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
+  // 認証コールバックパスではセッションチェックをスキップ
+  if (request.nextUrl.pathname.startsWith('/auth/callback')) {
+    return supabaseResponse
+  }
+
   // セッションをリフレッシュ
   const {
     data: { user },
