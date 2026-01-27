@@ -28,14 +28,18 @@ function LoginForm() {
         method: 'GET',
       });
 
-      if (response.redirected) {
-        // リダイレクトレスポンスの場合、そのURLに移動
-        window.location.href = response.url;
-      } else if (!response.ok) {
-        const errorData = await response.json();
-        setError(errorData.error || 'ログインに失敗しました');
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'ログインに失敗しました');
+        return;
+      }
+
+      if (data.url) {
+        // OAuth URLにリダイレクト
+        window.location.href = data.url;
       } else {
-        setError('予期しないレスポンスが返されました');
+        setError('認証URLの取得に失敗しました');
       }
     } catch (err: any) {
       console.error("Login error:", err);

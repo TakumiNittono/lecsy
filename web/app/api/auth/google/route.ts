@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=${redirectTo}`,
+        redirectTo: `${request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
       },
     })
 
@@ -20,7 +20,8 @@ export async function GET(request: Request) {
     }
 
     if (data?.url) {
-      return NextResponse.redirect(data.url)
+      // URLをJSONで返す（リダイレクトではなく）
+      return NextResponse.json({ url: data.url })
     }
 
     return NextResponse.json({ error: 'Failed to get OAuth URL' }, { status: 500 })
