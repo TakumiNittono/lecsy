@@ -1,21 +1,22 @@
 import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
-  const next = requestUrl.searchParams.get('next') ?? '/'
+  const next = requestUrl.searchParams.get('next') ?? '/app'
 
   if (code) {
-    const cookieStore = cookies()
     const supabase = createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
+    
     if (!error) {
-      return NextResponse.redirect(new URL(next, request.url))
+      // リダイレクト先のURLを構築
+      const redirectUrl = new URL(next, requestUrl.origin)
+      return NextResponse.redirect(redirectUrl)
     }
   }
 
   // エラーまたはcodeがない場合はログインページにリダイレクト
-  return NextResponse.redirect(new URL('/login', request.url))
+  return NextResponse.redirect(new URL('/login', requestUrl.origin))
 }
