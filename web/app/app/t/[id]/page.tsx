@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import CopyButton from '@/components/CopyButton'
+import EditTitleForm from '@/components/EditTitleForm'
 
 export default async function TranscriptDetailPage({
   params,
@@ -104,9 +105,11 @@ export default async function TranscriptDetailPage({
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                {transcript.title || `Lecture ${formattedDate}`}
-              </h1>
+              <EditTitleForm
+                transcriptId={transcript.id}
+                currentTitle={transcript.title}
+                defaultTitle={`Lecture ${formattedDate}`}
+              />
               <div className="flex items-center gap-4 text-sm text-gray-500">
                 <span>{formattedDate}</span>
                 <span className="flex items-center gap-1">
