@@ -13,12 +13,24 @@ export default function LoginPage() {
       setLoading(true);
       setError(null);
 
-      // 環境変数の確認
+      // 環境変数の確認とデバッグ
+      console.log("Environment check:", {
+        url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+        hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        origin: window.location.origin
+      });
+
       if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        throw new Error("Supabase環境変数が設定されていません");
+        const missingVars = [];
+        if (!process.env.NEXT_PUBLIC_SUPABASE_URL) missingVars.push("NEXT_PUBLIC_SUPABASE_URL");
+        if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) missingVars.push("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+        throw new Error(`環境変数が設定されていません: ${missingVars.join(", ")}`);
       }
 
+      console.log("Creating Supabase client...");
       const supabase = createClient();
+      
+      console.log("Calling signInWithOAuth...");
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -26,12 +38,18 @@ export default function LoginPage() {
         },
       });
 
+      console.log("OAuth response:", { data, error: signInError });
+
       if (signInError) {
         console.error("Error signing in with Google:", signInError);
         setError(signInError.message);
       } else if (data?.url) {
+        console.log("Redirecting to:", data.url);
         // リダイレクトが成功した場合
         window.location.href = data.url;
+      } else {
+        console.warn("No URL returned from OAuth");
+        setError("認証URLの取得に失敗しました");
       }
     } catch (err: any) {
       console.error("Login error:", err);
