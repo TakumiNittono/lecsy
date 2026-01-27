@@ -1,6 +1,22 @@
+"use client";
+
 import Link from "next/link";
+import { createClient } from "@/utils/supabase/client";
 
 export default function LoginPage() {
+  const handleGoogleLogin = async () => {
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (error) {
+      console.error("Error signing in with Google:", error);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-white flex flex-col">
       {/* Header */}
@@ -24,7 +40,10 @@ export default function LoginPage() {
 
           <div className="space-y-4">
             {/* Google Login */}
-            <button className="w-full flex items-center justify-center gap-3 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            <button
+              onClick={handleGoogleLogin}
+              className="w-full flex items-center justify-center gap-3 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"

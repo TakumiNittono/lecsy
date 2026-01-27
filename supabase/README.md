@@ -113,6 +113,7 @@ supabase login
 #### プロジェクトリンク
 
 ```bash
+# プロジェクト参照IDを指定（Supabase Dashboard > Settings > General から取得）
 supabase link --project-ref your-project-ref
 ```
 
