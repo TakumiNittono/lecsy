@@ -17,15 +17,25 @@ export default async function TranscriptDetailPage({
   }
 
   // 講義詳細を取得
-  const { data: transcript, error: transcriptError } = await supabase
+  const { data: transcriptRaw, error: transcriptError } = await supabase
     .from('transcripts')
     .select('id, title, content, created_at, updated_at, duration, word_count, language')
     .eq('id', params.id)
     .eq('user_id', user.id)
     .single()
 
-  if (transcriptError || !transcript) {
+  if (transcriptError || !transcriptRaw) {
     notFound()
+  }
+
+  // durationを数値に変換
+  const transcript = {
+    ...transcriptRaw,
+    duration: transcriptRaw.duration != null 
+      ? (typeof transcriptRaw.duration === 'string' 
+          ? parseFloat(transcriptRaw.duration) 
+          : Number(transcriptRaw.duration))
+      : null
   }
 
   const handleSignOut = async () => {
@@ -69,7 +79,7 @@ export default async function TranscriptDetailPage({
   return (
     <main className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="border-b border-gray-200 bg-white sticky top-0 z-50">
+      <header className="border-b border-gray-200 bg-white sticky top-0 z-50 no-print">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <Link href="/app" className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">
             lecsy
@@ -93,7 +103,7 @@ export default async function TranscriptDetailPage({
         {/* Back Button */}
         <Link
           href="/app"
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors"
+          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors no-print"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -136,8 +146,19 @@ export default async function TranscriptDetailPage({
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
-            <CopyButton content={transcript.content} />
+          <div className="flex items-center gap-3 pt-4 border-t border-gray-200 flex-wrap no-print">
+            {transcript.content && (
+              <CopyButton content={transcript.content} />
+            )}
+            <button
+              onClick={() => window.print()}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print
+            </button>
             <form action={handleDelete}>
               <button
                 type="submit"
@@ -156,11 +177,56 @@ export default async function TranscriptDetailPage({
 
         {/* Transcript Content */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="prose max-w-none">
-            <div className="whitespace-pre-wrap text-gray-900 leading-relaxed">
-              {transcript.content || 'No content available'}
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Transcript</h2>
+            <div className="text-sm text-gray-500">
+              {transcript.content ? `${transcript.content.length.toLocaleString()} characters` : 'No content'}
             </div>
           </div>
+          
+          {transcript.content ? (
+            <div className="relative">
+              {/* テキストコンテンツ */}
+              <div 
+                className="prose prose-lg max-w-none 
+                  text-gray-900 
+                  leading-7 
+                  font-normal
+                  whitespace-pre-wrap 
+                  break-words
+                  selection:bg-blue-200
+                  selection:text-gray-900
+                  focus:outline-none
+                  p-4
+                  bg-gray-50
+                  rounded-lg
+                  border border-gray-200
+                  min-h-[200px]
+                  max-h-[70vh]
+                  overflow-y-auto
+                  scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
+                style={{
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                  fontSize: '16px',
+                  lineHeight: '1.75',
+                }}
+              >
+                {transcript.content}
+              </div>
+              
+              {/* スクロールインジケーター */}
+              <div className="mt-2 text-xs text-gray-400 text-center">
+                Scroll to read full transcript
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p>No content available</p>
+            </div>
+          )}
         </div>
       </div>
     </main>
