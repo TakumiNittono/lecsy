@@ -103,7 +103,7 @@ export default async function TranscriptDetailPage({
       : 'N/A'
 
     return (
-    <main className="min-h-screen bg-gray-50">
+      <main className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="border-b border-gray-200 bg-white sticky top-0 z-50 no-print">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
@@ -255,7 +255,7 @@ export default async function TranscriptDetailPage({
           )}
         </div>
       </div>
-    </main>
+      </main>
     )
   } catch (error) {
     console.error('TranscriptDetailPage error:', error)
