@@ -23,36 +23,32 @@ function LoginForm() {
       setLoading(true);
       setError(null);
 
-      // サーバー側のAPIルートを使用してOAuth URLを取得
-      const response = await fetch(`/api/auth/google?redirectTo=${encodeURIComponent(redirectTo)}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      // レスポンスのContent-Typeを確認
-      const contentType = response.headers.get('content-type');
+      // クライアント側で直接OAuthを開始（クッキーストレージを使用）
+      const { createClient } = await import('@/utils/supabase/client')
+      const supabase = createClient()
       
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response:', text.substring(0, 200));
-        setError('サーバーからの予期しないレスポンスが返されました。APIルートを確認してください。');
-        return;
+      const { data, error: signInError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      })
+
+      if (signInError) {
+        console.error('OAuth error:', signInError)
+        setError(signInError.message)
+        return
       }
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || 'ログインに失敗しました');
-        return;
-      }
-
-      if (data.url) {
+      if (data?.url) {
         // OAuth URLにリダイレクト
-        window.location.href = data.url;
+        window.location.href = data.url
       } else {
-        setError('認証URLの取得に失敗しました');
+        setError('認証URLの取得に失敗しました')
       }
     } catch (err: any) {
       console.error("Login error:", err);

@@ -21,14 +21,23 @@ export function createClient() {
           cookiesToSet.forEach(({ name, value, options }) => {
             const cookieOptions: string[] = []
             
-            if (options?.path) cookieOptions.push(`path=${options.path}`)
-            if (options?.maxAge) cookieOptions.push(`max-age=${options.maxAge}`)
-            if (options?.expires) cookieOptions.push(`expires=${options.expires}`)
-            if (options?.sameSite) cookieOptions.push(`SameSite=${options.sameSite}`)
-            if (options?.secure) cookieOptions.push('Secure')
-            if (options?.domain) cookieOptions.push(`domain=${options.domain}`)
+            // デフォルト値を設定
+            const path = options?.path || '/'
+            const maxAge = options?.maxAge || 60 * 60 * 24 * 365 // 1年
+            const sameSite = options?.sameSite || 'Lax'
+            const secure = options?.secure !== undefined ? options.secure : window.location.protocol === 'https:'
             
-            const cookieString = `${name}=${encodeURIComponent(value)}${cookieOptions.length > 0 ? '; ' + cookieOptions.join('; ') : ''}`
+            cookieOptions.push(`path=${path}`)
+            cookieOptions.push(`max-age=${maxAge}`)
+            cookieOptions.push(`SameSite=${sameSite}`)
+            if (secure) {
+              cookieOptions.push('Secure')
+            }
+            if (options?.domain) {
+              cookieOptions.push(`domain=${options.domain}`)
+            }
+            
+            const cookieString = `${name}=${encodeURIComponent(value)}; ${cookieOptions.join('; ')}`
             document.cookie = cookieString
           })
         },
