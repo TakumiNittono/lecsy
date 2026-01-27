@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import Link from "next/link"
 import SearchBar from "./SearchBar"
+import type { ReactNode } from "react"
 
 interface Transcript {
   id: string
@@ -90,9 +91,10 @@ export default function TranscriptList({ transcripts }: TranscriptListProps) {
               : "No content"
 
             // 検索クエリが含まれている場合、ハイライト表示
-            const highlightText = (text: string, query: string) => {
+            const highlightText = (text: string, query: string): ReactNode => {
               if (!query.trim()) return text
-              const parts = text.split(new RegExp(`(${query})`, "gi"))
+              const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, "gi")
+              const parts = text.split(regex)
               return (
                 <>
                   {parts.map((part, index) =>
@@ -101,7 +103,7 @@ export default function TranscriptList({ transcripts }: TranscriptListProps) {
                         {part}
                       </mark>
                     ) : (
-                      part
+                      <span key={index}>{part}</span>
                     )
                   )}
                 </>

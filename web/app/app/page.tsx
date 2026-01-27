@@ -40,7 +40,15 @@ export default async function AppPage() {
   // 統計情報を計算
   const totalLectures = transcripts?.length || 0
   const totalDuration = transcripts?.reduce((sum, t) => {
-    const duration = t.duration ? Number(t.duration) : 0
+    // durationはNUMERIC型なので、文字列として返される可能性がある
+    let duration = 0
+    if (t.duration != null) {
+      if (typeof t.duration === 'string') {
+        duration = parseFloat(t.duration) || 0
+      } else if (typeof t.duration === 'number') {
+        duration = t.duration
+      }
+    }
     return sum + duration
   }, 0) || 0
   const totalHours = Math.floor(totalDuration / 3600)
