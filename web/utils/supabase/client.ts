@@ -9,12 +9,22 @@ export function createClient() {
         getAll() {
           return document.cookie.split('; ').map(cookie => {
             const [name, ...rest] = cookie.split('=')
-            return { name, value: rest.join('=') }
-          })
+            return { name: name.trim(), value: decodeURIComponent(rest.join('=')) }
+          }).filter(cookie => cookie.name)
         },
         setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            document.cookie = `${name}=${value}; path=${options?.path || '/'}; max-age=${options?.maxAge || 31536000}; SameSite=${options?.sameSite || 'lax'}${options?.secure ? '; Secure' : ''}`
+            const cookieOptions: string[] = []
+            
+            if (options?.path) cookieOptions.push(`path=${options.path}`)
+            if (options?.maxAge) cookieOptions.push(`max-age=${options.maxAge}`)
+            if (options?.expires) cookieOptions.push(`expires=${options.expires}`)
+            if (options?.sameSite) cookieOptions.push(`SameSite=${options.sameSite}`)
+            if (options?.secure) cookieOptions.push('Secure')
+            if (options?.domain) cookieOptions.push(`domain=${options.domain}`)
+            
+            const cookieString = `${name}=${encodeURIComponent(value)}${cookieOptions.length > 0 ? '; ' + cookieOptions.join('; ') : ''}`
+            document.cookie = cookieString
           })
         },
       },
