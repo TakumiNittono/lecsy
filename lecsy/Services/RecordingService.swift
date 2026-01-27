@@ -68,18 +68,27 @@ class RecordingService: NSObject, ObservableObject {
             throw RecordingError.insufficientStorage
         }
         
-        // オーディオセッション設定（長時間録音に最適化）
+        // オーディオセッション設定（バックグラウンド録音対応）
         print("🔴 オーディオセッションを設定します")
         let audioSession = AVAudioSession.sharedInstance()
         do {
-            // 長時間録音に最適化された設定
+            // バックグラウンド録音に最適化された設定
+            // .allowBluetoothA2DPは削除（録音には不要で、エラーの原因になる可能性がある）
             try audioSession.setCategory(
                 .playAndRecord,
                 mode: .default,
-                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
+                options: [.defaultToSpeaker, .allowBluetooth]
             )
-            try audioSession.setActive(true)
-            print("🔴 オーディオセッション設定成功")
+            
+            // バックグラウンド録音を有効化
+            try audioSession.setActive(true, options: [])
+            
+            // バックグラウンド録音が有効か確認
+            if !audioSession.isOtherAudioPlaying {
+                print("🔴 オーディオセッション設定成功（バックグラウンド録音有効）")
+            } else {
+                print("⚠️ 他のオーディオが再生中です")
+            }
         } catch {
             print("🔴 オーディオセッション設定エラー: \(error)")
             throw RecordingError.recordingFailed
@@ -138,6 +147,7 @@ class RecordingService: NSObject, ObservableObject {
         startLiveActivity()
         
         // タイマー開始（1秒ごとに更新、Live Activityも1秒ごとに更新）
+        // バックグラウンドでも動作するようにRunLoopに追加
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
             guard let self = self, let startTime = self.recordingStartTime else {
                 timer.invalidate()
@@ -152,8 +162,20 @@ class RecordingService: NSObject, ObservableObject {
                 return
             }
             
+            // 録音が継続しているか確認（ロック画面時など）
+            if let recorder = self.audioRecorder, !recorder.isRecording {
+                print("⚠️ 録音が停止しています。再開を試みます...")
+                // 録音を再開
+                recorder.record()
+            }
+            
             // Live Activityを1秒ごとに更新（ロック画面のストップウォッチを滑らかに動かすため）
             self.updateLiveActivity()
+        }
+        
+        // バックグラウンドでもタイマーが動作するようにRunLoopに追加
+        if let timer = timer {
+            RunLoop.current.add(timer, forMode: .common)
         }
         
         // バックグラウンドタスクの定期更新（30秒ごと）
