@@ -7,8 +7,9 @@ import EditTitleForm from '@/components/EditTitleForm'
 export default async function TranscriptDetailPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  const { id } = await params
   const supabase = createClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 
@@ -16,15 +17,31 @@ export default async function TranscriptDetailPage({
     redirect('/login')
   }
 
+  // IDのバリデーション
+  if (!id || typeof id !== 'string') {
+    notFound()
+  }
+
   // 講義詳細を取得
   const { data: transcriptRaw, error: transcriptError } = await supabase
     .from('transcripts')
     .select('id, title, content, created_at, updated_at, duration, word_count, language')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('user_id', user.id)
     .single()
 
-  if (transcriptError || !transcriptRaw) {
+  // エラーハンドリングを改善
+  if (transcriptError) {
+    console.error('Error fetching transcript:', transcriptError)
+    // PGRST116エラー（レコードが見つからない）の場合のみnotFoundを呼ぶ
+    if (transcriptError.code === 'PGRST116') {
+      notFound()
+    }
+    // その他のエラーの場合はエラーページを表示
+    throw new Error(`Failed to load transcript: ${transcriptError.message}`)
+  }
+
+  if (!transcriptRaw) {
     notFound()
   }
 
@@ -51,7 +68,7 @@ export default async function TranscriptDetailPage({
     const { error } = await supabase
       .from('transcripts')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id)
     
     if (!error) {
