@@ -49,10 +49,29 @@ export default async function AppPage() {
         duration = t.duration
       }
     }
+    // デバッグログ（開発環境のみ）
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Duration processing:', {
+        raw: t.duration,
+        type: typeof t.duration,
+        parsed: duration,
+        title: t.title
+      })
+    }
     return sum + duration
   }, 0) || 0
   const totalHours = Math.floor(totalDuration / 3600)
   const totalMinutes = Math.floor((totalDuration % 3600) / 60)
+  
+  // デバッグログ（開発環境のみ）
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Total duration calculation:', {
+      totalDuration,
+      totalHours,
+      totalMinutes,
+      transcriptsCount: transcripts?.length
+    })
+  }
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -135,8 +154,18 @@ export default async function AppPage() {
               <p className="text-gray-500 text-sm">{transcriptsError.message}</p>
             </div>
           </div>
+        ) : transcripts && transcripts.length > 0 ? (
+          <TranscriptList transcripts={transcripts} />
         ) : (
-          <TranscriptList transcripts={transcripts || []} />
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="text-center py-12">
+              <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+              </svg>
+              <p className="text-gray-500 text-lg mb-2">No lectures yet</p>
+              <p className="text-gray-400 text-sm">Record your first lecture using the lecsy iPhone app</p>
+            </div>
+          </div>
         )}
       </div>
     </main>
