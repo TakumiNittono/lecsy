@@ -13,11 +13,17 @@ export default async function AppPage() {
     }
 
   // 講義一覧を取得
-  const { data: transcripts, error: transcriptsError } = await supabase
+  const { data: transcriptsRaw, error: transcriptsError } = await supabase
     .from('transcripts')
     .select('id, title, content, created_at, updated_at, duration, word_count, language')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
+
+  // durationを数値に変換（NUMERIC型は文字列として返される可能性がある）
+  const transcripts = transcriptsRaw?.map(t => ({
+    ...t,
+    duration: t.duration != null ? (typeof t.duration === 'string' ? parseFloat(t.duration) : Number(t.duration)) : null
+  })) || null
 
   // エラーログ（開発環境のみ）
   if (transcriptsError) {
@@ -40,38 +46,11 @@ export default async function AppPage() {
   // 統計情報を計算
   const totalLectures = transcripts?.length || 0
   const totalDuration = transcripts?.reduce((sum, t) => {
-    // durationはNUMERIC型なので、文字列として返される可能性がある
-    let duration = 0
-    if (t.duration != null) {
-      if (typeof t.duration === 'string') {
-        duration = parseFloat(t.duration) || 0
-      } else if (typeof t.duration === 'number') {
-        duration = t.duration
-      }
-    }
-    // デバッグログ（開発環境のみ）
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Duration processing:', {
-        raw: t.duration,
-        type: typeof t.duration,
-        parsed: duration,
-        title: t.title
-      })
-    }
-    return sum + duration
+    // durationは既に数値に変換済み
+    return sum + (t.duration || 0)
   }, 0) || 0
   const totalHours = Math.floor(totalDuration / 3600)
   const totalMinutes = Math.floor((totalDuration % 3600) / 60)
-  
-  // デバッグログ（開発環境のみ）
-  if (process.env.NODE_ENV === 'development') {
-    console.log('Total duration calculation:', {
-      totalDuration,
-      totalHours,
-      totalMinutes,
-      transcriptsCount: transcripts?.length
-    })
-  }
 
   return (
     <main className="min-h-screen bg-gray-50">
