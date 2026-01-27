@@ -1,11 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirectTo') || '/app';
+
+  useEffect(() => {
+    // URLパラメータからエラーを取得
+    const errorParam = searchParams.get('error');
+    if (errorParam) {
+      setError(decodeURIComponent(errorParam));
+    }
+  }, [searchParams]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -13,7 +24,7 @@ export default function LoginPage() {
       setError(null);
 
       // サーバー側のAPIルートを使用してOAuth URLを取得
-      const response = await fetch('/api/auth/google?redirectTo=/app', {
+      const response = await fetch(`/api/auth/google?redirectTo=${encodeURIComponent(redirectTo)}`, {
         method: 'GET',
       });
 
