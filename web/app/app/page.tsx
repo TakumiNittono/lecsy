@@ -57,11 +57,22 @@ export default async function AppPage() {
   // 統計情報を計算
   const totalLectures = transcripts.length
   const totalDuration = transcripts.reduce((sum, t) => {
-    // durationは既に数値に変換済み
-    return sum + (t.duration || 0)
+    // durationは既に数値に変換済み（秒単位）
+    const duration = t.duration || 0
+    return sum + duration
   }, 0)
+  
+  // 時間を時間と分に変換
   const totalHours = Math.floor(totalDuration / 3600)
   const totalMinutes = Math.floor((totalDuration % 3600) / 60)
+  const totalSeconds = Math.floor(totalDuration % 60)
+  
+  // 表示用の文字列を生成（秒も含める）
+  const totalTimeDisplay = totalHours > 0 
+    ? `${totalHours}h ${totalMinutes}m`
+    : totalMinutes > 0
+    ? `${totalMinutes}m ${totalSeconds}s`
+    : `${totalSeconds}s`
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -117,7 +128,7 @@ export default async function AppPage() {
               </div>
             </div>
             <p className="text-3xl font-bold text-gray-900">
-              {totalHours > 0 ? `${totalHours}h ` : ''}{totalMinutes}m
+              {totalTimeDisplay}
             </p>
             <p className="text-sm text-gray-500 mt-2">Recorded time</p>
           </div>

@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import SearchBar from "./SearchBar"
-import type { ReactNode } from "react"
 
 interface Transcript {
   id: string
@@ -22,10 +21,16 @@ interface TranscriptListProps {
 
 export default function TranscriptList({ transcripts }: TranscriptListProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [mounted, setMounted] = useState(false)
+
+  // クライアント側でのマウント後にのみ検索機能を有効化（ハイドレーションエラー回避）
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // 検索フィルタリング
   const filteredTranscripts = useMemo(() => {
-    if (!searchQuery.trim()) {
+    if (!mounted || !searchQuery.trim()) {
       return transcripts
     }
 
@@ -35,7 +40,29 @@ export default function TranscriptList({ transcripts }: TranscriptListProps) {
       const content = transcript.content.toLowerCase()
       return title.includes(query) || content.includes(query)
     })
-  }, [transcripts, searchQuery])
+  }, [transcripts, searchQuery, mounted])
+
+  // ハイライト機能（クライアント側のみ）
+  const highlightText = (text: string, query: string): string | JSX.Element => {
+    if (!mounted || !query.trim()) return text
+    
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, "gi")
+    const parts = text.split(regex)
+    
+    return (
+      <>
+        {parts.map((part, index) =>
+          part.toLowerCase() === query.toLowerCase() ? (
+            <mark key={index} className="bg-yellow-200 px-1 rounded">
+              {part}
+            </mark>
+          ) : (
+            <span key={index}>{part}</span>
+          )
+        )}
+      </>
+    )
+  }
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -52,7 +79,7 @@ export default function TranscriptList({ transcripts }: TranscriptListProps) {
       </div>
 
       {/* Results Count */}
-      {searchQuery && (
+      {mounted && searchQuery && (
         <div className="mb-4 text-sm text-gray-600">
           {filteredTranscripts.length === 0 ? (
             <span>No lectures found</span>
@@ -90,25 +117,7 @@ export default function TranscriptList({ transcripts }: TranscriptListProps) {
               ? transcript.content.substring(0, 150) + (transcript.content.length > 150 ? "..." : "")
               : "No content"
 
-            // 検索クエリが含まれている場合、ハイライト表示
-            const highlightText = (text: string, query: string): ReactNode => {
-              if (!query.trim()) return text
-              const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, "gi")
-              const parts = text.split(regex)
-              return (
-                <>
-                  {parts.map((part, index) =>
-                    part.toLowerCase() === query.toLowerCase() ? (
-                      <mark key={index} className="bg-yellow-200 px-1 rounded">
-                        {part}
-                      </mark>
-                    ) : (
-                      <span key={index}>{part}</span>
-                    )
-                  )}
-                </>
-              )
-            }
+            const displayTitle = transcript.title || `Lecture ${formattedDate}`
 
             return (
               <Link
@@ -117,12 +126,10 @@ export default function TranscriptList({ transcripts }: TranscriptListProps) {
                 className="block p-6 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-md transition-all"
               >
                 <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-gray-900 line-clamp-1">
-                    {searchQuery
-                      ? highlightText(transcript.title || `Lecture ${formattedDate}`, searchQuery)
-                      : transcript.title || `Lecture ${formattedDate}`}
+                  <h3 className="text-lg font-semibold text-gray-900 line-clamp-1" suppressHydrationWarning>
+                    {mounted && searchQuery ? highlightText(displayTitle, searchQuery) : displayTitle}
                   </h3>
-                  <span className="text-sm text-gray-500 ml-4 flex-shrink-0">
+                  <span className="text-sm text-gray-500 ml-4 flex-shrink-0" suppressHydrationWarning>
                     {formattedDate} {formattedTime}
                   </span>
                 </div>
@@ -153,7 +160,7 @@ export default function TranscriptList({ transcripts }: TranscriptListProps) {
                   )}
                 </div>
                 <p className="text-gray-600 text-sm line-clamp-2">
-                  {searchQuery ? highlightText(preview, searchQuery) : preview}
+                  {mounted && searchQuery ? highlightText(preview, searchQuery) : preview}
                 </p>
               </Link>
             )
@@ -175,10 +182,10 @@ export default function TranscriptList({ transcripts }: TranscriptListProps) {
             />
           </svg>
           <p className="text-gray-500 text-lg mb-2">
-            {searchQuery ? "No lectures found" : "No lectures yet"}
+            {mounted && searchQuery ? "No lectures found" : "No lectures yet"}
           </p>
           <p className="text-gray-400 text-sm">
-            {searchQuery
+            {mounted && searchQuery
               ? "Try a different search term"
               : "Record your first lecture using the lecsy iPhone app"}
           </p>
