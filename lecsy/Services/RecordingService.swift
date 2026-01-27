@@ -269,11 +269,17 @@ class RecordingService: NSObject, ObservableObject {
         )
         
         // 非同期で更新（メインスレッドで実行）
-        // 1秒ごとの更新でもパフォーマンスに問題ないように最適化
+        // 1秒ごとの更新でロック画面のストップウォッチを滑らかに動かす
         Task { @MainActor in
             do {
-                // アニメーション付きで更新（数値の変化が滑らかに見える）
-                await liveActivity.update(using: contentState, alertConfiguration: nil)
+                // 数値の変化を滑らかにアニメーション
+                var updateConfig = Activity<LecsyWidgetAttributes>.UpdateConfiguration()
+                updateConfig.alertConfiguration = nil
+                
+                await liveActivity.update(
+                    using: contentState,
+                    alertConfiguration: nil
+                )
             } catch {
                 // エラーが頻繁に発生する場合は、更新頻度を下げる
                 print("⚠️ Live Activity更新エラー: \(error)")
