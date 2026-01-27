@@ -46,9 +46,15 @@ export async function GET(request: NextRequest) {
     if (!exchangeError && data?.user) {
       // 認証成功 - リダイレクト（クッキーを含む）
       const redirectResponse = NextResponse.redirect(new URL(next, requestUrl.origin))
-      // クッキーをコピー
+      // セッションクッキーをコピー
       supabaseResponse.cookies.getAll().forEach((cookie) => {
-        redirectResponse.cookies.set(cookie.name, cookie.value, cookie)
+        redirectResponse.cookies.set(cookie.name, cookie.value, {
+          path: cookie.path || '/',
+          sameSite: cookie.sameSite as 'lax' | 'strict' | 'none' | undefined,
+          secure: cookie.secure,
+          httpOnly: cookie.httpOnly,
+          maxAge: cookie.maxAge,
+        })
       })
       return redirectResponse
     } else {
