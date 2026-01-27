@@ -26,7 +26,20 @@ function LoginForm() {
       // サーバー側のAPIルートを使用してOAuth URLを取得
       const response = await fetch(`/api/auth/google?redirectTo=${encodeURIComponent(redirectTo)}`, {
         method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
+
+      // レスポンスのContent-Typeを確認
+      const contentType = response.headers.get('content-type');
+      
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response:', text.substring(0, 200));
+        setError('サーバーからの予期しないレスポンスが返されました。APIルートを確認してください。');
+        return;
+      }
 
       const data = await response.json();
 
