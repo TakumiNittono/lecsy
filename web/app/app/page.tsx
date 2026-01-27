@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import TranscriptList from '@/components/TranscriptList'
 
+// 動的レンダリングを強制（cookiesを使用するため）
+export const dynamic = 'force-dynamic'
+
 export default async function AppPage() {
   try {
     const supabase = createClient()

@@ -4,6 +4,9 @@ import Link from 'next/link'
 import CopyButton from '@/components/CopyButton'
 import EditTitleForm from '@/components/EditTitleForm'
 
+// 動的レンダリングを強制（cookiesを使用するため）
+export const dynamic = 'force-dynamic'
+
 export default async function TranscriptDetailPage({
   params,
 }: {
