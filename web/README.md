@@ -2,6 +2,10 @@
 
 lecsy の Web アプリケーション（Next.js）
 
+## 本番環境URL
+
+**VercelデプロイURL**: https://lecsy.vercel.app/app
+
 ## 開発環境セットアップ
 
 ```bash

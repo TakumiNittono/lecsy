@@ -26,29 +26,105 @@ serve(async (req) => {
   }
 
   try {
+    // デバッグ: すべてのヘッダーをログ出力
+    console.log("Request headers:", Object.fromEntries(req.headers.entries()));
+    
     // 認証チェック
     const authHeader = req.headers.get("Authorization");
+    console.log("Authorization header:", authHeader ? `${authHeader.substring(0, 50)}...` : "missing");
+    console.log("Authorization header length:", authHeader ? authHeader.length : 0);
+    
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      console.error("Authorization header is missing");
+      return new Response(JSON.stringify({ error: "Unauthorized", code: "NO_AUTH_HEADER" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    // Supabaseクライアント
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    // ユーザー取得
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    // Bearerプレフィックスを確認
+    if (!authHeader.startsWith("Bearer ")) {
+      console.error("Authorization header does not start with 'Bearer '");
+      return new Response(JSON.stringify({ error: "Unauthorized", code: "INVALID_AUTH_FORMAT" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    // JWTトークンを抽出
+    const token = authHeader.substring(7); // "Bearer "を除去
+    console.log("JWT token (first 50 chars):", token.substring(0, 50));
+    console.log("JWT token length:", token.length);
+
+    // Supabaseクライアント
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    console.log("Supabase URL:", supabaseUrl);
+    console.log("Supabase Anon Key (first 20 chars):", supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : "missing");
+    
+    const supabase = createClient(
+      supabaseUrl!,
+      supabaseAnonKey!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    console.log("Calling supabase.auth.getUser()...");
+    // ユーザー取得（JWT検証を含む）
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.log("getUser result - user:", user ? user.id : "null", "error:", authError);
+    
+    if (authError) {
+      console.error("Auth error:", authError);
+      console.error("Auth error details:", JSON.stringify(authError, null, 2));
+      console.error("Auth error status:", authError.status);
+      console.error("Auth error message:", authError.message);
+      
+      // JWT検証エラーの場合、より詳細な情報を返す
+      if (authError.message && authError.message.includes("JWT")) {
+        console.error("JWT validation failed. Token:", token.substring(0, 100));
+        // JWTの有効期限を確認（デコードはしないが、形式を確認）
+        const tokenParts = token.split(".");
+        console.error("JWT parts count:", tokenParts.length);
+        if (tokenParts.length === 3) {
+          try {
+            // JWTのペイロード部分をデコード（検証なし）
+            const payload = JSON.parse(atob(tokenParts[1]));
+            console.error("JWT payload:", JSON.stringify(payload, null, 2));
+            console.error("JWT exp (expiration):", payload.exp);
+            console.error("JWT exp (date):", new Date(payload.exp * 1000).toISOString());
+            console.error("Current time:", new Date().toISOString());
+            console.error("Token expired:", payload.exp < Date.now() / 1000);
+          } catch (e) {
+            console.error("Failed to decode JWT payload:", e);
+          }
+        }
+      }
+      
+      return new Response(
+        JSON.stringify({ 
+          error: "Unauthorized", 
+          code: "AUTH_ERROR",
+          message: authError.message || "Authentication failed",
+          details: authError.status ? `Status: ${authError.status}` : undefined
+        }), 
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+    if (!user) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Unauthorized", 
+          code: "NO_USER",
+          message: "User not found"
+        }), 
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
 
     // リクエストボディ
@@ -93,8 +169,13 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("Error:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
+      JSON.stringify({ 
+        error: "Internal server error",
+        code: "INTERNAL_ERROR",
+        message: errorMessage
+      }),
       { 
         status: 500,
         headers: { "Content-Type": "application/json" },

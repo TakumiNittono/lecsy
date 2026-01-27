@@ -3,12 +3,13 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 
 export default async function AppPage() {
-  const supabase = createClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
+  try {
+    const supabase = createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
 
-  if (error || !user) {
-    redirect('/login')
-  }
+    if (error || !user) {
+      redirect('/login')
+    }
 
   // 講義一覧を取得
   const { data: transcripts, error: transcriptsError } = await supabase
@@ -202,4 +203,20 @@ export default async function AppPage() {
       </div>
     </main>
   )
+  } catch (error) {
+    console.error('AppPage error:', error)
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Application Error</h1>
+          <p className="text-gray-600 mb-2">
+            {error instanceof Error ? error.message : 'An unexpected error occurred'}
+          </p>
+          <p className="text-sm text-gray-500">
+            Please check your environment variables in Vercel settings.
+          </p>
+        </div>
+      </main>
+    )
+  }
 }
