@@ -9,91 +9,100 @@ export default async function TranscriptDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const { id } = await params
-  const supabase = createClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    redirect('/login')
-  }
-
-  // IDのバリデーション
-  if (!id || typeof id !== 'string') {
-    notFound()
-  }
-
-  // 講義詳細を取得
-  const { data: transcriptRaw, error: transcriptError } = await supabase
-    .from('transcripts')
-    .select('id, title, content, created_at, updated_at, duration, word_count, language')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .single()
-
-  // エラーハンドリングを改善
-  if (transcriptError) {
-    console.error('Error fetching transcript:', transcriptError)
-    // PGRST116エラー（レコードが見つからない）の場合のみnotFoundを呼ぶ
-    if (transcriptError.code === 'PGRST116') {
+  try {
+    const { id } = await params
+    
+    // IDのバリデーション
+    if (!id || typeof id !== 'string') {
       notFound()
     }
-    // その他のエラーの場合はエラーページを表示
-    throw new Error(`Failed to load transcript: ${transcriptError.message}`)
-  }
 
-  if (!transcriptRaw) {
-    notFound()
-  }
-
-  // durationを数値に変換
-  const transcript = {
-    ...transcriptRaw,
-    duration: transcriptRaw.duration != null 
-      ? (typeof transcriptRaw.duration === 'string' 
-          ? parseFloat(transcriptRaw.duration) 
-          : Number(transcriptRaw.duration))
-      : null
-  }
-
-  const handleSignOut = async () => {
-    'use server'
     const supabase = createClient()
-    await supabase.auth.signOut()
-    redirect('/login')
-  }
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-  const handleDelete = async () => {
-    'use server'
-    const supabase = createClient()
-    const { error } = await supabase
+    if (authError || !user) {
+      redirect('/login')
+    }
+
+    // 講義詳細を取得
+    const { data: transcriptRaw, error: transcriptError } = await supabase
       .from('transcripts')
-      .delete()
+      .select('id, title, content, created_at, updated_at, duration, word_count, language')
       .eq('id', id)
       .eq('user_id', user.id)
-    
-    if (!error) {
-      redirect('/app')
+      .single()
+
+    // エラーハンドリングを改善
+    if (transcriptError) {
+      console.error('Error fetching transcript:', {
+        code: transcriptError.code,
+        message: transcriptError.message,
+        details: transcriptError.details,
+        hint: transcriptError.hint,
+        id,
+        userId: user.id
+      })
+      // PGRST116エラー（レコードが見つからない）の場合のみnotFoundを呼ぶ
+      if (transcriptError.code === 'PGRST116') {
+        notFound()
+      }
+      // その他のエラーの場合はエラーページを表示
+      throw new Error(`Failed to load transcript: ${transcriptError.message || 'Unknown error'}`)
     }
-  }
 
-  const date = new Date(transcript.created_at)
-  const formattedDate = date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-  const duration = transcript.duration
-    ? (() => {
-        const durationNum = Number(transcript.duration)
-        const minutes = Math.floor(durationNum / 60)
-        const seconds = Math.floor(durationNum % 60)
-        return `${minutes}m ${seconds}s`
-      })()
-    : 'N/A'
+    if (!transcriptRaw) {
+      notFound()
+    }
 
-  return (
+    // durationを数値に変換
+    const transcript = {
+      ...transcriptRaw,
+      duration: transcriptRaw.duration != null 
+        ? (typeof transcriptRaw.duration === 'string' 
+            ? parseFloat(transcriptRaw.duration) 
+            : Number(transcriptRaw.duration))
+        : null
+    }
+
+    const handleSignOut = async () => {
+      'use server'
+      const supabase = createClient()
+      await supabase.auth.signOut()
+      redirect('/login')
+    }
+
+    const handleDelete = async () => {
+      'use server'
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('transcripts')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id)
+      
+      if (!error) {
+        redirect('/app')
+      }
+    }
+
+    const date = new Date(transcript.created_at)
+    const formattedDate = date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    const duration = transcript.duration
+      ? (() => {
+          const durationNum = Number(transcript.duration)
+          const minutes = Math.floor(durationNum / 60)
+          const seconds = Math.floor(durationNum % 60)
+          return `${minutes}m ${seconds}s`
+        })()
+      : 'N/A'
+
+    return (
     <main className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="border-b border-gray-200 bg-white sticky top-0 z-50 no-print">
@@ -247,5 +256,10 @@ export default async function TranscriptDetailPage({
         </div>
       </div>
     </main>
-  )
+    )
+  } catch (error) {
+    console.error('TranscriptDetailPage error:', error)
+    // エラーを再スローしてerror.tsxで処理
+    throw error
+  }
 }
