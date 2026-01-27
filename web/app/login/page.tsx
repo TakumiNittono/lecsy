@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { createClient } from "@/utils/supabase/client";
 import { useState } from "react";
 
 export default function LoginPage() {
@@ -13,43 +12,19 @@ export default function LoginPage() {
       setLoading(true);
       setError(null);
 
-      // 環境変数の確認とデバッグ
-      console.log("Environment check:", {
-        url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-        hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        origin: window.location.origin
+      // サーバー側のAPIルートを使用してOAuth URLを取得
+      const response = await fetch('/api/auth/google?redirectTo=/app', {
+        method: 'GET',
       });
 
-      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        const missingVars = [];
-        if (!process.env.NEXT_PUBLIC_SUPABASE_URL) missingVars.push("NEXT_PUBLIC_SUPABASE_URL");
-        if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) missingVars.push("NEXT_PUBLIC_SUPABASE_ANON_KEY");
-        throw new Error(`環境変数が設定されていません: ${missingVars.join(", ")}`);
-      }
-
-      console.log("Creating Supabase client...");
-      const supabase = createClient();
-      
-      console.log("Calling signInWithOAuth...");
-      const { data, error: signInError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=/app`,
-        },
-      });
-
-      console.log("OAuth response:", { data, error: signInError });
-
-      if (signInError) {
-        console.error("Error signing in with Google:", signInError);
-        setError(signInError.message);
-      } else if (data?.url) {
-        console.log("Redirecting to:", data.url);
-        // リダイレクトが成功した場合
-        window.location.href = data.url;
+      if (response.redirected) {
+        // リダイレクトレスポンスの場合、そのURLに移動
+        window.location.href = response.url;
+      } else if (!response.ok) {
+        const errorData = await response.json();
+        setError(errorData.error || 'ログインに失敗しました');
       } else {
-        console.warn("No URL returned from OAuth");
-        setError("認証URLの取得に失敗しました");
+        setError('予期しないレスポンスが返されました');
       }
     } catch (err: any) {
       console.error("Login error:", err);
