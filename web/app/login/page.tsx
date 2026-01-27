@@ -2,18 +2,42 @@
 
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
+import { useState } from "react";
 
 export default function LoginPage() {
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
   const handleGoogleLogin = async () => {
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/app`,
-      },
-    });
-    if (error) {
-      console.error("Error signing in with Google:", error);
+    try {
+      setLoading(true);
+      setError(null);
+
+      // 環境変数の確認
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        throw new Error("Supabase環境変数が設定されていません");
+      }
+
+      const supabase = createClient();
+      const { data, error: signInError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=/app`,
+        },
+      });
+
+      if (signInError) {
+        console.error("Error signing in with Google:", signInError);
+        setError(signInError.message);
+      } else if (data?.url) {
+        // リダイレクトが成功した場合
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
+      console.error("Login error:", err);
+      setError(err.message || "ログインに失敗しました");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -38,11 +62,18 @@ export default function LoginPage() {
             </p>
           </div>
 
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-800 text-sm">{error}</p>
+            </div>
+          )}
+
           <div className="space-y-4">
             {/* Google Login */}
             <button
               onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center gap-3 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-3 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
@@ -62,7 +93,9 @@ export default function LoginPage() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              <span className="text-gray-700 font-medium">Continue with Google</span>
+              <span className="text-gray-700 font-medium">
+                {loading ? "Loading..." : "Continue with Google"}
+              </span>
             </button>
 
             {/* Apple Login */}
