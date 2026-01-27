@@ -20,10 +20,21 @@ export default async function AppPage() {
     .order('created_at', { ascending: false })
 
   // durationを数値に変換（NUMERIC型は文字列として返される可能性がある）
-  const transcripts = transcriptsRaw?.map(t => ({
-    ...t,
-    duration: t.duration != null ? (typeof t.duration === 'string' ? parseFloat(t.duration) : Number(t.duration)) : null
-  })) || null
+  const transcripts = transcriptsRaw?.map(t => {
+    let duration: number | null = null
+    if (t.duration != null) {
+      if (typeof t.duration === 'string') {
+        const parsed = parseFloat(t.duration)
+        duration = isNaN(parsed) ? null : parsed
+      } else if (typeof t.duration === 'number') {
+        duration = isNaN(t.duration) ? null : t.duration
+      }
+    }
+    return {
+      ...t,
+      duration
+    }
+  }) || []
 
   // エラーログ（開発環境のみ）
   if (transcriptsError) {
@@ -32,8 +43,8 @@ export default async function AppPage() {
   
   // デバッグログ（開発環境のみ）
   if (process.env.NODE_ENV === 'development') {
-    console.log('Transcripts fetched:', transcripts?.length || 0)
-    console.log('Sample transcript:', transcripts?.[0])
+    console.log('Transcripts fetched:', transcripts.length)
+    console.log('Sample transcript:', transcripts[0])
   }
 
   const handleSignOut = async () => {
@@ -44,11 +55,11 @@ export default async function AppPage() {
   }
 
   // 統計情報を計算
-  const totalLectures = transcripts?.length || 0
-  const totalDuration = transcripts?.reduce((sum, t) => {
+  const totalLectures = transcripts.length
+  const totalDuration = transcripts.reduce((sum, t) => {
     // durationは既に数値に変換済み
     return sum + (t.duration || 0)
-  }, 0) || 0
+  }, 0)
   const totalHours = Math.floor(totalDuration / 3600)
   const totalMinutes = Math.floor((totalDuration % 3600) / 60)
 
@@ -133,7 +144,7 @@ export default async function AppPage() {
               <p className="text-gray-500 text-sm">{transcriptsError.message}</p>
             </div>
           </div>
-        ) : transcripts && transcripts.length > 0 ? (
+        ) : transcripts.length > 0 ? (
           <TranscriptList transcripts={transcripts} />
         ) : (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
