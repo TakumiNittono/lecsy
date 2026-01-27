@@ -4,6 +4,7 @@ import Link from 'next/link'
 import CopyButton from '@/components/CopyButton'
 import EditTitleForm from '@/components/EditTitleForm'
 import PrintButton from '@/components/PrintButton'
+import DeleteForm from '@/components/DeleteForm'
 
 // 動的レンダリングを強制（cookiesを使用するため）
 export const dynamic = 'force-dynamic'
@@ -75,19 +76,6 @@ export default async function TranscriptDetailPage({
       redirect('/login')
     }
 
-    const handleDelete = async () => {
-      'use server'
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('transcripts')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id)
-      
-      if (!error) {
-        redirect('/app')
-      }
-    }
 
     const date = new Date(transcript.created_at)
     const formattedDate = date.toLocaleDateString('en-US', {
@@ -181,19 +169,7 @@ export default async function TranscriptDetailPage({
               <CopyButton content={transcript.content} />
             )}
             <PrintButton />
-            <form action={handleDelete}>
-              <button
-                type="submit"
-                className="px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors font-medium"
-                onClick={(e) => {
-                  if (!confirm('Are you sure you want to delete this lecture?')) {
-                    e.preventDefault()
-                  }
-                }}
-              >
-                Delete
-              </button>
-            </form>
+            <DeleteForm transcriptId={transcript.id} />
           </div>
         </div>
 
