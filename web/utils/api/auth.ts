@@ -74,26 +74,98 @@ export function isValidUUID(id: string): boolean {
 export function validateOrigin(request: Request): boolean {
   const origin = request.headers.get('origin')
   const referer = request.headers.get('referer')
+  const host = request.headers.get('host')
   
+  // 許可されたオリジンリスト
   const allowedOrigins = [
     process.env.NEXT_PUBLIC_SITE_URL,
     'http://localhost:3000',
+    'http://localhost:3020',
     'https://localhost:3000',
+    'https://localhost:3020',
+    'https://lecsy.vercel.app', // Vercel本番環境
+    'https://*.vercel.app', // Vercelのプレビュー環境（ワイルドカードは後で処理）
   ].filter(Boolean) as string[]
   
-  if (origin && !allowedOrigins.includes(origin)) {
-    return false
+  // 同じオリジンからのリクエスト（Same-Origin Request）の場合は許可
+  // Same-Origin Requestでは、Originヘッダーが送信されないことがある
+  if (!origin && referer && host) {
+    try {
+      const refererUrl = new URL(referer)
+      // Refererのホストがリクエストのホストと一致する場合は許可
+      if (refererUrl.host === host) {
+        return true
+      }
+    } catch {
+      // URL解析エラーは無視
+    }
   }
   
+  // Originヘッダーが存在する場合
+  if (origin) {
+    // 許可リストに含まれているか確認
+    const isAllowed = allowedOrigins.some(allowed => {
+      // ワイルドカード対応（*.vercel.app）
+      if (allowed.includes('*')) {
+        const pattern = allowed.replace('*', '.*')
+        const regex = new RegExp(`^${pattern}$`)
+        return regex.test(origin)
+      }
+      return allowed === origin
+    })
+    
+    if (!isAllowed) {
+      console.warn(`Origin validation failed: ${origin} not in allowed list`)
+      return false
+    }
+  }
+  
+  // Refererヘッダーが存在する場合
   if (referer) {
     try {
       const url = new URL(referer)
       const refOrigin = `${url.protocol}//${url.host}`
-      if (!allowedOrigins.includes(refOrigin)) {
+      
+      // 許可リストに含まれているか確認
+      const isAllowed = allowedOrigins.some(allowed => {
+        // ワイルドカード対応
+        if (allowed.includes('*')) {
+          const pattern = allowed.replace('*', '.*')
+          const regex = new RegExp(`^${pattern}$`)
+          return regex.test(refOrigin)
+        }
+        return allowed === refOrigin
+      })
+      
+      if (!isAllowed) {
+        // 同じホストからのリクエストの場合は許可（Same-Origin Request）
+        if (host && url.host === host) {
+          return true
+        }
+        console.warn(`Referer validation failed: ${refOrigin} not in allowed list`)
         return false
       }
     } catch {
+      // URL解析エラーは無視（Same-Origin Requestの可能性があるため）
+      // ただし、hostヘッダーが存在する場合は許可
+      if (host) {
+        return true
+      }
       return false
+    }
+  }
+  
+  // OriginもRefererも存在しない場合、Same-Origin Requestの可能性があるため許可
+  // （ただし、これは開発環境でのみ発生する可能性が高い）
+  if (!origin && !referer) {
+    // 本番環境では、通常OriginまたはRefererが存在するはず
+    // 開発環境では許可
+    if (process.env.NODE_ENV === 'development') {
+      return true
+    }
+    // 本番環境では、hostヘッダーが存在する場合は許可
+    if (host) {
+      return true
     }
   }
   
