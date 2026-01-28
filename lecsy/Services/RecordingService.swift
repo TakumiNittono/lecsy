@@ -17,8 +17,10 @@ class RecordingService: NSObject, ObservableObject {
     static let shared = RecordingService()
     
     @Published var isRecording = false
+    @Published var isPaused = false
     @Published var recordingDuration: TimeInterval = 0
     @Published var recordingStartTime: Date?
+    @Published var pausedDuration: TimeInterval = 0 // ポーズ中の累積時間
     
     private var audioRecorder: AVAudioRecorder?
     private var timer: Timer?
@@ -27,6 +29,7 @@ class RecordingService: NSObject, ObservableObject {
     private var liveActivity: Activity<LecsyWidgetAttributes>?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var currentLectureTitle: String = "New Recording"
+    private var pauseStartTime: Date? // ポーズ開始時刻
     
     // 100分（6000秒）の録音に対応
     private let maxRecordingDuration: TimeInterval = 6000 // 100分
@@ -45,7 +48,7 @@ class RecordingService: NSObject, ObservableObject {
     }
     
     /// 録音開始
-    func startRecording(lectureTitle: String = "New Recording") throws {
+    func startRecording(lectureTitle: String = "New Recording") async throws {
         print("🔴 RecordingService.startRecording() が呼ばれました")
         
         guard !isRecording else {
@@ -71,7 +74,17 @@ class RecordingService: NSObject, ObservableObject {
         // オーディオセッション設定（バックグラウンド録音対応）
         print("🔴 オーディオセッションを設定します")
         let audioSession = AVAudioSession.sharedInstance()
+        
+        // 権限が確実に反映されるまで少し待機（権限リクエスト直後の場合）
+        if AVAudioSession.sharedInstance().recordPermission == .granted {
+            // 少し待機してからセッションを設定
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1秒待機
+        }
+        
         do {
+            // 既存のセッションを非アクティブにする（エラー回避のため）
+            try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+            
             // バックグラウンド録音に最適化された設定
             // .allowBluetoothA2DPは削除（録音には不要で、エラーの原因になる可能性がある）
             try audioSession.setCategory(
@@ -137,11 +150,14 @@ class RecordingService: NSObject, ObservableObject {
         }
         
         isRecording = true
+        isPaused = false
         recordingStartTime = Date()
         recordingDuration = 0
+        pausedDuration = 0
+        pauseStartTime = nil
         currentLectureTitle = lectureTitle
         
-        print("🔴 録音状態を更新: isRecording = \(isRecording)")
+        print("🔴 録音状態を更新: isRecording = \(isRecording), isPaused = \(isPaused)")
         
         // Live Activity開始
         startLiveActivity()
@@ -153,17 +169,22 @@ class RecordingService: NSObject, ObservableObject {
                 timer.invalidate()
                 return
             }
-            self.recordingDuration = Date().timeIntervalSince(startTime)
             
-            // 最大録音時間チェック
+            // ポーズ中でない場合のみ時間を更新
+            if !self.isPaused {
+                let totalElapsed = Date().timeIntervalSince(startTime)
+                self.recordingDuration = totalElapsed - self.pausedDuration
+            }
+            
+            // 最大録音時間チェック（ポーズ時間を除いた実録音時間）
             if self.recordingDuration >= self.maxRecordingDuration {
                 print("🔴 最大録音時間に達しました（100分）")
                 _ = self.stopRecording()
                 return
             }
             
-            // 録音が継続しているか確認（ロック画面時など）
-            if let recorder = self.audioRecorder, !recorder.isRecording {
+            // 録音が継続しているか確認（ロック画面時など、ポーズ中でない場合のみ）
+            if !self.isPaused, let recorder = self.audioRecorder, !recorder.isRecording {
                 print("⚠️ 録音が停止しています。再開を試みます...")
                 // 録音を再開
                 recorder.record()
@@ -184,6 +205,39 @@ class RecordingService: NSObject, ObservableObject {
         print("🔴 タイマー開始完了")
     }
     
+    /// 録音ポーズ
+    func pauseRecording() {
+        guard isRecording, !isPaused else { return }
+        
+        print("⏸️ 録音をポーズします")
+        audioRecorder?.pause()
+        isPaused = true
+        pauseStartTime = Date()
+        
+        // Live Activityを更新（ポーズ状態を反映）
+        updateLiveActivity()
+    }
+    
+    /// 録音再開
+    func resumeRecording() {
+        guard isRecording, isPaused else { return }
+        
+        print("▶️ 録音を再開します")
+        
+        // ポーズ時間を累積
+        if let pauseStart = pauseStartTime {
+            let pauseDuration = Date().timeIntervalSince(pauseStart)
+            pausedDuration += pauseDuration
+            pauseStartTime = nil
+        }
+        
+        audioRecorder?.record()
+        isPaused = false
+        
+        // Live Activityを更新（再開状態を反映）
+        updateLiveActivity()
+    }
+    
     /// 録音停止
     func stopRecording() -> URL? {
         guard isRecording else { return nil }
@@ -195,6 +249,8 @@ class RecordingService: NSObject, ObservableObject {
         backgroundTaskTimer = nil
         
         isRecording = false
+        isPaused = false
+        pauseStartTime = nil
         
         // Live Activity終了
         endLiveActivity()
@@ -205,6 +261,7 @@ class RecordingService: NSObject, ObservableObject {
         let url = recordingURL
         recordingURL = nil
         recordingStartTime = nil
+        pausedDuration = 0
         
         // オーディオセッションを非アクティブに
         try? AVAudioSession.sharedInstance().setActive(false)
@@ -260,7 +317,7 @@ class RecordingService: NSObject, ObservableObject {
     private func startLiveActivity() {
         // ActivityKitが利用可能かチェック
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            print("Live Activities are not enabled")
+            print("⚠️ Live Activitiesが有効になっていません")
             return
         }
         
@@ -277,7 +334,7 @@ class RecordingService: NSObject, ObservableObject {
                 pushType: nil
             )
         } catch {
-            print("Failed to start Live Activity: \(error)")
+            print("❌ Live Activityの開始に失敗しました: \(error)")
         }
     }
     
@@ -287,17 +344,13 @@ class RecordingService: NSObject, ObservableObject {
         
         let contentState = LecsyWidgetAttributes.ContentState(
             recordingDuration: recordingDuration,
-            isRecording: isRecording
+            isRecording: isRecording && !isPaused
         )
         
         // 非同期で更新（メインスレッドで実行）
         // 1秒ごとの更新でロック画面のストップウォッチを滑らかに動かす
         Task { @MainActor in
             do {
-                // 数値の変化を滑らかにアニメーション
-                var updateConfig = Activity<LecsyWidgetAttributes>.UpdateConfiguration()
-                updateConfig.alertConfiguration = nil
-                
                 await liveActivity.update(
                     using: contentState,
                     alertConfiguration: nil
@@ -352,13 +405,13 @@ class RecordingService: NSObject, ObservableObject {
         var errorDescription: String? {
             switch self {
             case .permissionDenied:
-                return "Microphone permission is required"
+                return "マイクへのアクセス権限が必要です"
             case .fileCreationFailed:
-                return "Failed to create recording file"
+                return "録音ファイルの作成に失敗しました"
             case .recordingFailed:
-                return "Recording failed"
+                return "録音に失敗しました"
             case .insufficientStorage:
-                return "Insufficient storage space. Please free up at least 100MB."
+                return "ストレージ容量が不足しています。少なくとも100MBの空き容量が必要です。"
             }
         }
     }
@@ -378,7 +431,7 @@ extension RecordingService: AVAudioRecorderDelegate {
     
     nonisolated func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
         Task { @MainActor in
-            print("🔴 録音エンコードエラー: \(error?.localizedDescription ?? "Unknown")")
+            print("🔴 録音エンコードエラー: \(error?.localizedDescription ?? "不明なエラー")")
             isRecording = false
             timer?.invalidate()
             timer = nil

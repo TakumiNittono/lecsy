@@ -1,80 +1,115 @@
 //
-//  LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetLiveActivity.swift
-//  LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget
+//  LecsyWidgetLiveActivity.swift
+//  LecsyWidget
 //
-//  Created by Takuminittono on 2026/01/27.
+//  Created on 2026/01/27.
 //
 
 import ActivityKit
 import WidgetKit
 import SwiftUI
 
-struct LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
-        // Dynamic stateful properties about your activity go here!
-        var emoji: String
-    }
-
-    // Fixed non-changing properties about your activity go here!
-    var name: String
-}
+// LecsyWidgetAttributesはメインアプリのlecsy/Models/LecsyWidgetAttributes.swiftから共有されます
 
 struct LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetLiveActivity: Widget {
     var body: some WidgetConfiguration {
-        ActivityConfiguration(for: LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes.self) { context in
-            // Lock screen/banner UI goes here
-            VStack {
-                Text("Hello \(context.state.emoji)")
+        ActivityConfiguration(for: LecsyWidgetAttributes.self) { context in
+            // ロック画面UI
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "mic.fill")
+                        .foregroundColor(.red)
+                        .font(.title2)
+                    Text("Recording")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                }
+                
+                // 経過時間表示
+                Text(formatDuration(context.state.recordingDuration))
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundColor(.primary)
+                
+                // 講義タイトル
+                Text(context.attributes.lectureTitle)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                
+                Text("Tap to open app")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
-            .activityBackgroundTint(Color.cyan)
-            .activitySystemActionForegroundColor(Color.black)
-
+            .padding()
+            .activityBackgroundTint(Color(.systemBackground))
+            .activitySystemActionForegroundColor(Color.primary)
+            
         } dynamicIsland: { context in
             DynamicIsland {
-                // Expanded UI goes here.  Compose the expanded UI through
-                // various regions, like leading/trailing/center/bottom
+                // Expanded UI（Dynamic Islandが展開された時）
                 DynamicIslandExpandedRegion(.leading) {
-                    Text("Leading")
+                    HStack {
+                        Image(systemName: "mic.fill")
+                            .foregroundColor(.red)
+                            .font(.title2)
+                        Text("Recording")
+                            .font(.headline)
+                    }
                 }
+                
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text("Trailing")
+                    Text(formatDuration(context.state.recordingDuration))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .monospacedDigit()
                 }
+                
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text("Bottom \(context.state.emoji)")
-                    // more content
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(context.attributes.lectureTitle)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        Text("Tap to stop recording")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             } compactLeading: {
-                Text("L")
+                // Compact Leading（左側）
+                Image(systemName: "mic.fill")
+                    .foregroundColor(.red)
             } compactTrailing: {
-                Text("T \(context.state.emoji)")
+                // Compact Trailing（右側）- 時間表示
+                Text(formatDuration(context.state.recordingDuration))
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
             } minimal: {
-                Text(context.state.emoji)
+                // Minimal（最小表示）- 録音アイコンのみ
+                Image(systemName: "mic.fill")
+                    .foregroundColor(.red)
             }
-            .widgetURL(URL(string: "http://www.apple.com"))
+            .widgetURL(URL(string: "lecsy://record"))
             .keylineTint(Color.red)
+        }
+    }
+    
+    /// 時間をフォーマット（HH:MM:SS形式）
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let hours = Int(duration) / 3600
+        let minutes = (Int(duration) % 3600) / 60
+        let seconds = Int(duration) % 60
+        
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%02d:%02d", minutes, seconds)
         }
     }
 }
 
-extension LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes {
-    fileprivate static var preview: LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes {
-        LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes(name: "World")
-    }
-}
-
-extension LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes.ContentState {
-    fileprivate static var smiley: LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes.ContentState {
-        LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes.ContentState(emoji: "😀")
-     }
-     
-     fileprivate static var starEyes: LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes.ContentState {
-         LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes.ContentState(emoji: "🤩")
-     }
-}
-
-#Preview("Notification", as: .content, using: LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes.preview) {
-   LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetLiveActivity()
+#Preview("Lock Screen", as: .content, using: LecsyWidgetAttributes.preview) {
+    LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetLiveActivity()
 } contentStates: {
-    LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes.ContentState.smiley
-    LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidget_LecsyWidgetAttributes.ContentState.starEyes
+    LecsyWidgetAttributes.ContentState.preview
 }

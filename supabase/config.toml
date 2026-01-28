@@ -35,6 +35,14 @@ enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
 
-# save-transcript関数のJWT検証を有効にする（本番環境では必須）
+# Edge Functions JWT設定
+# 本番環境では全てのfunctionでJWT検証を有効化
 [functions.save-transcript]
 verify_jwt = true
+
+[functions.summarize]
+verify_jwt = true
+
+[functions.stripe-webhook]
+# Webhookは外部からのリクエストのため、Stripe署名で検証
+verify_jwt = false

@@ -6,6 +6,14 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CDF43A1A2F288977003A1A08 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDF4390A2F283C41003A1A0B /* WhisperKit */; };
+		CDF43A1B2F288977003A1A08 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = CDF4390B2F283C41003A1A0C /* Supabase */; };
+		CDF43BCD2F2939B2003A1A08 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDF43BCC2F2939B2003A1A08 /* WidgetKit.framework */; };
+		CDF43BCF2F2939B2003A1A08 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDF43BCE2F2939B2003A1A08 /* SwiftUI.framework */; };
+		CDF43BDC2F2939B3003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CDF43BCA2F2939B2003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		CDF438EC2F283C41003A1A08 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,17 +29,61 @@
 			remoteGlobalIDString = CDF438DD2F283C40003A1A08;
 			remoteInfo = lecsy;
 		};
+		CDF43BDA2F2939B3003A1A08 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CDF438D62F283C40003A1A08 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CDF43BC92F2939B2003A1A08;
+			remoteInfo = "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension";
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CDF43BDD2F2939B3003A1A08 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				CDF43BDC2F2939B3003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		CDF438DE2F283C40003A1A08 /* lecsy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = lecsy.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CDF438EB2F283C41003A1A08 /* lecsyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = lecsyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CDF438F52F283C41003A1A08 /* lecsyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = lecsyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CDF43BCA2F2939B2003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CDF43BCC2F2939B2003A1A08 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		CDF43BCE2F2939B2003A1A08 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		CDF43BE02F2939B3003A1A08 /* Exceptions for "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget" folder in "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CDF43BC92F2939B2003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension */;
+		};
+		CDF43D692F297149003A1A08 /* Exceptions for "lecsy" folder in "lecsy" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CDF438DD2F283C40003A1A08 /* lecsy */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		CDF438E02F283C40003A1A08 /* lecsy */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CDF43D692F297149003A1A08 /* Exceptions for "lecsy" folder in "lecsy" target */,
+			);
 			path = lecsy;
 			sourceTree = "<group>";
 		};
@@ -45,6 +97,14 @@
 			path = lecsyUITests;
 			sourceTree = "<group>";
 		};
+		CDF43BD02F2939B2003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CDF43BE02F2939B3003A1A08 /* Exceptions for "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget" folder in "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension" target */,
+			);
+			path = "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,6 +112,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CDF43A1B2F288977003A1A08 /* Supabase in Frameworks */,
+				CDF43A1A2F288977003A1A08 /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -69,6 +131,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CDF43BC72F2939B2003A1A08 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CDF43BCF2F2939B2003A1A08 /* SwiftUI.framework in Frameworks */,
+				CDF43BCD2F2939B2003A1A08 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -78,6 +149,8 @@
 				CDF438E02F283C40003A1A08 /* lecsy */,
 				CDF438EE2F283C41003A1A08 /* lecsyTests */,
 				CDF438F82F283C41003A1A08 /* lecsyUITests */,
+				CDF43BD02F2939B2003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget */,
+				CDF43BCB2F2939B2003A1A08 /* Frameworks */,
 				CDF438DF2F283C40003A1A08 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,8 +161,18 @@
 				CDF438DE2F283C40003A1A08 /* lecsy.app */,
 				CDF438EB2F283C41003A1A08 /* lecsyTests.xctest */,
 				CDF438F52F283C41003A1A08 /* lecsyUITests.xctest */,
+				CDF43BCA2F2939B2003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		CDF43BCB2F2939B2003A1A08 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				CDF43BCC2F2939B2003A1A08 /* WidgetKit.framework */,
+				CDF43BCE2F2939B2003A1A08 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -102,16 +185,20 @@
 				CDF438DA2F283C40003A1A08 /* Sources */,
 				CDF438DB2F283C40003A1A08 /* Frameworks */,
 				CDF438DC2F283C40003A1A08 /* Resources */,
+				CDF43BDD2F2939B3003A1A08 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				CDF43BDB2F2939B3003A1A08 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				CDF438E02F283C40003A1A08 /* lecsy */,
 			);
 			name = lecsy;
 			packageProductDependencies = (
+				CDF4390A2F283C41003A1A0B /* WhisperKit */,
+				CDF4390B2F283C41003A1A0C /* Supabase */,
 			);
 			productName = lecsy;
 			productReference = CDF438DE2F283C40003A1A08 /* lecsy.app */;
@@ -163,6 +250,28 @@
 			productReference = CDF438F52F283C41003A1A08 /* lecsyUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		CDF43BC92F2939B2003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CDF43BE12F2939B3003A1A08 /* Build configuration list for PBXNativeTarget "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension" */;
+			buildPhases = (
+				CDF43BC62F2939B2003A1A08 /* Sources */,
+				CDF43BC72F2939B2003A1A08 /* Frameworks */,
+				CDF43BC82F2939B2003A1A08 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				CDF43BD02F2939B2003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget */,
+			);
+			name = "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension";
+			packageProductDependencies = (
+			);
+			productName = "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension";
+			productReference = CDF43BCA2F2939B2003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +293,9 @@
 						CreatedOnToolsVersion = 26.1.1;
 						TestTargetID = CDF438DD2F283C40003A1A08;
 					};
+					CDF43BC92F2939B2003A1A08 = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
 				};
 			};
 			buildConfigurationList = CDF438D92F283C40003A1A08 /* Build configuration list for PBXProject "lecsy" */;
@@ -195,6 +307,10 @@
 			);
 			mainGroup = CDF438D52F283C40003A1A08;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				CDF439082F283C41003A1A09 /* XCRemoteSwiftPackageReference "WhisperKit" */,
+				CDF439092F283C41003A1A0A /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CDF438DF2F283C40003A1A08 /* Products */;
 			projectDirPath = "";
@@ -203,6 +319,7 @@
 				CDF438DD2F283C40003A1A08 /* lecsy */,
 				CDF438EA2F283C41003A1A08 /* lecsyTests */,
 				CDF438F42F283C41003A1A08 /* lecsyUITests */,
+				CDF43BC92F2939B2003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -223,6 +340,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		CDF438F32F283C41003A1A08 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CDF43BC82F2939B2003A1A08 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,6 +377,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CDF43BC62F2939B2003A1A08 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -266,11 +397,18 @@
 			target = CDF438DD2F283C40003A1A08 /* lecsy */;
 			targetProxy = CDF438F62F283C41003A1A08 /* PBXContainerItemProxy */;
 		};
+		CDF43BDB2F2939B3003A1A08 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CDF43BC92F2939B2003A1A08 /* LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension */;
+			targetProxy = CDF43BDA2F2939B3003A1A08 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		CDF438FD2F283C41003A1A08 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = CDF438E02F283C40003A1A08 /* lecsy */;
+			baseConfigurationReferenceRelativePath = Config/Debug.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -335,6 +473,8 @@
 		};
 		CDF438FE2F283C41003A1A08 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = CDF438E02F283C40003A1A08 /* lecsy */;
+			baseConfigurationReferenceRelativePath = Config/Release.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -395,16 +535,25 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = lecsy/lecsy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = G7LG228243;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = lecsy/Info.plist;
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = \"com.takumiNittono.word.lecsy\";\n    CFBundleURLSchemes =     (\n        lecsy\n    );\n}";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "lecsy needs microphone access to record your lectures.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_SUPABASE_ANON_KEY = "sb_publishable_q6JRDcMOKDp8qPuptCLARg_-HqmJsNH";
+				INFOPLIST_KEY_SUPABASE_URL = "https://bjqilokchrqfxzimfnpm.supabase.co";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = audio;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -413,6 +562,10 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.takumiNittono.word.lecsy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -427,16 +580,25 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = lecsy/lecsy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = G7LG228243;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = lecsy/Info.plist;
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = \"com.takumiNittono.word.lecsy\";\n    CFBundleURLSchemes =     (\n        lecsy\n    );\n}";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "lecsy needs microphone access to record your lectures.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_SUPABASE_ANON_KEY = "sb_publishable_q6JRDcMOKDp8qPuptCLARg_-HqmJsNH";
+				INFOPLIST_KEY_SUPABASE_URL = "https://bjqilokchrqfxzimfnpm.supabase.co";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = audio;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -445,6 +607,10 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.takumiNittono.word.lecsy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -538,6 +704,68 @@
 			};
 			name = Release;
 		};
+		CDF43BDE2F2939B3003A1A08 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G7LG228243;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = LecsyWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.takumiNittono.word.lecsy.LecsyWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CDF43BDF2F2939B3003A1A08 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G7LG228243;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = LecsyWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.takumiNittono.word.lecsy.LecsyWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -577,7 +805,48 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		CDF43BE12F2939B3003A1A08 /* Build configuration list for PBXNativeTarget "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CDF43BDE2F2939B3003A1A08 /* Debug */,
+				CDF43BDF2F2939B3003A1A08 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		CDF439082F283C41003A1A09 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
+		CDF439092F283C41003A1A0A /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CDF4390A2F283C41003A1A0B /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CDF439082F283C41003A1A09 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
+		};
+		CDF4390B2F283C41003A1A0C /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CDF439092F283C41003A1A0A /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = CDF438D62F283C40003A1A08 /* Project object */;
 }
