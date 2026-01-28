@@ -37,13 +37,28 @@ export default function Home() {
               </span>
             </div>
             <h1 className="text-5xl lg:text-7xl font-bold text-gray-900 mb-6 leading-tight">
-              Turn lectures into
-              <br />
-              <span className="gradient-text">understanding.</span>
+              Lecture Recording & AI Transcription App for Students
             </h1>
-            <p className="text-xl lg:text-2xl text-gray-600 mb-8 max-w-2xl mx-auto">
-              Record on your iPhone. Read anywhere. Let AI do the rest.
+            <p className="text-xl lg:text-2xl text-gray-600 mb-6 max-w-2xl mx-auto">
+              Record lectures, transcribe them with AI, and review anytime to truly understand your classes.
             </p>
+            <div className="mb-8 max-w-2xl mx-auto">
+              <p className="text-lg text-gray-700 font-medium mb-3">Designed for:</p>
+              <ul className="flex flex-wrap justify-center gap-4 text-gray-600">
+                <li className="flex items-center gap-2">
+                  <span>•</span>
+                  <span>College students</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span>•</span>
+                  <span>International students</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span>•</span>
+                  <span>English lectures</span>
+                </li>
+              </ul>
+            </div>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Link
                 href="/login"
@@ -124,7 +139,7 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
-              Your lectures, captured and clarified.
+              Lecsy: Lecture Recording & AI Transcription App
             </h2>
           </div>
           <div className="grid md:grid-cols-2 gap-8 items-center">
@@ -137,7 +152,7 @@ export default function Home() {
                 </div>
                 <div>
                   <h3 className="font-bold text-gray-900 mb-2">Completely Offline</h3>
-                  <p className="text-gray-600">lecsy records your lectures on iPhone — no internet required.</p>
+                  <p className="text-gray-600">Lecsy lecture recording app records your lectures on iPhone — no internet required.</p>
                 </div>
               </div>
               <div className="flex items-start gap-4 p-6 bg-gradient-to-br from-sky-50 to-cyan-50 rounded-xl hover-lift">
@@ -148,7 +163,7 @@ export default function Home() {
                 </div>
                 <div>
                   <h3 className="font-bold text-gray-900 mb-2">Local Transcription</h3>
-                  <p className="text-gray-600">It transcribes everything locally, no internet required.</p>
+                  <p className="text-gray-600">AI transcription transcribes everything locally, no internet required.</p>
                 </div>
               </div>
               <div className="flex items-start gap-4 p-6 bg-gradient-to-br from-cyan-50 to-blue-50 rounded-xl hover-lift">
@@ -214,7 +229,7 @@ export default function Home() {
               <div className="text-5xl mb-4">🧠</div>
               <h3 className="text-2xl font-bold text-gray-900 mb-4">Understand</h3>
               <p className="text-gray-600 leading-relaxed">
-                Pro users get AI-powered summaries: key points, sections, and exam prep — all in one tap.
+                AI-powered summaries: key points, sections, and exam prep — coming soon!
               </p>
             </div>
           </div>
@@ -272,7 +287,7 @@ export default function Home() {
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-3xl font-bold">Pro</h3>
-                  <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-semibold">$2.99/month</span>
+                  <span className="px-3 py-1 bg-yellow-400 text-yellow-900 rounded-full text-sm font-semibold">Coming Soon</span>
                 </div>
                 <ul className="space-y-4 mb-8">
                   <li className="flex items-start gap-3">
@@ -316,7 +331,7 @@ export default function Home() {
       <section className="bg-gradient-to-b from-white to-gray-50 py-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-12 text-center">
-            Why lecsy?
+            Why Lecsy Lecture Recording & AI Transcription App?
           </h2>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="text-center p-8 bg-white rounded-2xl shadow-lg hover-lift">
@@ -435,12 +450,12 @@ export default function Home() {
                   <span>Key points &amp; sections</span>
                 </li>
               </ul>
-              <Link
-                href="/login"
-                className="block w-full text-center px-6 py-4 bg-gradient-to-r from-blue-600 to-sky-600 text-white rounded-xl hover:from-blue-700 hover:to-sky-700 transition-all font-semibold shadow-lg hover:shadow-xl"
-              >
-                Upgrade to Pro
-              </Link>
+              <div className="block w-full text-center px-6 py-4 bg-gray-300 text-gray-600 rounded-xl font-semibold cursor-not-allowed relative">
+                <span>Coming Soon</span>
+                <div className="absolute top-2 right-2">
+                  <span className="px-2 py-1 bg-gray-500 text-white rounded text-xs font-semibold">SOON</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -470,15 +485,15 @@ export default function Home() {
               </p>
             </div>
             <div className="bg-white p-6 rounded-xl shadow-md hover-lift">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Can I cancel Pro anytime?</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">When will Pro features be available?</h3>
               <p className="text-gray-600 leading-relaxed">
-                Yes. Cancel anytime from your account settings.
+                Pro features including AI summaries and exam prep mode are coming soon. Stay tuned for updates!
               </p>
             </div>
             <div className="bg-white p-6 rounded-xl shadow-md hover-lift">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Is there a free trial for Pro?</h3>
               <p className="text-gray-600 leading-relaxed">
-                No trial, but Free gives you everything you need to start. Pro is just faster understanding.
+                Pro features are coming soon. The free plan gives you everything you need to start recording and transcribing lectures.
               </p>
             </div>
           </div>
@@ -490,10 +505,10 @@ export default function Home() {
         <div className="absolute inset-0 bg-grid-pattern opacity-10"></div>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
           <h2 className="text-4xl lg:text-5xl font-bold mb-6">
-            Start capturing your lectures today.
+            Start capturing your lectures today with Lecsy.
           </h2>
           <p className="text-xl mb-4 opacity-90">
-            Free to use. No account required to start.
+            Free lecture recording & AI transcription app. No account required to start.
           </p>
           <p className="text-xl mb-4 opacity-90">
             Start recording in seconds.
@@ -505,7 +520,7 @@ export default function Home() {
             href="/login"
             className="inline-flex items-center gap-2 px-8 py-4 bg-white text-blue-600 rounded-xl text-lg font-semibold hover:bg-gray-100 transition-all shadow-2xl hover:shadow-3xl transform hover:scale-105"
           >
-            Download lecsy — Free
+            Download Lecsy — Free
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>

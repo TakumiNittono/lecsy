@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "lecsy — Turn lectures into understanding",
-  description: "Record lectures on iPhone. Read anywhere. Let AI do the rest.",
+  title: "Lecsy | Lecture Recording & AI Transcription App for Students",
+  description: "Lecsy is a lecture recording and AI transcription app designed for college and international students to better understand lectures.",
+  alternates: {
+    canonical: "https://www.lecsy.app/",
+  },
 };
 
 export default function RootLayout({
