@@ -54,6 +54,50 @@ function LoginForm() {
     }
   };
 
+  const handleAppleLogin = async () => {
+    console.log('🍎 Apple Sign In button clicked');
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('🍎 Starting Apple OAuth flow...');
+
+      // クライアント側で直接OAuthを開始（クッキーストレージを使用）
+      const { createClient } = await import('@/utils/supabase/client')
+      const supabase = createClient()
+      console.log('🍎 Supabase client created');
+      
+      const { data, error: signInError } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+        },
+      })
+
+      console.log('🍎 OAuth response:', { data, error: signInError });
+
+      if (signInError) {
+        console.error('🍎 OAuth error:', signInError)
+        setError(signInError.message)
+        setLoading(false);
+        return
+      }
+
+      if (data?.url) {
+        console.log('🍎 Redirecting to:', data.url);
+        // OAuth URLにリダイレクト
+        window.location.href = data.url
+      } else {
+        console.error('🍎 No OAuth URL received');
+        setError('認証URLの取得に失敗しました')
+        setLoading(false);
+      }
+    } catch (err: any) {
+      console.error("🍎 Login error:", err);
+      setError(err.message || "ログインに失敗しました");
+      setLoading(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-white flex flex-col">
       {/* Header */}
@@ -112,11 +156,17 @@ function LoginForm() {
             </button>
 
             {/* Apple Login */}
-            <button className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors">
+            <button
+              onClick={handleAppleLogin}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
               </svg>
-              <span className="font-medium">Continue with Apple</span>
+              <span className="font-medium">
+                {loading ? "Loading..." : "Continue with Apple"}
+              </span>
             </button>
           </div>
 
