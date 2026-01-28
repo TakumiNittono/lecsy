@@ -519,8 +519,8 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-center text-gray-600 text-sm">
             <div className="mb-4 md:mb-0">© 2026 lecsy. All rights reserved.</div>
             <div className="flex gap-6">
-              <Link href="#" className="hover:text-gray-900 transition-colors">Privacy Policy</Link>
-              <Link href="#" className="hover:text-gray-900 transition-colors">Terms of Service</Link>
+              <Link href="/privacy" className="hover:text-gray-900 transition-colors">Privacy Policy</Link>
+              <Link href="/terms" className="hover:text-gray-900 transition-colors">Terms of Service</Link>
             </div>
           </div>
         </div>
