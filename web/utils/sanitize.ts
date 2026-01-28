@@ -4,7 +4,7 @@ import DOMPurify from 'dompurify';
  * サーバーサイドでHTMLタグを除去（シンプルな実装）
  */
 function stripHTMLTagsServer(input: string): string {
-  if (!input) return '';
+  if (!input || typeof input !== 'string') return '';
   // HTMLタグを正規表現で除去
   return input.replace(/<[^>]*>/g, '');
 }
@@ -13,7 +13,7 @@ function stripHTMLTagsServer(input: string): string {
  * クライアントサイドでHTMLタグを除去（DOMPurify使用）
  */
 function stripHTMLTagsClient(input: string): string {
-  if (!input) return '';
+  if (!input || typeof input !== 'string') return '';
   return DOMPurify.sanitize(input, {
     ALLOWED_TAGS: [], // すべてのタグを禁止
     ALLOWED_ATTR: [], // すべての属性を禁止
