@@ -1,16 +1,23 @@
 import DOMPurify from 'dompurify';
 
-// サーバーサイドでのDOMPurify使用のためのポリフィル
-let purify: typeof DOMPurify;
+/**
+ * サーバーサイドでHTMLタグを除去（シンプルな実装）
+ */
+function stripHTMLTagsServer(input: string): string {
+  if (!input) return '';
+  // HTMLタグを正規表現で除去
+  return input.replace(/<[^>]*>/g, '');
+}
 
-if (typeof window === 'undefined') {
-  // サーバーサイド: jsdomを使用
-  const { JSDOM } = require('jsdom');
-  const window = new JSDOM('').window;
-  purify = DOMPurify(window as unknown as Window & typeof globalThis);
-} else {
-  // クライアントサイド
-  purify = DOMPurify;
+/**
+ * クライアントサイドでHTMLタグを除去（DOMPurify使用）
+ */
+function stripHTMLTagsClient(input: string): string {
+  if (!input) return '';
+  return DOMPurify.sanitize(input, {
+    ALLOWED_TAGS: [], // すべてのタグを禁止
+    ALLOWED_ATTR: [], // すべての属性を禁止
+  });
 }
 
 /**
@@ -19,11 +26,14 @@ if (typeof window === 'undefined') {
 export function sanitizeText(input: string | null | undefined): string {
   if (!input) return '';
   
-  // HTMLタグをすべて除去
-  return purify.sanitize(input, {
-    ALLOWED_TAGS: [], // すべてのタグを禁止
-    ALLOWED_ATTR: [], // すべての属性を禁止
-  });
+  // サーバーサイドとクライアントサイドで異なる実装を使用
+  if (typeof window === 'undefined') {
+    // サーバーサイド: シンプルな正規表現で除去
+    return stripHTMLTagsServer(input);
+  } else {
+    // クライアントサイド: DOMPurifyを使用
+    return stripHTMLTagsClient(input);
+  }
 }
 
 /**
@@ -32,8 +42,14 @@ export function sanitizeText(input: string | null | undefined): string {
 export function sanitizeHTML(input: string | null | undefined): string {
   if (!input) return '';
   
-  // 安全なタグのみ許可
-  return purify.sanitize(input, {
+  // クライアントサイドのみで使用（サーバーサイドでは使用しない）
+  if (typeof window === 'undefined') {
+    // サーバーサイドではHTMLタグをすべて除去
+    return stripHTMLTagsServer(input);
+  }
+  
+  // クライアントサイド: DOMPurifyを使用
+  return DOMPurify.sanitize(input, {
     ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'ul', 'ol', 'li'],
     ALLOWED_ATTR: [],
   });
