@@ -3,6 +3,27 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  createPreflightResponse,
+  createJsonResponse,
+  createErrorResponse,
+} from '../_shared/cors.ts';
+
+// 環境変数でデバッグモードを制御
+const DEBUG_MODE = Deno.env.get("DEBUG") === "true";
+
+function debugLog(...args: unknown[]): void {
+  if (DEBUG_MODE) {
+    console.log("[DEBUG]", ...args);
+  }
+}
+
+function maskToken(token: string, visibleChars: number = 8): string {
+  if (token.length <= visibleChars) {
+    return "***";
+  }
+  return `${token.substring(0, visibleChars)}***[length:${token.length}]`;
+}
 
 interface SaveTranscriptRequest {
   title: string;
@@ -14,25 +35,17 @@ interface SaveTranscriptRequest {
 }
 
 serve(async (req) => {
-  // CORS
+  // CORS プリフライト
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST",
-        "Access-Control-Allow-Headers": "authorization, content-type",
-      },
-    });
+    return createPreflightResponse(req);
   }
 
   try {
-    // デバッグ: すべてのヘッダーをログ出力
-    console.log("Request headers:", Object.fromEntries(req.headers.entries()));
+    debugLog("Request received");
     
     // 認証チェック
     const authHeader = req.headers.get("Authorization");
-    console.log("Authorization header:", authHeader ? `${authHeader.substring(0, 50)}...` : "missing");
-    console.log("Authorization header length:", authHeader ? authHeader.length : 0);
+    console.log("Authorization header present:", !!authHeader);
     
     if (!authHeader) {
       console.error("Authorization header is missing");
@@ -44,23 +57,19 @@ serve(async (req) => {
 
     // Bearerプレフィックスを確認
     if (!authHeader.startsWith("Bearer ")) {
-      console.error("Authorization header does not start with 'Bearer '");
-      return new Response(JSON.stringify({ error: "Unauthorized", code: "INVALID_AUTH_FORMAT" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+      console.error("Invalid authorization format");
+      return createErrorResponse(req, "Invalid auth format", 401);
     }
 
     // JWTトークンを抽出
     const token = authHeader.substring(7); // "Bearer "を除去
-    console.log("JWT token (first 50 chars):", token.substring(0, 50));
-    console.log("JWT token length:", token.length);
+    debugLog("JWT token:", maskToken(token));
 
     // Supabaseクライアント
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    console.log("Supabase URL:", supabaseUrl);
-    console.log("Supabase Anon Key (first 20 chars):", supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : "missing");
+    console.log("Supabase URL configured:", !!supabaseUrl);
+    console.log("Supabase Anon Key configured:", !!supabaseAnonKey);
     
     const supabase = createClient(
       supabaseUrl!,
@@ -68,10 +77,9 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    console.log("Calling supabase.auth.getUser()...");
     // ユーザー取得（JWT検証を含む）
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    console.log("getUser result - user:", user ? user.id : "null", "error:", authError);
+    console.log("User authenticated:", !!user);
     
     if (authError) {
       console.error("Auth error:", authError);
@@ -100,31 +108,10 @@ serve(async (req) => {
         }
       }
       
-      return new Response(
-        JSON.stringify({ 
-          error: "Unauthorized", 
-          code: "AUTH_ERROR",
-          message: authError.message || "Authentication failed",
-          details: authError.status ? `Status: ${authError.status}` : undefined
-        }), 
-        {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      return createErrorResponse(req, "Unauthorized", 401);
     }
     if (!user) {
-      return new Response(
-        JSON.stringify({ 
-          error: "Unauthorized", 
-          code: "NO_USER",
-          message: "User not found"
-        }), 
-        {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      return createErrorResponse(req, "Unauthorized", 401);
     }
 
     // リクエストボディ
@@ -132,13 +119,7 @@ serve(async (req) => {
 
     // バリデーション
     if (!body.content || body.content.trim() === "") {
-      return new Response(
-        JSON.stringify({ error: "Content is required", code: "VALIDATION_ERROR" }),
-        { 
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      return createErrorResponse(req, "Content is required", 400);
     }
 
     // word_count計算
@@ -164,22 +145,9 @@ serve(async (req) => {
       throw error;
     }
 
-    return new Response(JSON.stringify(data), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return createJsonResponse(req, data);
   } catch (error) {
-    console.error("Error:", error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return new Response(
-      JSON.stringify({ 
-        error: "Internal server error",
-        code: "INTERNAL_ERROR",
-        message: errorMessage
-      }),
-      { 
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    console.error("Error:", error instanceof Error ? error.message : "Unknown error");
+    return createErrorResponse(req, "Internal server error", 500);
   }
 });

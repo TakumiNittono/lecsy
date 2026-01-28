@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import SearchBar from "./SearchBar"
+import { sanitizeText, escapeRegExp } from '@/utils/sanitize'
 
 interface Transcript {
   id: string
@@ -46,22 +47,33 @@ export default function TranscriptList({ transcripts }: TranscriptListProps) {
   const highlightText = (text: string, query: string): string | JSX.Element => {
     if (!mounted || !query.trim()) return text
     
-    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, "gi")
-    const parts = text.split(regex)
+    // 入力をサニタイズ
+    const sanitizedText = sanitizeText(text)
+    const sanitizedQuery = sanitizeText(query)
     
-    return (
-      <>
-        {parts.map((part, index) =>
-          part.toLowerCase() === query.toLowerCase() ? (
-            <mark key={index} className="bg-yellow-200 px-1 rounded">
-              {part}
-            </mark>
-          ) : (
-            <span key={index}>{part}</span>
-          )
-        )}
-      </>
-    )
+    if (!sanitizedQuery) return sanitizedText
+    
+    try {
+      const regex = new RegExp(`(${escapeRegExp(sanitizedQuery)})`, "gi")
+      const parts = sanitizedText.split(regex)
+      
+      return (
+        <>
+          {parts.map((part, index) =>
+            part.toLowerCase() === sanitizedQuery.toLowerCase() ? (
+              <mark key={index} className="bg-yellow-200 px-1 rounded">
+                {part}
+              </mark>
+            ) : (
+              <span key={index}>{part}</span>
+            )
+          )}
+        </>
+      )
+    } catch {
+      // 正規表現エラーの場合はそのまま返す
+      return sanitizedText
+    }
   }
 
   return (

@@ -8,6 +8,7 @@
 import Foundation
 import Supabase
 import Combine
+import os.log
 
 /// Web同期サービス
 @MainActor
@@ -104,8 +105,7 @@ class SyncService: ObservableObject {
                         throw SyncError.notAuthenticated
                     }
                     
-                    print("🌐 SyncService: アクセストークン取得 - \(accessToken.prefix(20))...")
-                    print("🌐 SyncService: トークン長: \(accessToken.count) characters")
+                    AppLogger.logToken("Access Token", token: accessToken, category: .sync)
                     
                     // URLRequestを直接使用してEdge Functionを呼び出し
                     // Authorizationヘッダーを明示的に設定
@@ -119,7 +119,7 @@ class SyncService: ObservableObject {
                     // Bearerトークンの形式で設定（既にBearerプレフィックスが含まれていないことを確認）
                     let authHeader = accessToken.hasPrefix("Bearer ") ? accessToken : "Bearer \(accessToken)"
                     urlRequest.setValue(authHeader, forHTTPHeaderField: "Authorization")
-                    print("🌐 SyncService: Authorizationヘッダー設定 - \(authHeader.prefix(30))...")
+                    AppLogger.debug("Authorization header configured", category: .sync)
                     
                     let encoder = JSONEncoder()
                     urlRequest.httpBody = try encoder.encode(request)
@@ -283,11 +283,11 @@ enum SyncError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notAuthenticated:
-            return "User is not authenticated"
+            return "ユーザーが認証されていません"
         case .noTranscript:
-            return "No transcript available"
+            return "文字起こしデータがありません"
         case .uploadFailed(let message):
-            return "Upload failed: \(message)"
+            return "アップロードに失敗しました: \(message)"
         }
     }
 }

@@ -1,5 +1,49 @@
+# セキュリティ修正 #5: Stripe Webhook のエラーハンドリング強化
+
+**重要度**: 緊急  
+**対象ファイル**: `supabase/functions/stripe-webhook/index.ts`  
+**推定作業時間**: 20分
+
+---
+
+## 現状の問題
+
+### 問題 1: データベース操作のエラーチェックがない
+
+```typescript
+// 現在のコード (38-46行目)
+await supabase.from("subscriptions").upsert({
+  user_id: userId,
+  status: "active",
+  // ...
+});
+// エラーチェックがない
+```
+
+### 問題 2: メタデータの検証が不十分
+
+```typescript
+// 現在のコード (32行目)
+const userId = session.metadata?.user_id;
+// user_idの形式検証がない
+```
+
+### 問題 3: エラーメッセージがそのまま返される
+
+```typescript
+// 現在のコード (94行目)
+return new Response(`Webhook Error: ${error.message}`, { status: 400 });
+// 内部エラーの詳細が露出する可能性
+```
+
+---
+
+## 修正手順
+
+### Step 1: 完全な修正後のコード
+
+```typescript
 // supabase/functions/stripe-webhook/index.ts
-// Purpose: Stripeイベント処理
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -174,3 +218,117 @@ serve(async (req) => {
     return new Response("Internal server error", { status: 500 });
   }
 });
+```
+
+---
+
+## 主な変更点
+
+### 1. UUID形式の検証を追加
+```typescript
+function isValidUUID(id: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+}
+
+// 使用例
+if (!isValidUUID(userId)) {
+  console.error("[Stripe Webhook] Invalid user_id format:", userId);
+  return new Response("Invalid user_id format", { status: 400 });
+}
+```
+
+### 2. データベースエラーのチェックを追加
+```typescript
+const { error: upsertError } = await supabase.from("subscriptions").upsert({...});
+
+if (upsertError) {
+  logError("Failed to upsert subscription", upsertError);
+  return new Response("Database error", { status: 500 });
+}
+```
+
+### 3. エラーメッセージの安全化
+```typescript
+// 変更前
+return new Response(`Webhook Error: ${error.message}`, { status: 400 });
+
+// 変更後
+return new Response("Internal server error", { status: 500 });
+```
+
+### 4. 署名検証の分離
+```typescript
+let event: Stripe.Event;
+try {
+  event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+} catch (signatureError) {
+  console.error("[Stripe Webhook] Signature verification failed");
+  return new Response("Invalid signature", { status: 400 });
+}
+```
+
+---
+
+## デプロイ手順
+
+```bash
+cd supabase
+supabase functions deploy stripe-webhook
+```
+
+---
+
+## テスト方法
+
+### Stripe CLI でのテスト
+
+```bash
+# Stripe CLIをインストール
+brew install stripe/stripe-cli/stripe
+
+# ログイン
+stripe login
+
+# Webhookをローカルにフォワード
+stripe listen --forward-to localhost:54321/functions/v1/stripe-webhook
+
+# 別ターミナルでテストイベントを送信
+stripe trigger checkout.session.completed
+```
+
+### 不正なリクエストのテスト
+
+```bash
+# 署名なしリクエスト（400を期待）
+curl -X POST http://localhost:54321/functions/v1/stripe-webhook \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# 不正な署名（400を期待）
+curl -X POST http://localhost:54321/functions/v1/stripe-webhook \
+  -H "Content-Type: application/json" \
+  -H "stripe-signature: invalid" \
+  -d '{}'
+```
+
+---
+
+## 確認チェックリスト
+
+- [ ] `isValidUUID` 関数を追加
+- [ ] すべてのデータベース操作にエラーチェックを追加
+- [ ] メタデータの検証を追加
+- [ ] エラーメッセージを安全化
+- [ ] 署名検証を分離
+- [ ] ログ出力を追加
+- [ ] Stripe CLIでテスト
+- [ ] 本番環境にデプロイ
+
+---
+
+## 関連ドキュメント
+
+- [Stripe Webhooks Best Practices](https://stripe.com/docs/webhooks/best-practices)
+- [Stripe Signature Verification](https://stripe.com/docs/webhooks/signatures)
+- [Supabase Edge Functions](https://supabase.com/docs/guides/functions)

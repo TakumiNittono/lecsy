@@ -1,0 +1,8 @@
+// Debug.xcconfig.example
+// このファイルをコピーして Debug.xcconfig を作成してください
+// cp Debug.xcconfig.example Debug.xcconfig
+
+SUPABASE_URL = https:/$()/your-project.supabase.co
+SUPABASE_ANON_KEY = your-anon-key-here
+
+// 注意: $() は "/" のエスケープに必要

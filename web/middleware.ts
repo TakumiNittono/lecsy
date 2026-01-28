@@ -1,12 +1,17 @@
-import { type NextRequest } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/utils/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-  // APIルートはミドルウェアをスキップ
-  if (request.nextUrl.pathname.startsWith('/api/')) {
-    return
+  // 公開APIルート（Webhookなど）はスキップ
+  const publicApiPaths = [
+    '/api/stripe-webhook',  // Stripeからのwebhook
+  ]
+  
+  if (publicApiPaths.some(path => request.nextUrl.pathname.startsWith(path))) {
+    return NextResponse.next()
   }
   
+  // セッション更新はすべてのルートで実行
   return await updateSession(request)
 }
 

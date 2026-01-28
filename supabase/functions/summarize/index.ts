@@ -4,6 +4,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import OpenAI from "https://esm.sh/openai@4";
+import {
+  createPreflightResponse,
+  createJsonResponse,
+  createErrorResponse,
+} from '../_shared/cors.ts';
 
 interface SummarizeRequest {
   transcript_id: string;
@@ -15,23 +20,14 @@ const MONTHLY_LIMIT = 400;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST",
-        "Access-Control-Allow-Headers": "authorization, content-type",
-      },
-    });
+    return createPreflightResponse(req);
   }
 
   try {
     // 認証
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { 
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+      return createErrorResponse(req, "Unauthorized", 401);
     }
 
     const supabase = createClient(
@@ -47,10 +43,7 @@ serve(async (req) => {
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { 
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+      return createErrorResponse(req, "Unauthorized", 401);
     }
 
     // Pro状態チェック
@@ -61,13 +54,7 @@ serve(async (req) => {
       .single();
 
     if (!subscription || subscription.status !== "active") {
-      return new Response(
-        JSON.stringify({ error: "Pro subscription required", code: "PRO_REQUIRED" }),
-        { 
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      return createErrorResponse(req, "Pro subscription required", 403);
     }
 
     // リクエスト
@@ -84,52 +71,36 @@ serve(async (req) => {
       .gte("created_at", today.toISOString());
 
     if ((dailyCount || 0) >= DAILY_LIMIT) {
-      return new Response(
-        JSON.stringify({
-          error: "Daily limit reached. Try again tomorrow.",
-          code: "DAILY_LIMIT",
-        }),
-        { 
-          status: 429,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      return createErrorResponse(req, "Daily limit reached. Try again tomorrow.", 429);
     }
 
-    // transcript取得
+    // transcript取得（所有権チェック付き）
     const { data: transcript, error: transcriptError } = await supabase
       .from("transcripts")
-      .select("id, content, title")
+      .select("id, content, title, user_id")
       .eq("id", body.transcript_id)
+      .eq("user_id", user.id)  // 所有権チェックを追加
       .single();
 
     if (transcriptError || !transcript) {
-      return new Response(
-        JSON.stringify({ error: "Transcript not found" }),
-        { 
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      // 存在しない場合も権限がない場合も同じエラーを返す（情報漏洩防止）
+      return createErrorResponse(req, "Transcript not found or access denied", 404);
     }
 
-    // キャッシュチェック
+    // キャッシュチェック（所有権チェック付き）
     const { data: existingSummary } = await supabase
       .from("summaries")
       .select("*")
       .eq("transcript_id", body.transcript_id)
+      .eq("user_id", user.id)  // 所有権チェックを追加
       .single();
 
     if (existingSummary) {
       if (body.mode === "summary" && existingSummary.summary) {
-        return new Response(JSON.stringify(existingSummary), {
-          headers: { "Content-Type": "application/json" },
-        });
+        return createJsonResponse(req, existingSummary);
       }
       if (body.mode === "exam" && existingSummary.exam_mode) {
-        return new Response(JSON.stringify(existingSummary), {
-          headers: { "Content-Type": "application/json" },
-        });
+        return createJsonResponse(req, existingSummary);
       }
     }
 
@@ -212,17 +183,9 @@ ${transcript.content}
       transcript_id: body.transcript_id,
     });
 
-    return new Response(JSON.stringify(savedSummary), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return createJsonResponse(req, savedSummary);
   } catch (error) {
     console.error("Error:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { 
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    return createErrorResponse(req, "Internal server error", 500);
   }
 });

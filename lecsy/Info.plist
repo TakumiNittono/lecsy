@@ -7,9 +7,9 @@
 		<string>audio</string>
 	</array>
 	<key>SUPABASE_URL</key>
-	<string>https://bjqilokchrqfxzimfnpm.supabase.co</string>
+	<string>$(SUPABASE_URL)</string>
 	<key>SUPABASE_ANON_KEY</key>
-	<string>sb_publishable_q6JRDcMOKDp8qPuptCLARg_-HqmJsNH</string>
+	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>講義の音声を録音して文字起こしするためにマイクへのアクセスが必要です。</string>
 	<key>NSSupportsLiveActivities</key>

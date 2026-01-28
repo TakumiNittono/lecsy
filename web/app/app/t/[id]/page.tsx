@@ -5,6 +5,7 @@ import CopyButton from '@/components/CopyButton'
 import EditTitleForm from '@/components/EditTitleForm'
 import PrintButton from '@/components/PrintButton'
 import DeleteForm from '@/components/DeleteForm'
+import { sanitizeText } from '@/utils/sanitize'
 
 // 動的レンダリングを強制（cookiesを使用するため）
 export const dynamic = 'force-dynamic'
@@ -209,7 +210,7 @@ export default async function TranscriptDetailPage({
                   lineHeight: '1.75',
                 }}
               >
-                {transcript.content}
+                {sanitizeText(transcript.content)}
               </div>
               
               {/* スクロールインジケーター */}

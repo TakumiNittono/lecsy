@@ -19,6 +19,13 @@ DerivedData/
 *.dSYM.zip
 *.dSYM
 
+# Xcconfig files with secrets
+lecsy/Config/Debug.xcconfig
+lecsy/Config/Release.xcconfig
+
+# Keep example file
+!lecsy/Config/*.xcconfig.example
+
 # Supabase
 supabase/.temp/
 supabase/.branches/
