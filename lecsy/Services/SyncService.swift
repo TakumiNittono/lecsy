@@ -309,6 +309,74 @@ class SyncService: ObservableObject {
             throw SyncError.uploadFailed("Failed to update title: \(errorMessage)")
         }
     }
+    
+    /// Webから最新のタイトルを取得してiOSアプリの講義を更新
+    func syncTitlesFromWeb() async throws {
+        guard await authService.isSessionValid else {
+            print("⚠️ SyncService: 認証されていません - タイトル同期をスキップ")
+            return
+        }
+        
+        print("🌐 SyncService: Webからタイトル同期開始")
+        
+        // セッションをリフレッシュして最新のトークンを取得
+        await authService.refreshSession()
+        
+        guard let accessToken = await authService.accessToken else {
+            print("⚠️ SyncService: アクセストークンが取得できません")
+            throw SyncError.notAuthenticated
+        }
+        
+        // Supabase REST APIからtranscriptsを取得
+        let config = SupabaseConfig.shared
+        let restURL = config.supabaseURL.appendingPathComponent("rest/v1/transcripts")
+        
+        var urlRequest = URLRequest(url: restURL)
+        urlRequest.httpMethod = "GET"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        urlRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        urlRequest.setValue(config.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        // 必要なフィールドのみ取得（id, title, updated_at）
+        urlRequest.url = URL(string: "\(restURL.absoluteString)?select=id,title,updated_at&order=updated_at.desc")
+        
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncError.uploadFailed("Invalid response")
+        }
+        
+        if httpResponse.statusCode == 200 {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let transcripts: [WebTranscript] = try decoder.decode([WebTranscript].self, from: data)
+            
+            print("✅ SyncService: Webから \(transcripts.count) 件のtranscriptsを取得")
+            
+            // 各transcriptのタイトルをiOSアプリの講義に反映
+            var updatedCount = 0
+            for transcript in transcripts {
+                // webTranscriptIdが一致する講義を探す
+                if let lecture = lectureStore.lectures.first(where: { $0.webTranscriptId == transcript.id }) {
+                    // タイトルが異なる場合のみ更新
+                    let webTitle = transcript.displayTitle
+                    if lecture.title != webTitle {
+                        var updatedLecture = lecture
+                        updatedLecture.title = webTitle
+                        lectureStore.updateLecture(updatedLecture)
+                        updatedCount += 1
+                        print("✅ SyncService: タイトル更新 - ID: \(transcript.id), Title: \(webTitle)")
+                    }
+                }
+            }
+            
+            print("✅ SyncService: タイトル同期完了 - \(updatedCount) 件更新")
+        } else {
+            let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ SyncService: Webタイトル取得失敗 - Status: \(httpResponse.statusCode), Message: \(errorMessage)")
+            throw SyncError.uploadFailed("Failed to fetch titles: \(errorMessage)")
+        }
+    }
 }
 
 /// 保存リクエスト
@@ -325,6 +393,17 @@ struct SaveTranscriptRequest: Codable {
 struct SaveTranscriptResponse: Codable {
     let id: UUID
     let created_at: String?  // オプショナル（Edge Functionから返されるが、使用しない）
+}
+
+/// Webから取得したtranscript情報
+struct WebTranscript: Codable {
+    let id: UUID
+    let title: String?
+    let updated_at: Date?
+    
+    var displayTitle: String {
+        return title ?? ""
+    }
 }
 
 /// 同期エラー
