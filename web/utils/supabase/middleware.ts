@@ -32,17 +32,22 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse
   }
 
+  // ルートパス（LP）とログインページは認証不要
+  if (
+    request.nextUrl.pathname === '/' ||
+    request.nextUrl.pathname.startsWith('/login') ||
+    request.nextUrl.pathname.startsWith('/auth')
+  ) {
+    return supabaseResponse
+  }
+
   // セッションをリフレッシュ
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // 認証が必要なページへのアクセスを保護
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/auth')
-  ) {
+  // 認証が必要なページ（/appなど）へのアクセスを保護
+  if (!user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
