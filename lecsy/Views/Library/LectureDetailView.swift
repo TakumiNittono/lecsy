@@ -26,7 +26,7 @@ struct LectureDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 // タイトル編集
-                TextField("Title", text: $title)
+                TextField("タイトル", text: $title)
                     .font(.title2)
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: title) { oldValue, newValue in
@@ -34,6 +34,19 @@ struct LectureDetailView: View {
                         updatedLecture.title = newValue
                         store.updateLecture(updatedLecture)
                         lecture = updatedLecture
+                        
+                        // Webに保存済みの場合は、Web側のタイトルも更新
+                        if lecture.savedToWeb, let webId = lecture.webTranscriptId {
+                            Task {
+                                do {
+                                    try await syncService.updateTitleOnWeb(lecture: lecture, newTitle: newValue)
+                                    print("✅ LectureDetailView: Webタイトル更新成功")
+                                } catch {
+                                    print("⚠️ LectureDetailView: Webタイトル更新失敗 - \(error.localizedDescription)")
+                                    // エラーは無視（ローカルのタイトルは更新済み）
+                                }
+                            }
+                        }
                     }
                 
                 // メタ情報
@@ -79,7 +92,7 @@ struct LectureDetailView: View {
                                     } else {
                                         Image(systemName: "icloud.and.arrow.up")
                                     }
-                                    Text(isSavingToWeb ? "Saving..." : "Save to Web")
+                                    Text(isSavingToWeb ? "保存中..." : "Webに保存")
                                 }
                                 .font(.subheadline)
                                 .foregroundColor(.blue)
@@ -89,7 +102,7 @@ struct LectureDetailView: View {
                             VStack(spacing: 8) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "checkmark.icloud")
-                                    Text("Saved to Web")
+                                    Text("Webに保存済み")
                                 }
                                 .font(.subheadline)
                                 .foregroundColor(.green)
@@ -102,7 +115,7 @@ struct LectureDetailView: View {
                                     }) {
                                         HStack(spacing: 4) {
                                             Image(systemName: "safari")
-                                            Text("Open on Web")
+                                            Text("Webで開く")
                                         }
                                         .font(.subheadline)
                                         .foregroundColor(.blue)
@@ -120,7 +133,7 @@ struct LectureDetailView: View {
                 if lecture.transcriptStatus == .processing {
                     VStack(spacing: 16) {
                         ProgressView()
-                        Text("Transcribing...")
+                        Text("文字起こし中...")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -130,20 +143,20 @@ struct LectureDetailView: View {
                     Text(transcript)
                         .font(.body)
                 } else if lecture.transcriptStatus == .failed {
-                    Text("Transcription failed")
+                    Text("文字起こしに失敗しました")
                         .font(.body)
                         .foregroundColor(.red)
                 } else {
-                    Text("No transcript available")
+                    Text("文字起こしデータがありません")
                         .font(.body)
                         .foregroundColor(.secondary)
                 }
             }
             .padding()
         }
-        .navigationTitle("Lecture")
+        .navigationTitle("講義")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Save to Web Failed", isPresented: $showErrorAlert) {
+        .alert("Webへの保存に失敗しました", isPresented: $showErrorAlert) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(errorMessage)

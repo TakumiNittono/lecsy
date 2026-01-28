@@ -256,6 +256,59 @@ class SyncService: ObservableObject {
     private func updatePendingCount() {
         pendingCount = lectureStore.getPendingUploads().count
     }
+    
+    /// Web側のタイトルを更新
+    func updateTitleOnWeb(lecture: Lecture, newTitle: String) async throws {
+        guard let webId = lecture.webTranscriptId else {
+            print("⚠️ SyncService: Web IDがありません - タイトル更新をスキップ")
+            return
+        }
+        
+        guard await authService.isSessionValid else {
+            print("❌ SyncService: 認証されていません")
+            throw SyncError.notAuthenticated
+        }
+        
+        print("🌐 SyncService: Webタイトル更新開始 - Web ID: \(webId)")
+        
+        // セッションをリフレッシュして最新のトークンを取得
+        await authService.refreshSession()
+        
+        guard let accessToken = await authService.accessToken else {
+            print("⚠️ SyncService: アクセストークンが取得できません")
+            throw SyncError.notAuthenticated
+        }
+        
+        // Web APIを呼び出してタイトルを更新
+        let config = SupabaseConfig.shared
+        // WebアプリのAPIエンドポイントを使用
+        guard let webBaseURL = URL(string: "https://lecsy.vercel.app") else {
+            throw SyncError.uploadFailed("Invalid web URL")
+        }
+        let updateURL = webBaseURL.appendingPathComponent("api/transcripts/\(webId.uuidString)/title")
+        
+        var urlRequest = URLRequest(url: updateURL)
+        urlRequest.httpMethod = "PATCH"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        
+        let requestBody = ["title": newTitle]
+        urlRequest.httpBody = try JSONEncoder().encode(requestBody)
+        
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncError.uploadFailed("Invalid response")
+        }
+        
+        if httpResponse.statusCode == 200 {
+            print("✅ SyncService: Webタイトル更新成功")
+        } else {
+            let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ SyncService: Webタイトル更新失敗 - Status: \(httpResponse.statusCode), Message: \(errorMessage)")
+            throw SyncError.uploadFailed("Failed to update title: \(errorMessage)")
+        }
+    }
 }
 
 /// 保存リクエスト
@@ -279,6 +332,7 @@ enum SyncError: LocalizedError {
     case notAuthenticated
     case noTranscript
     case uploadFailed(String)
+    case notSavedToWeb
     
     var errorDescription: String? {
         switch self {
@@ -288,6 +342,8 @@ enum SyncError: LocalizedError {
             return "文字起こしデータがありません"
         case .uploadFailed(let message):
             return "アップロードに失敗しました: \(message)"
+        case .notSavedToWeb:
+            return "Webに保存されていません"
         }
     }
 }
