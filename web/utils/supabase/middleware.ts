@@ -32,11 +32,13 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse
   }
 
-  // ルートパス（LP）とログインページは認証不要
+  // ルートパス（LP）とログインページ、公開ページは認証不要
   if (
     request.nextUrl.pathname === '/' ||
     request.nextUrl.pathname.startsWith('/login') ||
-    request.nextUrl.pathname.startsWith('/auth')
+    request.nextUrl.pathname.startsWith('/auth') ||
+    request.nextUrl.pathname === '/privacy' ||
+    request.nextUrl.pathname === '/terms'
   ) {
     return supabaseResponse
   }
