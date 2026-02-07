@@ -21,11 +21,22 @@ interface ExamResponse {
   error?: string
 }
 
+const LANGUAGES = [
+  { code: 'ja', label: '日本語', name: 'Japanese' },
+  { code: 'en', label: 'English', name: 'English' },
+  { code: 'es', label: 'Español', name: 'Spanish' },
+  { code: 'zh', label: '中文', name: 'Chinese' },
+  { code: 'ko', label: '한국어', name: 'Korean' },
+  { code: 'fr', label: 'Français', name: 'French' },
+  { code: 'de', label: 'Deutsch', name: 'German' },
+]
+
 export default function ExamModeButton({ transcriptId, isPro }: ExamModeButtonProps) {
   const [loading, setLoading] = useState(false)
   const [examData, setExamData] = useState<ExamResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showAnswers, setShowAnswers] = useState<Record<number, boolean>>({})
+  const [selectedLanguage, setSelectedLanguage] = useState('ja')
   const router = useRouter()
 
   if (!isPro) {
@@ -76,6 +87,7 @@ export default function ExamModeButton({ transcriptId, isPro }: ExamModeButtonPr
         body: JSON.stringify({
           transcript_id: transcriptId,
           mode: 'exam',
+          output_language: selectedLanguage,
         }),
       })
 
@@ -116,6 +128,30 @@ export default function ExamModeButton({ transcriptId, isPro }: ExamModeButtonPr
 
   return (
     <div className="space-y-4">
+      {/* 言語選択UI */}
+      {!examData && (
+        <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+          <label className="block text-sm font-semibold text-gray-900 mb-3">
+            Exam Prep Language / 試験対策の言語
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            {LANGUAGES.map((lang) => (
+              <button
+                key={lang.code}
+                onClick={() => setSelectedLanguage(lang.code)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  selectedLanguage === lang.code
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'bg-white text-gray-700 hover:bg-purple-100 border border-gray-300'
+                }`}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ボタン */}
       {!examData && (
         <button

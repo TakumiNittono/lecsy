@@ -13,6 +13,7 @@ import {
 interface SummarizeRequest {
   transcript_id: string;
   mode: "summary" | "exam";
+  output_language?: string;
 }
 
 const DAILY_LIMIT = 20;
@@ -188,42 +189,62 @@ serve(async (req) => {
     // OpenAI呼び出し
     console.log("=== CALLING OPENAI API ===");
     console.log("OPENAI_API_KEY exists:", !!Deno.env.get("OPENAI_API_KEY"));
+    console.log("Output language:", body.output_language || "ja (default)");
     
     const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 
+    // 言語名マッピング
+    const languageNames: Record<string, string> = {
+      ja: "Japanese",
+      en: "English",
+      es: "Spanish",
+      zh: "Chinese",
+      ko: "Korean",
+      fr: "French",
+      de: "German",
+    };
+    
+    const outputLanguage = body.output_language || "ja";
+    const languageName = languageNames[outputLanguage] || "Japanese";
+    const languageInstruction = `You must respond ONLY in ${languageName}. All text in your response must be in ${languageName}.`;
+
     let prompt: string;
     if (body.mode === "summary") {
-      prompt = `以下の講義文字起こしを分析し、JSON形式で要約を生成してください。
+      prompt = `${languageInstruction}
 
-講義内容:
+Analyze the following lecture transcript and generate a summary in JSON format.
+
+Lecture content:
 ${transcript.content}
 
-出力形式:
+Output format (in ${languageName}):
 {
-  "summary": "全体の要約（200-300文字）",
-  "key_points": ["重要ポイント1", "重要ポイント2", ...],
+  "summary": "Overall summary (200-300 characters)",
+  "key_points": ["Key point 1", "Key point 2", ...],
   "sections": [
-    {"heading": "セクション名", "content": "1行要約"},
+    {"heading": "Section name", "content": "One-line summary"},
     ...
   ]
 }`;
     } else {
-      prompt = `以下の講義文字起こしを分析し、試験対策用のJSON形式で情報を生成してください。
+      prompt = `${languageInstruction}
 
-講義内容:
+Analyze the following lecture transcript and generate exam preparation information in JSON format.
+
+Lecture content:
 ${transcript.content}
 
-出力形式:
+Output format (in ${languageName}):
 {
   "key_terms": [
-    {"term": "用語", "definition": "定義"},
+    {"term": "Term", "definition": "Definition"},
     ...
   ],
   "questions": [
-    {"question": "問題", "answer": "解答"},
+    {"question": "Question", "answer": "Answer"},
     ...
   ],
-  "predictions": ["出題予想1", "出題予想2", ...]
+  "predictions": ["Prediction 1", "Prediction 2", ...]
 }`;
     }
 
@@ -232,7 +253,7 @@ ${transcript.content}
     const completion = await openai.chat.completions.create({
       model: "gpt-4-turbo",
       messages: [
-        { role: "system", content: "あなたは大学講義の要約と試験対策を行う専門家です。" },
+        { role: "system", content: `You are an expert in summarizing university lectures and preparing exam materials. ${languageInstruction}` },
         { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },

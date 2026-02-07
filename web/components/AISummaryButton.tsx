@@ -18,10 +18,21 @@ interface SummaryResponse {
   error?: string
 }
 
+const LANGUAGES = [
+  { code: 'ja', label: '日本語', name: 'Japanese' },
+  { code: 'en', label: 'English', name: 'English' },
+  { code: 'es', label: 'Español', name: 'Spanish' },
+  { code: 'zh', label: '中文', name: 'Chinese' },
+  { code: 'ko', label: '한국어', name: 'Korean' },
+  { code: 'fr', label: 'Français', name: 'French' },
+  { code: 'de', label: 'Deutsch', name: 'German' },
+]
+
 export default function AISummaryButton({ transcriptId, isPro }: AISummaryButtonProps) {
   const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState<SummaryResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [selectedLanguage, setSelectedLanguage] = useState('ja')
   const router = useRouter()
 
   if (!isPro) {
@@ -72,6 +83,7 @@ export default function AISummaryButton({ transcriptId, isPro }: AISummaryButton
         body: JSON.stringify({
           transcript_id: transcriptId,
           mode: 'summary',
+          output_language: selectedLanguage,
         }),
       })
 
@@ -105,6 +117,30 @@ export default function AISummaryButton({ transcriptId, isPro }: AISummaryButton
 
   return (
     <div className="space-y-4">
+      {/* 言語選択UI */}
+      {!summary && (
+        <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+          <label className="block text-sm font-semibold text-gray-900 mb-3">
+            Summary Language / サマリーの言語
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            {LANGUAGES.map((lang) => (
+              <button
+                key={lang.code}
+                onClick={() => setSelectedLanguage(lang.code)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  selectedLanguage === lang.code
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-white text-gray-700 hover:bg-blue-100 border border-gray-300'
+                }`}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ボタン */}
       {!summary && (
         <button
