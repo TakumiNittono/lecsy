@@ -41,75 +41,19 @@ serve(async (req) => {
   }
 
   try {
-    debugLog("Request received");
-    
-    // 認証チェック
+    // 認証（summarize関数と完全に同じ実装）
     const authHeader = req.headers.get("Authorization");
-    console.log("Authorization header present:", !!authHeader);
-    
     if (!authHeader) {
-      console.error("Authorization header is missing");
-      return new Response(JSON.stringify({ error: "Unauthorized", code: "NO_AUTH_HEADER" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+      return createErrorResponse(req, "Unauthorized", 401);
     }
 
-    // Bearerプレフィックスを確認
-    if (!authHeader.startsWith("Bearer ")) {
-      console.error("Invalid authorization format");
-      return createErrorResponse(req, "Invalid auth format", 401);
-    }
-
-    // JWTトークンを抽出
-    const token = authHeader.substring(7); // "Bearer "を除去
-    debugLog("JWT token:", maskToken(token));
-
-    // Supabaseクライアント
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    console.log("Supabase URL configured:", !!supabaseUrl);
-    console.log("Supabase Anon Key configured:", !!supabaseAnonKey);
-    
     const supabase = createClient(
-      supabaseUrl!,
-      supabaseAnonKey!,
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // ユーザー取得（JWT検証を含む）
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    console.log("User authenticated:", !!user);
-    
-    if (authError) {
-      console.error("Auth error:", authError);
-      console.error("Auth error details:", JSON.stringify(authError, null, 2));
-      console.error("Auth error status:", authError.status);
-      console.error("Auth error message:", authError.message);
-      
-      // JWT検証エラーの場合、より詳細な情報を返す
-      if (authError.message && authError.message.includes("JWT")) {
-        console.error("JWT validation failed. Token:", token.substring(0, 100));
-        // JWTの有効期限を確認（デコードはしないが、形式を確認）
-        const tokenParts = token.split(".");
-        console.error("JWT parts count:", tokenParts.length);
-        if (tokenParts.length === 3) {
-          try {
-            // JWTのペイロード部分をデコード（検証なし）
-            const payload = JSON.parse(atob(tokenParts[1]));
-            console.error("JWT payload:", JSON.stringify(payload, null, 2));
-            console.error("JWT exp (expiration):", payload.exp);
-            console.error("JWT exp (date):", new Date(payload.exp * 1000).toISOString());
-            console.error("Current time:", new Date().toISOString());
-            console.error("Token expired:", payload.exp < Date.now() / 1000);
-          } catch (e) {
-            console.error("Failed to decode JWT payload:", e);
-          }
-        }
-      }
-      
-      return createErrorResponse(req, "Unauthorized", 401);
-    }
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return createErrorResponse(req, "Unauthorized", 401);
     }

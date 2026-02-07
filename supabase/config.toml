@@ -37,8 +37,9 @@ enable_confirmations = false
 
 # Edge Functions JWT設定
 # 本番環境では全てのfunctionでJWT検証を有効化
+# save-transcript関数は手動でJWT検証を行うため、自動検証を無効化
 [functions.save-transcript]
-verify_jwt = true
+verify_jwt = false
 
 [functions.summarize]
 verify_jwt = true
@@ -46,3 +47,6 @@ verify_jwt = true
 [functions.stripe-webhook]
 # Webhookは外部からのリクエストのため、Stripe署名で検証
 verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = true

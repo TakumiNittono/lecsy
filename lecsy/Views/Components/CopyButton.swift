@@ -16,7 +16,7 @@ struct CopyButton: View {
             UIPasteboard.general.string = text
             copied = true
             
-            // 2秒後にリセット
+            // Reset after 2 seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 copied = false
             }

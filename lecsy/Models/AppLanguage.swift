@@ -7,27 +7,16 @@
 
 import Foundation
 
-/// アプリのUI言語設定
+/// アプリのUI言語設定（英語特化型）
 enum AppLanguage: String, Codable, CaseIterable {
-    case japanese = "ja"
     case english = "en"
     
     var displayName: String {
-        switch self {
-        case .japanese:
-            return "日本語"
-        case .english:
-            return "English"
-        }
+        return "English"
     }
     
-    /// システムのデフォルト言語を取得
+    /// システムのデフォルト言語を取得（常に英語）
     static var systemDefault: AppLanguage {
-        let preferredLanguage = Locale.preferredLanguages.first ?? "en"
-        if preferredLanguage.hasPrefix("ja") {
-            return .japanese
-        } else {
-            return .english
-        }
+        return .english
     }
 }

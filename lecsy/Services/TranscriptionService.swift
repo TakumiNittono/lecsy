@@ -10,65 +10,61 @@ import WhisperKit
 import AVFoundation
 import Combine
 
-/// 文字起こしサービス
+/// Transcription service
 @MainActor
 class TranscriptionService: ObservableObject {
     static let shared = TranscriptionService()
     
     @Published var state: TranscriptionState = .idle
     @Published var progress: Double = 0
-    @Published var transcriptionLanguage: TranscriptionLanguage = .auto
+    @Published var transcriptionLanguage: TranscriptionLanguage = .english
     @Published var isModelLoaded: Bool = false
     @Published var modelDownloadProgress: Double = 0
     
     private var whisperKit: WhisperKit?
     private var transcriptionTask: Task<Void, Never>?
-    private var currentLanguageCode: String? // 現在設定されている言語コード
+    private var currentLanguageCode: String? // Currently set language code
+    
+    // Timeout settings
+    private let modelLoadTimeout: TimeInterval = 300 // 5 minutes for model loading
+    private let transcriptionTimeout: TimeInterval = 300 // 5 minutes for transcription
     
     private init() {
-        // 保存された言語設定を読み込み
-        if let savedLanguageRaw = UserDefaults.standard.string(forKey: "transcriptionLanguage"),
-           let savedLanguage = TranscriptionLanguage(rawValue: savedLanguageRaw) {
-            transcriptionLanguage = savedLanguage
-            currentLanguageCode = savedLanguage.whisperLanguage
-            print("🔵 保存された言語設定を読み込み: \(savedLanguage.displayName) (\(savedLanguage.rawValue))")
-        } else {
-            // デフォルトは日本語
-            transcriptionLanguage = .japanese
-            currentLanguageCode = "ja"
-            UserDefaults.standard.set(TranscriptionLanguage.japanese.rawValue, forKey: "transcriptionLanguage")
-            print("🔵 デフォルト言語を日本語に設定")
-        }
+        // English-only: Always use English
+        transcriptionLanguage = .english
+        currentLanguageCode = "en"
+        UserDefaults.standard.set(TranscriptionLanguage.english.rawValue, forKey: "transcriptionLanguage")
+        print("🔵 TranscriptionLanguage: English-only mode - Always using English")
     }
     
-    /// 言語設定を変更して保存
+    /// Change and save language setting
     func setLanguage(_ language: TranscriptionLanguage) {
         transcriptionLanguage = language
         currentLanguageCode = language.whisperLanguage
         UserDefaults.standard.set(language.rawValue, forKey: "transcriptionLanguage")
         
-        // 言語が変更された場合、モデルを再読み込みする必要がある可能性があるため、whisperKitをnilにリセット
+        // Reset whisperKit to nil as model may need to be reloaded when language changes
         whisperKit = nil
         isModelLoaded = false
         
-        print("🔵 言語設定を変更: \(language.displayName) (\(language.rawValue))")
+        print("🔵 Language setting changed: \(language.displayName) (\(language.rawValue))")
         if let langCode = currentLanguageCode {
-            print("🔵 言語コード: \(langCode)")
+            print("🔵 Language code: \(langCode)")
         } else {
-            print("🔵 自動検出モード")
+            print("🔵 Auto-detect mode")
         }
     }
     
-    /// モデルがダウンロード済みか確認
+    /// Check if model is downloaded
     func isModelDownloaded() -> Bool {
-        // WhisperKitのモデルキャッシュディレクトリを確認
+        // Check WhisperKit model cache directory
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let modelDir = cacheDir.appendingPathComponent("WhisperKit")
         let modelPath = modelDir.appendingPathComponent("openai_whisper-coreml-base")
         return FileManager.default.fileExists(atPath: modelPath.path)
     }
     
-    /// モデルを読み込む
+    /// Load model with timeout
     func loadModel() async throws {
         guard !isModelLoaded else { return }
         
@@ -76,26 +72,54 @@ class TranscriptionService: ObservableObject {
         progress = 0
         
         do {
-            // WhisperKitを初期化（モデルを自動ダウンロード）
-            // baseモデルを使用（約500MB、高速）
-            print("🔵 WhisperKitモデルを読み込みます: 言語設定 = \(transcriptionLanguage.displayName)")
+            // Initialize WhisperKit (automatically downloads model)
+            // Use base model (approximately 500MB, fast)
+            print("🔵 Loading WhisperKit model: Language setting = \(transcriptionLanguage.displayName)")
+            print("🔵 Model load timeout: \(modelLoadTimeout) seconds")
             
-            // WhisperKitを初期化（シンプルな初期化）
-            whisperKit = try await WhisperKit()
+            // Initialize WhisperKit with timeout
+            whisperKit = try await withTimeout(seconds: modelLoadTimeout) {
+                try await WhisperKit()
+            }
             
             isModelLoaded = true
             state = .idle
             progress = 1.0
-            print("🔵 WhisperKitモデルの読み込み完了")
+            print("🔵 WhisperKit model loading completed")
+        } catch is TimeoutError {
+            state = .failed
+            print("❌ Model loading timed out after \(modelLoadTimeout) seconds")
+            throw TranscriptionError.modelLoadFailed("Model loading timed out. Please check your network connection and try again.")
         } catch {
             state = .failed
             throw TranscriptionError.modelLoadFailed(error.localizedDescription)
         }
     }
     
-    /// 文字起こしを実行
+    /// Execute async operation with timeout
+    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TimeoutError()
+            }
+            
+            guard let result = try await group.next() else {
+                throw TimeoutError()
+            }
+            
+            group.cancelAll()
+            return result
+        }
+    }
+    
+    /// Execute transcription with timeout
     func transcribe(audioURL: URL) async throws -> TranscriptionResult {
-        // モデルが読み込まれていない場合は自動的に読み込む
+        // Automatically load model if not loaded
         if whisperKit == nil {
             try await loadModel()
         }
@@ -108,51 +132,56 @@ class TranscriptionService: ObservableObject {
         progress = 0
         
         do {
-            // 設定された言語をログに記録
-            print("🔵 文字起こし開始: 言語設定 = \(transcriptionLanguage.displayName) (\(transcriptionLanguage.rawValue))")
+            // Log configured language
+            print("🔵 Starting transcription: Language setting = \(transcriptionLanguage.displayName) (\(transcriptionLanguage.rawValue))")
+            print("🔵 Transcription timeout: \(transcriptionTimeout) seconds")
             
-            // DecodingOptionsで言語を指定
+            // Specify language in DecodingOptions
             var decodeOptions = DecodingOptions()
             
+            // English-only: Always process as English
             if let languageCode = currentLanguageCode {
-                // 言語を明示的に指定（日本語の場合は確実に日本語として処理）
                 decodeOptions.language = languageCode
-                decodeOptions.usePrefillPrompt = true // 言語を強制指定するために必要
-                decodeOptions.detectLanguage = false // 言語検出を無効化して指定した言語を使用
-                print("🔵 言語を強制指定: \(languageCode)")
+                decodeOptions.usePrefillPrompt = true // Required to force language specification
+                decodeOptions.detectLanguage = false // Disable language detection and process as English
+                print("🔵 English-only: Forcing language to English: \(languageCode)")
             } else {
-                // 自動検出モード
-                decodeOptions.detectLanguage = true
-                print("🔵 自動検出モード")
+                // Fallback (should not normally occur)
+                decodeOptions.language = "en"
+                decodeOptions.usePrefillPrompt = true
+                decodeOptions.detectLanguage = false
+                print("🔵 English-only: Fallback setting to English")
             }
             
-            // 文字起こし実行（WhisperKitが音声ファイルを直接処理）
-            // WhisperKitのtranscribeメソッドは[TranscriptionResult]を返す
-            let whisperResults = try await whisperKit.transcribe(
-                audioPath: audioURL.path,
-                decodeOptions: decodeOptions
-            )
+            // Execute transcription with timeout (WhisperKit processes audio file directly)
+            // WhisperKit's transcribe method returns [TranscriptionResult]
+            let whisperResults = try await withTimeout(seconds: transcriptionTimeout) {
+                try await whisperKit.transcribe(
+                    audioPath: audioURL.path,
+                    decodeOptions: decodeOptions
+                )
+            }
             
-            print("🔵 WhisperKitが検出した言語: \(whisperResults.first?.language ?? "不明")")
+            print("🔵 Language detected by WhisperKit: \(whisperResults.first?.language ?? "Unknown")")
             
-            // 設定された言語と検出された言語が一致するか確認
+            // Check if configured language matches detected language
             if let detectedLanguage = whisperResults.first?.language,
                let languageCode = currentLanguageCode,
                detectedLanguage != languageCode {
-                print("⚠️ 警告: 設定された言語(\(languageCode))と検出された言語(\(detectedLanguage))が一致しません")
+                print("⚠️ Warning: Configured language(\(languageCode)) does not match detected language(\(detectedLanguage))")
             }
             
-            // 配列から最初の結果を取得
+            // Get first result from array
             guard let whisperResult = whisperResults.first else {
                 throw TranscriptionError.transcriptionFailed
             }
             
-            // 結果を変換（WhisperKitのTranscriptionResultから独自のTranscriptionResultへ）
-            // 名前空間を明確にするため、型エイリアスを使用
+            // Convert result (from WhisperKit's TranscriptionResult to custom TranscriptionResult)
+            // Use type alias to clarify namespace
             typealias LectureTranscriptionResult = TranscriptionResult
             typealias LectureTranscriptionSegment = LectureTranscriptionResult.TranscriptionSegment
             
-            // WhisperKitのsegmentsはFloat型のstart/endを持つため、Doubleに変換
+            // Convert WhisperKit's segments (Float start/end) to Double
             let segments = whisperResult.segments.map { segment in
                 LectureTranscriptionSegment(
                     startTime: Double(segment.start),
@@ -166,8 +195,8 @@ class TranscriptionService: ObservableObject {
             state = .completed
             progress = 1.0
             
-            // processingTimeプロパティが存在しない可能性があるため、デフォルト値を使用
-            // WhisperKitのTranscriptionResultにはprocessingTimeプロパティがない可能性がある
+            // Use default value as processingTime property may not exist
+            // WhisperKit's TranscriptionResult may not have processingTime property
             let processingTime: TimeInterval = 0.0
             
             return LectureTranscriptionResult(
@@ -176,13 +205,17 @@ class TranscriptionService: ObservableObject {
                 language: whisperResult.language,
                 processingTime: processingTime
             )
+        } catch is TimeoutError {
+            state = .failed
+            print("❌ Transcription timed out after \(transcriptionTimeout) seconds")
+            throw TranscriptionError.transcriptionTimedOut
         } catch {
             state = .failed
             throw error
         }
     }
     
-    /// 文字起こしをキャンセル
+    /// Cancel transcription
     func cancelTranscription() {
         transcriptionTask?.cancel()
         transcriptionTask = nil
@@ -190,7 +223,7 @@ class TranscriptionService: ObservableObject {
         progress = 0
     }
     
-    /// モデルを削除
+    /// Delete model
     func deleteModel() throws {
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let modelDir = cacheDir.appendingPathComponent("WhisperKit")
@@ -203,7 +236,7 @@ class TranscriptionService: ObservableObject {
         isModelLoaded = false
     }
     
-    /// モデルサイズを取得（バイト単位）
+    /// Get model size (in bytes)
     var modelSize: Int64 {
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let modelDir = cacheDir.appendingPathComponent("WhisperKit")
@@ -225,7 +258,7 @@ class TranscriptionService: ObservableObject {
     }
 }
 
-/// 文字起こし状態
+/// Transcription state
 enum TranscriptionState {
     case idle
     case downloading
@@ -234,23 +267,29 @@ enum TranscriptionState {
     case failed
 }
 
-/// 文字起こしエラー
+/// Timeout error for async operations
+struct TimeoutError: Error {}
+
+/// Transcription error
 enum TranscriptionError: LocalizedError {
     case modelNotLoaded
     case modelLoadFailed(String)
     case audioLoadFailed
     case transcriptionFailed
+    case transcriptionTimedOut
     
     var errorDescription: String? {
         switch self {
         case .modelNotLoaded:
-            return "モデルが読み込まれていません"
+            return "Model is not loaded"
         case .modelLoadFailed(let message):
-            return "モデルの読み込みに失敗しました: \(message)"
+            return "Failed to load model: \(message)"
         case .audioLoadFailed:
-            return "音声ファイルの読み込みに失敗しました"
+            return "Failed to load audio file"
         case .transcriptionFailed:
-            return "文字起こしに失敗しました"
+            return "Transcription failed"
+        case .transcriptionTimedOut:
+            return "Transcription timed out. The audio may be too long or the device is too slow. Please try again with a shorter recording."
         }
     }
 }

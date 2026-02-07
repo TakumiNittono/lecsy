@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ProCardUpgradeButton from "@/components/ProCardUpgradeButton";
 
 export default function Home() {
   return (
@@ -287,7 +288,7 @@ export default function Home() {
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-3xl font-bold">Pro</h3>
-                  <span className="px-3 py-1 bg-yellow-400 text-yellow-900 rounded-full text-sm font-semibold">Coming Soon</span>
+                  <span className="px-3 py-1 bg-yellow-400 text-yellow-900 rounded-full text-sm font-semibold">$2.99/mo</span>
                 </div>
                 <ul className="space-y-4 mb-8">
                   <li className="flex items-start gap-3">
@@ -321,6 +322,7 @@ export default function Home() {
                     <span className="text-lg">Section breakdown</span>
                   </li>
                 </ul>
+                <ProCardUpgradeButton />
               </div>
             </div>
           </div>
@@ -450,12 +452,7 @@ export default function Home() {
                   <span>Key points &amp; sections</span>
                 </li>
               </ul>
-              <div className="block w-full text-center px-6 py-4 bg-gray-300 text-gray-600 rounded-xl font-semibold cursor-not-allowed relative">
-                <span>Coming Soon</span>
-                <div className="absolute top-2 right-2">
-                  <span className="px-2 py-1 bg-gray-500 text-white rounded text-xs font-semibold">SOON</span>
-                </div>
-              </div>
+              <ProCardUpgradeButton />
             </div>
           </div>
         </div>
@@ -485,15 +482,15 @@ export default function Home() {
               </p>
             </div>
             <div className="bg-white p-6 rounded-xl shadow-md hover-lift">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">When will Pro features be available?</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">How do I upgrade to Pro?</h3>
               <p className="text-gray-600 leading-relaxed">
-                Pro features including AI summaries and exam prep mode are coming soon. Stay tuned for updates!
+                Simply log in to your account and click "Upgrade to Pro" on the dashboard. You'll be redirected to a secure checkout page powered by Stripe.
               </p>
             </div>
             <div className="bg-white p-6 rounded-xl shadow-md hover-lift">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Is there a free trial for Pro?</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Can I cancel my Pro subscription?</h3>
               <p className="text-gray-600 leading-relaxed">
-                Pro features are coming soon. The free plan gives you everything you need to start recording and transcribing lectures.
+                Yes! You can cancel your Pro subscription anytime from the dashboard. Your subscription will remain active until the end of the current billing period.
               </p>
             </div>
           </div>

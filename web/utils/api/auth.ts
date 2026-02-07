@@ -157,14 +157,21 @@ export function validateOrigin(request: Request): boolean {
   
   // OriginもRefererも存在しない場合、Same-Origin Requestの可能性があるため許可
   // （ただし、これは開発環境でのみ発生する可能性が高い）
+  // iOSアプリからのリクエストの場合、Origin/Refererが存在しない可能性がある
   if (!origin && !referer) {
-    // 本番環境では、通常OriginまたはRefererが存在するはず
     // 開発環境では許可
     if (process.env.NODE_ENV === 'development') {
       return true
     }
     // 本番環境では、hostヘッダーが存在する場合は許可
+    // iOSアプリからのリクエストの場合、認証トークンで検証するため、Origin検証をスキップ
     if (host) {
+      return true
+    }
+    // iOSアプリからのリクエストの場合、認証トークンで検証するため、Origin検証をスキップ
+    // User-AgentヘッダーでiOSアプリからのリクエストかどうかを判断
+    const userAgent = request.headers.get('user-agent')
+    if (userAgent && (userAgent.includes('iOS') || userAgent.includes('iPhone') || userAgent.includes('iPad'))) {
       return true
     }
   }

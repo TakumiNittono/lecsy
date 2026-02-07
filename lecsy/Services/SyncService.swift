@@ -10,7 +10,7 @@ import Supabase
 import Combine
 import os.log
 
-/// Web同期サービス
+/// Web sync service
 @MainActor
 class SyncService: ObservableObject {
     static let shared = SyncService()
@@ -22,27 +22,27 @@ class SyncService: ObservableObject {
     private let authService = AuthService.shared
     private let lectureStore = LectureStore.shared
     
-    // AuthServiceのsupabaseクライアントを使用（セッションを共有）
+    // Use AuthService's supabase client (share session)
     private var supabase: SupabaseClient {
         return authService.supabase
     }
     
     private init() {
-        // 起動時に保留中のアップロードを確認
+        // Check pending uploads on launch
         updatePendingCount()
     }
     
-    /// Webに保存
+    /// Save to Web
     func saveToWeb(lecture: Lecture) async throws -> UUID {
-        print("🌐 SyncService: saveToWeb開始 - Lecture ID: \(lecture.id)")
+        print("🌐 SyncService: Starting saveToWeb - Lecture ID: \(lecture.id)")
         
         guard await authService.isSessionValid else {
-            print("❌ SyncService: 認証されていません")
+            print("❌ SyncService: Not authenticated")
             throw SyncError.notAuthenticated
         }
         
         guard let transcriptText = lecture.transcriptText, !transcriptText.isEmpty else {
-            print("❌ SyncService: 文字起こしテキストがありません")
+            print("❌ SyncService: No transcript text available")
             throw SyncError.noTranscript
         }
         
@@ -55,8 +55,8 @@ class SyncService: ObservableObject {
         }
         
         do {
-            // Edge Functionを呼び出し
-            // created_atをISO 8601形式の文字列に変換
+            // Call Edge Function
+            // Convert created_at to ISO 8601 format string
             let iso8601Formatter = ISO8601DateFormatter()
             iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             let created_at_string = iso8601Formatter.string(from: lecture.createdAt)
@@ -70,45 +70,45 @@ class SyncService: ObservableObject {
                 app_version: Bundle.main.appVersion ?? "1.0.0"
             )
             
-            print("🌐 SyncService: Edge Function呼び出し中...")
+            print("🌐 SyncService: Calling Edge Function...")
             print("   - Title: \(request.title)")
             print("   - Content length: \(request.content.count) characters")
             print("   - Language: \(request.language ?? "nil")")
             let config = SupabaseConfig.shared
             print("   - URL: \(config.supabaseURL.absoluteString)/functions/v1/save-transcript")
             
-            // リトライロジック（最大3回）
+            // Retry logic (max 3 times)
             var lastError: Error?
             let maxRetries = 3
-            let retryDelay: TimeInterval = 2.0 // 2秒
+            let retryDelay: TimeInterval = 2.0 // 2 seconds
             
             for attempt in 1...maxRetries {
                 do {
-                    // セッションが有効か確認
+                    // Check if session is valid
                     guard await authService.isSessionValid else {
-                        print("⚠️ SyncService: セッションが無効です")
+                        print("⚠️ SyncService: Session is invalid")
                         throw SyncError.notAuthenticated
                     }
                     
-                    // 常にセッションをリフレッシュして、最新のトークンを取得
-                    print("🌐 SyncService: セッションをリフレッシュ中...")
-                    await authService.refreshSession()
-                    // リフレッシュ後にセッションが有効か再確認
-                    guard await authService.isSessionValid else {
-                        print("⚠️ SyncService: セッションリフレッシュ後も無効です")
-                        throw SyncError.notAuthenticated
+                    // Refresh session to get latest token
+                    print("🌐 SyncService: Refreshing session...")
+                    let refreshSuccess = await authService.refreshSession()
+                    if !refreshSuccess {
+                        print("⚠️ SyncService: Session refresh failed")
+                        // リフレッシュ失敗でもアクセストークンが有効かもしれないので続行
                     }
                     
-                    // アクセストークンを取得
+                    // Get access token (refreshSession()でキャッシュされた最新トークンを取得)
                     guard let accessToken = await authService.accessToken else {
-                        print("⚠️ SyncService: アクセストークンが取得できません")
+                        print("⚠️ SyncService: Cannot get access token")
                         throw SyncError.notAuthenticated
                     }
                     
+                    // トークンのデバッグ情報を出力
                     AppLogger.logToken("Access Token", token: accessToken, category: .sync)
                     
-                    // URLRequestを直接使用してEdge Functionを呼び出し
-                    // Authorizationヘッダーを明示的に設定
+                    // Call Edge Function using URLRequest directly
+                    // Explicitly set Authorization header
                     let config = SupabaseConfig.shared
                     let functionURL = config.supabaseURL.appendingPathComponent("functions/v1/save-transcript")
                     
@@ -116,25 +116,30 @@ class SyncService: ObservableObject {
                     urlRequest.httpMethod = "POST"
                     urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     
-                    // Bearerトークンの形式で設定（既にBearerプレフィックスが含まれていないことを確認）
+                    // Set in Bearer token format (ensure Bearer prefix is not already included)
                     let authHeader = accessToken.hasPrefix("Bearer ") ? accessToken : "Bearer \(accessToken)"
                     urlRequest.setValue(authHeader, forHTTPHeaderField: "Authorization")
+                    
+                    // Supabase Edge Functionsでは、apikeyヘッダーも必要かもしれない
+                    urlRequest.setValue(config.supabaseAnonKey, forHTTPHeaderField: "apikey")
+                    
                     AppLogger.debug("Authorization header configured", category: .sync)
+                    print("🌐 SyncService: Headers configured - Authorization: \(authHeader.prefix(30))..., apikey: \(config.supabaseAnonKey.prefix(20))...")
                     
                     let encoder = JSONEncoder()
                     urlRequest.httpBody = try encoder.encode(request)
                     
-                    print("🌐 SyncService: HTTPリクエスト送信...")
+                    print("🌐 SyncService: Sending HTTP request...")
                     let (data, response) = try await URLSession.shared.data(for: urlRequest)
                     
                     guard let httpResponse = response as? HTTPURLResponse else {
                         throw SyncError.uploadFailed("Invalid response type")
                     }
                     
-                    print("🌐 SyncService: HTTPレスポンス受信 - Status: \(httpResponse.statusCode)")
+                    print("🌐 SyncService: HTTP response received - Status: \(httpResponse.statusCode)")
                     
                     guard (200...299).contains(httpResponse.statusCode) else {
-                        // エラーレスポンスをパースして詳細なエラーメッセージを取得
+                        // Parse error response to get detailed error message
                         var errorMessage = "Unknown error"
                         if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
                            let message = errorData["message"] ?? errorData["error"] {
@@ -142,16 +147,16 @@ class SyncService: ObservableObject {
                         } else if let errorString = String(data: data, encoding: .utf8) {
                             errorMessage = errorString
                         }
-                        print("❌ SyncService: HTTPエラー - Status: \(httpResponse.statusCode), Message: \(errorMessage)")
+                        print("❌ SyncService: HTTP error - Status: \(httpResponse.statusCode), Message: \(errorMessage)")
                         throw SyncError.uploadFailed("Edge Function returned a non-2xx status code: \(httpResponse.statusCode)")
                     }
                     
                     let decoder = JSONDecoder()
                     let responseData: SaveTranscriptResponse = try decoder.decode(SaveTranscriptResponse.self, from: data)
                     
-                    print("✅ SyncService: Web保存成功 - Web ID: \(responseData.id)")
+                    print("✅ SyncService: Web save successful - Web ID: \(responseData.id)")
                     
-                    // 保存成功をマーク
+                    // Mark as saved
                     lectureStore.markAsSavedToWeb(lecture, webId: responseData.id)
                     
                     return responseData.id
@@ -168,9 +173,9 @@ class SyncService: ObservableObject {
                         continue
                     }
                     
-                    // 401エラーで最大試行回数に達した場合
+                    // If 401 error and max retries reached
                     if errorMessage.contains("401") || errorMessage.contains("Unauthorized") || errorMessage.contains("Invalid JWT") {
-                        print("⚠️ SyncService: 認証エラーのためリトライを中止します")
+                        print("⚠️ SyncService: Stopping retry due to authentication error")
                         break
                     }
                     
@@ -220,36 +225,36 @@ class SyncService: ObservableObject {
         }
     }
     
-    /// 保留中のアップロードを再試行
+    /// Retry pending uploads
     func retryPendingUploads() async {
         let pendingLectures = lectureStore.getPendingUploads()
         
         guard !pendingLectures.isEmpty else {
-            print("🌐 SyncService: 保留中のアップロードはありません")
+            print("🌐 SyncService: No pending uploads")
             return
         }
         
-        print("🌐 SyncService: 保留中のアップロードを再試行 - \(pendingLectures.count)件")
+        print("🌐 SyncService: Retrying pending uploads - \(pendingLectures.count) items")
         isSyncing = true
         
         var successCount = 0
         var failureCount = 0
         
         for (index, lecture) in pendingLectures.enumerated() {
-            print("🌐 SyncService: [\(index + 1)/\(pendingLectures.count)] アップロード中...")
+            print("🌐 SyncService: [\(index + 1)/\(pendingLectures.count)] Uploading...")
             do {
                 _ = try await saveToWeb(lecture: lecture)
                 successCount += 1
             } catch {
-                print("❌ SyncService: 講義 \(lecture.id) のアップロードに失敗: \(error)")
+                print("❌ SyncService: Upload failed for lecture \(lecture.id): \(error)")
                 failureCount += 1
-                // エラーが発生しても次の講義のアップロードを試行
+                // Continue with next lecture even if error occurs
             }
         }
         
         isSyncing = false
         updatePendingCount()
-        print("🌐 SyncService: 再試行完了 - 成功: \(successCount), 失敗: \(failureCount)")
+        print("🌐 SyncService: Retry completed - Success: \(successCount), Failed: \(failureCount)")
     }
     
     /// 保留中の数を更新
@@ -260,28 +265,28 @@ class SyncService: ObservableObject {
     /// Web側のタイトルを更新
     func updateTitleOnWeb(lecture: Lecture, newTitle: String) async throws {
         guard let webId = lecture.webTranscriptId else {
-            print("⚠️ SyncService: Web IDがありません - タイトル更新をスキップ")
+            print("⚠️ SyncService: No Web ID - Skipping title update")
             return
         }
         
         guard await authService.isSessionValid else {
-            print("❌ SyncService: 認証されていません")
+            print("❌ SyncService: Not authenticated")
             throw SyncError.notAuthenticated
         }
         
-        print("🌐 SyncService: Webタイトル更新開始 - Web ID: \(webId)")
+        print("🌐 SyncService: Starting Web title update - Web ID: \(webId)")
         
-        // セッションをリフレッシュして最新のトークンを取得
+        // Refresh session to get latest token
         await authService.refreshSession()
         
         guard let accessToken = await authService.accessToken else {
-            print("⚠️ SyncService: アクセストークンが取得できません")
+            print("⚠️ SyncService: Cannot get access token")
             throw SyncError.notAuthenticated
         }
         
-        // Web APIを呼び出してタイトルを更新
+        // Call Web API to update title
         let config = SupabaseConfig.shared
-        // WebアプリのAPIエンドポイントを使用
+        // Use Web app API endpoint
         guard let webBaseURL = URL(string: "https://lecsy.vercel.app") else {
             throw SyncError.uploadFailed("Invalid web URL")
         }
@@ -302,15 +307,15 @@ class SyncService: ObservableObject {
         }
         
         if httpResponse.statusCode == 200 {
-            print("✅ SyncService: Webタイトル更新成功")
+            print("✅ SyncService: Web title update successful")
         } else {
             let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-            print("❌ SyncService: Webタイトル更新失敗 - Status: \(httpResponse.statusCode), Message: \(errorMessage)")
+            print("❌ SyncService: Web title update failed - Status: \(httpResponse.statusCode), Message: \(errorMessage)")
             throw SyncError.uploadFailed("Failed to update title: \(errorMessage)")
         }
     }
     
-    /// Webから最新のタイトルを取得してiOSアプリの講義を更新
+    /// Get latest titles from Web and update iOS app lectures
     func syncTitlesFromWeb() async throws {
         guard await authService.isSessionValid else {
             print("⚠️ SyncService: 認証されていません - タイトル同期をスキップ")
@@ -329,16 +334,26 @@ class SyncService: ObservableObject {
         
         // Supabase REST APIからtranscriptsを取得
         let config = SupabaseConfig.shared
-        let restURL = config.supabaseURL.appendingPathComponent("rest/v1/transcripts")
+        let baseURL = config.supabaseURL.appendingPathComponent("rest/v1/transcripts")
+        
+        // URLにクエリパラメータを追加（apikeyはヘッダーに設定するため、クエリパラメータには含めない）
+        var urlComponents = URLComponents(string: baseURL.absoluteString)!
+        urlComponents.queryItems = [
+            URLQueryItem(name: "select", value: "id,title,updated_at"),
+            URLQueryItem(name: "order", value: "updated_at.desc")
+        ]
+        
+        guard let restURL = urlComponents.url else {
+            throw SyncError.uploadFailed("Failed to create REST API URL")
+        }
         
         var urlRequest = URLRequest(url: restURL)
         urlRequest.httpMethod = "GET"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        // Supabase REST APIは、認証済みリクエストの場合、Authorizationヘッダーとapikeyヘッダーの両方が必要
         urlRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         urlRequest.setValue(config.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        // 必要なフィールドのみ取得（id, title, updated_at）
-        urlRequest.url = URL(string: "\(restURL.absoluteString)?select=id,title,updated_at&order=updated_at.desc")
         
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
         
@@ -347,11 +362,38 @@ class SyncService: ObservableObject {
         }
         
         if httpResponse.statusCode == 200 {
+            // レスポンスデータを確認
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("🔍 SyncService: レスポンスデータ - \(responseString.prefix(200))...")
+            }
+            
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            let transcripts: [WebTranscript] = try decoder.decode([WebTranscript].self, from: data)
             
-            print("✅ SyncService: Webから \(transcripts.count) 件のtranscriptsを取得")
+            let transcripts: [WebTranscript]
+            do {
+                transcripts = try decoder.decode([WebTranscript].self, from: data)
+                print("✅ SyncService: Webから \(transcripts.count) 件のtranscriptsを取得")
+            } catch {
+                print("❌ SyncService: JSONデコードエラー - \(error.localizedDescription)")
+                if let decodingError = error as? DecodingError {
+                    switch decodingError {
+                    case .typeMismatch(let type, let context):
+                        print("   - Type mismatch: \(type), Context: \(context)")
+                    case .valueNotFound(let type, let context):
+                        print("   - Value not found: \(type), Context: \(context)")
+                    case .keyNotFound(let key, let context):
+                        print("   - Key not found: \(key), Context: \(context)")
+                    case .dataCorrupted(let context):
+                        print("   - Data corrupted: \(context)")
+                    @unknown default:
+                        print("   - Unknown decoding error")
+                    }
+                }
+                // 空の配列を返してエラーを無視（タイトル同期はオプショナルな機能）
+                print("⚠️ SyncService: タイトル同期をスキップします")
+                return
+            }
             
             // 各transcriptのタイトルをiOSアプリの講義に反映
             var updatedCount = 0
@@ -379,23 +421,23 @@ class SyncService: ObservableObject {
     }
 }
 
-/// 保存リクエスト
+/// Save request
 struct SaveTranscriptRequest: Codable {
     let title: String
     let content: String
-    let created_at: String  // ISO 8601形式の文字列
+    let created_at: String  // ISO 8601 format string
     let duration: TimeInterval?
     let language: String?
     let app_version: String
 }
 
-/// 保存レスポンス
+/// Save response
 struct SaveTranscriptResponse: Codable {
     let id: UUID
-    let created_at: String?  // オプショナル（Edge Functionから返されるが、使用しない）
+    let created_at: String?  // Optional (returned from Edge Function but not used)
 }
 
-/// Webから取得したtranscript情報
+/// Transcript information retrieved from Web
 struct WebTranscript: Codable {
     let id: UUID
     let title: String?
@@ -406,7 +448,7 @@ struct WebTranscript: Codable {
     }
 }
 
-/// 同期エラー
+/// Sync error
 enum SyncError: LocalizedError {
     case notAuthenticated
     case noTranscript
@@ -416,13 +458,13 @@ enum SyncError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notAuthenticated:
-            return "ユーザーが認証されていません"
+            return "User is not authenticated"
         case .noTranscript:
-            return "文字起こしデータがありません"
+            return "No transcript data available"
         case .uploadFailed(let message):
-            return "アップロードに失敗しました: \(message)"
+            return "Upload failed: \(message)"
         case .notSavedToWeb:
-            return "Webに保存されていません"
+            return "Not saved to Web"
         }
     }
 }

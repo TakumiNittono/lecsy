@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AuthenticationServices
 
 @main
 struct lecsyApp: App {
@@ -15,10 +16,11 @@ struct lecsyApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if authService.isAuthenticated {
+                // Show ContentView if authenticated OR if user skipped login
+                if authService.isAuthenticated || authService.hasSkippedLogin {
                     ContentView()
                         .task {
-                            // アプリ起動時にWebからタイトルを同期
+                            // Sync titles from Web on app launch (only if authenticated)
                             await syncTitlesOnLaunch()
                         }
                 } else {
@@ -26,35 +28,53 @@ struct lecsyApp: App {
                 }
             }
             .onOpenURL { url in
-                // URLスキーム処理（認証コールバック）
-                print("🔗 lecsyApp: URL受信 - \(url)")
-                if url.scheme == "lecsy" && url.host == "auth" {
-                    print("🔗 lecsyApp: 認証コールバックURLを処理")
-                    Task { @MainActor in
-                        // AuthServiceでコールバックURLを処理
-                        await AuthService.shared.handleOAuthCallbackURL(url)
-                    }
+                handleIncomingURL(url)
+            }
+            .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { userActivity in
+                // Universal Links のハンドリング（必要に応じて）
+                if let url = userActivity.webpageURL {
+                    print("🔗 lecsyApp: Universal Link received - \(url)")
+                    handleIncomingURL(url)
                 }
             }
         }
     }
     
-    /// アプリ起動時にWebからタイトルを同期
+    /// URLを処理（OAuth コールバック等）
+    private func handleIncomingURL(_ url: URL) {
+        print("🔗 lecsyApp: URL received - \(url)")
+        print("   - scheme: \(url.scheme ?? "nil")")
+        print("   - host: \(url.host ?? "nil")")
+        print("   - path: \(url.path)")
+        print("   - fragment: \(url.fragment ?? "nil")")
+        
+        // lecsy:// スキームの処理
+        if url.scheme == "lecsy" {
+            if url.host == "auth" || url.path.contains("callback") {
+                print("🔗 lecsyApp: Processing authentication callback URL")
+                Task { @MainActor in
+                    await AuthService.shared.handleOAuthCallbackURL(url)
+                }
+            }
+        }
+    }
+    
+    /// Sync titles from Web on app launch
     @MainActor
     private func syncTitlesOnLaunch() async {
-        // 認証されている場合のみ実行
+        // Execute only if authenticated
         guard await authService.isSessionValid else {
-            print("⚠️ lecsyApp: 認証されていないためタイトル同期をスキップ")
+            print("⚠️ lecsyApp: Not authenticated, skipping title sync")
             return
         }
         
-        print("🌐 lecsyApp: 起動時タイトル同期開始")
+        print("🌐 lecsyApp: Starting title sync on launch")
         do {
             try await syncService.syncTitlesFromWeb()
-            print("✅ lecsyApp: 起動時タイトル同期完了")
+            print("✅ lecsyApp: Title sync on launch completed")
         } catch {
-            print("⚠️ lecsyApp: 起動時タイトル同期失敗 - \(error.localizedDescription)")
-            // エラーは無視（アプリの起動を妨げない）
+            print("⚠️ lecsyApp: Title sync on launch failed - \(error.localizedDescription)")
+            // Ignore errors (don't block app launch)
         }
     }
 }

@@ -12,6 +12,8 @@ struct RecordView: View {
     @StateObject private var recordingService = RecordingService.shared
     @State private var showPermissionAlert = false
     @State private var permissionAlertMessage = ""
+    @State private var showTranscriptionErrorAlert = false
+    @State private var transcriptionErrorMessage = ""
     
     var body: some View {
         VStack(spacing: 24) {
@@ -23,16 +25,16 @@ struct RecordView: View {
                 .monospacedDigit()
                 .foregroundColor(.secondary)
             
-            // ポーズ状態の表示
+            // Pause state display
             if recordingService.isPaused {
-                Text("一時停止中")
+                Text("Paused")
                     .font(.caption)
                     .foregroundColor(.orange.opacity(0.7))
             }
             
-            // 録音ボタンとポーズボタン
+            // Record button and pause button
             HStack(spacing: 24) {
-                // ポーズ/再開ボタン（録音中のみ表示）
+                // Pause/Resume button (only shown when recording)
                 if recordingService.isRecording {
                     Button(action: {
                         if recordingService.isPaused {
@@ -53,7 +55,7 @@ struct RecordView: View {
                     }
                 }
                 
-                // 録音開始/停止ボタン
+                // Record start/stop button
                 Button(action: {
                     if recordingService.isRecording {
                         stopRecording()
@@ -76,56 +78,61 @@ struct RecordView: View {
             Spacer()
         }
         .padding()
-        .alert("マイクへのアクセス権限が必要です", isPresented: $showPermissionAlert) {
-            Button("設定") {
+        .alert("Microphone access permission required", isPresented: $showPermissionAlert) {
+            Button("Settings") {
                 if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(settingsURL)
                 }
             }
-            Button("キャンセル", role: .cancel) { }
+            Button("Cancel", role: .cancel) { }
         } message: {
             Text(permissionAlertMessage)
+        }
+        .alert("Transcription Error", isPresented: $showTranscriptionErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(transcriptionErrorMessage)
         }
     }
     
     private func startRecording() {
         Task { @MainActor in
-            print("🔴 録音開始ボタンが押されました")
+            print("🔴 Record button pressed")
             
-            // 権限チェック
+            // Permission check
             var permissionStatus = AVAudioSession.sharedInstance().recordPermission
-            print("🔴 マイク権限状態: \(permissionStatus.rawValue)")
+            print("🔴 Microphone permission status: \(permissionStatus.rawValue)")
             
             if permissionStatus == .undetermined {
-                // 権限が未確定の場合はリクエスト
-                print("🔴 マイク権限をリクエストします")
+                // Request permission if undetermined
+                print("🔴 Requesting microphone permission")
                 let granted = await recordingService.requestMicrophonePermission()
-                print("🔴 マイク権限リクエスト結果: \(granted)")
+                print("🔴 Microphone permission request result: \(granted)")
                 
-                // 権限状態を再確認
+                // Recheck permission status
                 permissionStatus = AVAudioSession.sharedInstance().recordPermission
-                print("🔴 マイク権限状態（再確認）: \(permissionStatus.rawValue)")
+                print("🔴 Microphone permission status (recheck): \(permissionStatus.rawValue)")
                 
                 if !granted || permissionStatus != .granted {
-                    permissionAlertMessage = "マイクへのアクセスが拒否されています。設定アプリから権限を有効にしてください。"
+                    permissionAlertMessage = "Microphone access has been denied. Please enable it in Settings."
                     showPermissionAlert = true
                     return
                 }
             } else if permissionStatus != .granted {
-                // 権限が拒否されている場合
-                permissionAlertMessage = "マイクへのアクセスが拒否されています。設定アプリから権限を有効にしてください。"
+                // Permission denied
+                permissionAlertMessage = "Microphone access has been denied. Please enable it in Settings."
                 showPermissionAlert = true
                 return
             }
             
-            // 権限が許可されている場合、録音を開始
+            // Start recording
             do {
-                print("🔴 録音を開始します")
+                print("🔴 Starting recording")
                 try await recordingService.startRecording()
-                print("🔴 録音開始成功: isRecording = \(recordingService.isRecording)")
+                print("🔴 Recording started successfully: isRecording = \(recordingService.isRecording)")
             } catch {
-                print("🔴 録音開始エラー: \(error)")
-                permissionAlertMessage = "録音の開始に失敗しました: \(error.localizedDescription)"
+                print("🔴 Recording start error: \(error)")
+                permissionAlertMessage = "Failed to start recording: \(error.localizedDescription)"
                 showPermissionAlert = true
             }
         }
@@ -134,7 +141,7 @@ struct RecordView: View {
     private func stopRecording() {
         guard let audioURL = recordingService.stopRecording() else { return }
         
-        // 録音データからLectureを作成
+        // Create Lecture from recording data
         let lecture = Lecture(
             title: "",
             createdAt: Date(),
@@ -143,11 +150,11 @@ struct RecordView: View {
             transcriptStatus: .notStarted
         )
         
-        // LectureStoreに追加
+        // Add to LectureStore
         let store = LectureStore.shared
         store.addLecture(lecture)
         
-        // 文字起こしを開始
+        // Start transcription
         Task {
             await startTranscription(for: lecture)
         }
@@ -158,25 +165,32 @@ struct RecordView: View {
         
         let transcriptionService = TranscriptionService.shared
         
-        // 講義の状態を更新
+        // Update lecture status
         var updatedLecture = lecture
         updatedLecture.transcriptStatus = .processing
         LectureStore.shared.updateLecture(updatedLecture)
         
         do {
-            // 文字起こし実行
+            // Execute transcription
             let result = try await transcriptionService.transcribe(audioURL: audioURL)
             
-            // 結果を保存
+            // Save results
             updatedLecture.transcriptText = result.text
             updatedLecture.transcriptStatus = .completed
-            updatedLecture.language = TranscriptionLanguage(rawValue: result.language ?? "auto") ?? .auto
+            // English-only: Always set to English
+            updatedLecture.language = .english
             LectureStore.shared.updateLecture(updatedLecture)
         } catch {
-            // エラー処理
+            // Error handling
             updatedLecture.transcriptStatus = .failed
             LectureStore.shared.updateLecture(updatedLecture)
             print("Transcription failed: \(error)")
+            
+            // Show error alert to user
+            await MainActor.run {
+                transcriptionErrorMessage = error.localizedDescription
+                showTranscriptionErrorAlert = true
+            }
         }
     }
     

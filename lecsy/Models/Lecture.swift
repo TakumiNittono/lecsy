@@ -7,12 +7,12 @@
 
 import Foundation
 
-/// 講義データモデル
+/// Lecture data model
 struct Lecture: Identifiable, Codable {
     let id: UUID
     var title: String
     let createdAt: Date
-    var duration: TimeInterval // 秒単位
+    var duration: TimeInterval // In seconds
     let audioPath: URL?
     var transcriptText: String?
     var transcriptStatus: TranscriptionStatus
@@ -30,7 +30,7 @@ struct Lecture: Identifiable, Codable {
         transcriptStatus: TranscriptionStatus = .notStarted,
         savedToWeb: Bool = false,
         webTranscriptId: UUID? = nil,
-        language: TranscriptionLanguage = .auto
+        language: TranscriptionLanguage = .english
     ) {
         self.id = id
         self.title = title
@@ -44,7 +44,7 @@ struct Lecture: Identifiable, Codable {
         self.language = language
     }
     
-    /// タイトルが空の場合のデフォルトタイトル
+    /// Default title when title is empty
     var displayTitle: String {
         if title.isEmpty {
             let formatter = DateFormatter()
@@ -55,7 +55,7 @@ struct Lecture: Identifiable, Codable {
         return title
     }
     
-    /// 時間をフォーマット（例: "1h 23m"）
+    /// Format duration (e.g., "1h 23m")
     var formattedDuration: String {
         let hours = Int(duration) / 3600
         let minutes = (Int(duration) % 3600) / 60
@@ -70,7 +70,7 @@ struct Lecture: Identifiable, Codable {
         }
     }
     
-    /// 単語数を計算
+    /// Calculate word count
     var wordCount: Int {
         guard let text = transcriptText else { return 0 }
         return text.split(whereSeparator: { $0.isWhitespace }).count

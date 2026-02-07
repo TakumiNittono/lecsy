@@ -20,14 +20,10 @@ class AppLanguageService: ObservableObject {
     }
     
     private init() {
-        // 保存された言語設定を読み込み、なければシステムデフォルトを使用
-        if let savedLanguageRaw = UserDefaults.standard.string(forKey: "appLanguage"),
-           let savedLanguage = AppLanguage(rawValue: savedLanguageRaw) {
-            currentLanguage = savedLanguage
-        } else {
-            currentLanguage = AppLanguage.systemDefault
-            UserDefaults.standard.set(currentLanguage.rawValue, forKey: "appLanguage")
-        }
+        // 英語特化型：常に英語を使用
+        currentLanguage = .english
+        UserDefaults.standard.set(currentLanguage.rawValue, forKey: "appLanguage")
+        print("🔵 AppLanguage: 英語特化型モード - 常に英語を使用")
     }
     
     /// 言語を設定

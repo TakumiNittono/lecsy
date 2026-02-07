@@ -8,7 +8,7 @@
 import Foundation
 import Combine
 
-/// 講義データ管理サービス
+/// Lecture data management service
 @MainActor
 class LectureStore: ObservableObject {
     static let shared = LectureStore()
@@ -20,25 +20,25 @@ class LectureStore: ObservableObject {
     private let decoder = JSONDecoder()
     
     private init() {
-        // 保存先URL
+        // Storage URL
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         storageURL = documentsPath.appendingPathComponent("lectures.json")
         
-        // 日付フォーマット設定
+        // Date format settings
         encoder.dateEncodingStrategy = .iso8601
         decoder.dateDecodingStrategy = .iso8601
         
-        // 起動時にデータを読み込み
+        // Load data on launch
         loadLectures()
     }
     
-    /// 講義を追加
+    /// Add lecture
     func addLecture(_ lecture: Lecture) {
         lectures.append(lecture)
         saveLectures()
     }
     
-    /// 講義を更新
+    /// Update lecture
     func updateLecture(_ lecture: Lecture) {
         if let index = lectures.firstIndex(where: { $0.id == lecture.id }) {
             lectures[index] = lecture
@@ -46,11 +46,11 @@ class LectureStore: ObservableObject {
         }
     }
     
-    /// 講義を削除
+    /// Delete lecture
     func deleteLecture(_ lecture: Lecture) {
         lectures.removeAll { $0.id == lecture.id }
         
-        // 音声ファイルも削除
+        // Also delete audio file
         if let audioPath = lecture.audioPath {
             try? FileManager.default.removeItem(at: audioPath)
         }
@@ -58,12 +58,12 @@ class LectureStore: ObservableObject {
         saveLectures()
     }
     
-    /// IDで講義を取得
+    /// Get lecture by ID
     func getLecture(by id: UUID) -> Lecture? {
         return lectures.first { $0.id == id }
     }
     
-    /// 講義データを保存
+    /// Save lecture data
     func saveLectures() {
         do {
             let data = try encoder.encode(lectures)
@@ -73,7 +73,7 @@ class LectureStore: ObservableObject {
         }
     }
     
-    /// 講義データを読み込み
+    /// Load lecture data
     func loadLectures() {
         guard FileManager.default.fileExists(atPath: storageURL.path) else {
             return
@@ -88,7 +88,7 @@ class LectureStore: ObservableObject {
         }
     }
     
-    /// Webに保存済みとしてマーク
+    /// Mark as saved to Web
     func markAsSavedToWeb(_ lecture: Lecture, webId: UUID) {
         var updatedLecture = lecture
         updatedLecture.savedToWeb = true
@@ -96,7 +96,7 @@ class LectureStore: ObservableObject {
         updateLecture(updatedLecture)
     }
     
-    /// Webに未保存の講義を取得
+    /// Get lectures not saved to Web
     func getPendingUploads() -> [Lecture] {
         return lectures.filter { lecture in
             lecture.transcriptStatus == .completed &&
@@ -105,17 +105,36 @@ class LectureStore: ObservableObject {
         }
     }
     
-    /// 検索
+    /// Search
     func searchLectures(query: String) -> [Lecture] {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty else { return lectures }
         
         let lowercasedQuery = trimmedQuery.lowercased()
         return lectures.filter { lecture in
-            // タイトルで検索
+            // Search by title
             lecture.displayTitle.lowercased().contains(lowercasedQuery) ||
-            // 文字起こしテキストで検索
+            // Search by transcript text
             lecture.transcriptText?.lowercased().contains(lowercasedQuery) ?? false
         }
+    }
+    
+    /// Delete all local data (for account deletion)
+    func deleteAllData() {
+        // Delete all audio files
+        for lecture in lectures {
+            if let audioPath = lecture.audioPath {
+                try? FileManager.default.removeItem(at: audioPath)
+            }
+        }
+        
+        // Clear lectures array
+        lectures = []
+        
+        // Delete storage file
+        try? FileManager.default.removeItem(at: storageURL)
+        
+        // Save empty state
+        saveLectures()
     }
 }

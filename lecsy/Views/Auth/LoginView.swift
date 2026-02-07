@@ -14,58 +14,54 @@ struct LoginView: View {
     @StateObject private var authService = AuthService.shared
     @State private var errorMessage: String?
     @State private var currentNonce: String?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
     var body: some View {
-        VStack(spacing: 30) {
-            Spacer()
-            
-            // アプリロゴ・タイトル
-            VStack(spacing: 16) {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(.blue)
+        GeometryReader { geometry in
+            VStack(spacing: 30) {
+                Spacer()
                 
-                Text("Lecsy")
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
-                    .foregroundColor(.primary)
+                // アプリロゴ・タイトル
+                VStack(spacing: 16) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: horizontalSizeClass == .regular ? 100 : 80))
+                        .foregroundColor(.blue)
+                    
+                    Text("Lecsy")
+                        .font(.system(size: horizontalSizeClass == .regular ? 56 : 48, weight: .bold, design: .rounded))
+                        .foregroundColor(.primary)
+                    
+                    Text("Record lectures and transcribe automatically")
+                        .font(horizontalSizeClass == .regular ? .title3 : .subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
                 
-                Text("講義を録音して、自動で文字起こし")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            
-            Spacer()
-            
-            // ログインボタン
-            VStack(spacing: 16) {
-                // Appleログインボタン（Appleのデザインガイドラインに準拠）
-                SignInWithAppleButton(
-                    onRequest: { request in
-                        // nonceを生成してリクエストに設定
-                        let nonce = randomNonceString()
-                        currentNonce = nonce
-                        request.requestedScopes = [.fullName, .email]
-                        request.nonce = sha256(nonce)
-                        print("🍎 LoginView: Apple Sign In request created with nonce")
-                    },
-                    onCompletion: { result in
-                        switch result {
-                        case .success(let authorization):
-                            Task {
-                                await handleAppleSignInResult(authorization: authorization)
-                            }
-                        case .failure(let error):
-                            print("❌ Apple Sign In error: \(error.localizedDescription)")
-                            currentNonce = nil
-                            errorMessage = error.localizedDescription
+                Spacer()
+                
+                // ログインボタン
+                VStack(spacing: 16) {
+                    // Appleログインボタン（Appleのデザインガイドラインに準拠）
+                    SignInWithAppleButton(
+                        .signIn,
+                        onRequest: { request in
+                            // nonceを生成してリクエストに設定
+                            let nonce = randomNonceString()
+                            currentNonce = nonce
+                            request.requestedScopes = [.fullName, .email]
+                            request.nonce = sha256(nonce)
+                            print("🍎 LoginView: Apple Sign In request created with nonce")
+                            print("   - Device type: \(horizontalSizeClass == .regular ? "iPad" : "iPhone")")
+                        },
+                        onCompletion: { result in
+                            handleAppleSignInCompletion(result: result)
                         }
-                    }
-                )
-                .signInWithAppleButtonStyle(.black)
-                .frame(height: 50)
-                .cornerRadius(12)
-                .disabled(authService.isLoading)
+                    )
+                    .signInWithAppleButtonStyle(.black)
+                    .frame(height: 50)
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                    .cornerRadius(12)
+                    .disabled(authService.isLoading)
                 
                 // Googleログインボタン
                 Button(action: {
@@ -76,10 +72,10 @@ struct LoginView: View {
                     HStack {
                         Image(systemName: "globe")
                             .font(.system(size: 20))
-                        Text("Googleで続ける")
+                        Text("Continue with Google")
                             .font(.headline)
                     }
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
                     .frame(height: 50)
                     .background(Color.white)
                     .foregroundColor(.black)
@@ -90,13 +86,26 @@ struct LoginView: View {
                     )
                 }
                 .disabled(authService.isLoading)
+                
+                // Skip button - allows using app without account
+                Button(action: {
+                    authService.skipLogin()
+                }) {
+                    Text("Continue without account")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 8)
+                .disabled(authService.isLoading)
             }
-            .padding(.horizontal, 40)
+            .padding(.horizontal, horizontalSizeClass == .regular ? 80 : 40)
             
             if let errorMessage = errorMessage ?? authService.errorMessage {
                 Text(errorMessage)
                     .font(.caption)
                     .foregroundColor(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
                     .padding(.top, 8)
             }
             
@@ -106,8 +115,57 @@ struct LoginView: View {
             }
             
             Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding()
+    }
+    
+    /// Apple Sign Inの完了を処理
+    private func handleAppleSignInCompletion(result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            print("🍎 LoginView: Apple Sign In succeeded, processing authorization")
+            Task {
+                await handleAppleSignInResult(authorization: authorization)
+            }
+        case .failure(let error):
+            print("❌ LoginView: Apple Sign In failed")
+            print("   - Error: \(error)")
+            print("   - Localized: \(error.localizedDescription)")
+            
+            // ASAuthorizationErrorを詳細に解析
+            if let authError = error as? ASAuthorizationError {
+                print("   - ASAuthorizationError code: \(authError.code.rawValue)")
+                switch authError.code {
+                case .canceled:
+                    print("   - User canceled the authorization")
+                    errorMessage = nil // ユーザーがキャンセルした場合はエラーを表示しない
+                case .failed:
+                    print("   - Authorization failed")
+                    errorMessage = "Sign in failed. Please try again."
+                case .invalidResponse:
+                    print("   - Invalid response from Apple")
+                    errorMessage = "Invalid response from Apple. Please try again."
+                case .notHandled:
+                    print("   - Authorization not handled")
+                    errorMessage = "Authorization not handled. Please try again."
+                case .unknown:
+                    print("   - Unknown error")
+                    errorMessage = "An unknown error occurred. Please try again."
+                case .notInteractive:
+                    print("   - Not interactive")
+                    errorMessage = "Interactive sign in required."
+                @unknown default:
+                    print("   - Unknown error case")
+                    errorMessage = error.localizedDescription
+                }
+            } else {
+                errorMessage = error.localizedDescription
+            }
+            
+            currentNonce = nil
+        }
     }
     
     private func signInWithGoogle() async {
@@ -124,57 +182,57 @@ struct LoginView: View {
         print("🍎 LoginView: Apple Sign In authorization received")
         errorMessage = nil
         
+        print("🔍 LoginView: Checking authorization credential type...")
         guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-            errorMessage = "Apple認証に失敗しました"
+            print("❌ LoginView: Failed to cast credential to ASAuthorizationAppleIDCredential")
+            errorMessage = "Apple authentication failed"
             currentNonce = nil
             return
         }
+        print("✅ LoginView: Successfully cast to ASAuthorizationAppleIDCredential")
         
+        print("🔍 LoginView: Extracting identity token...")
         guard let identityToken = appleIDCredential.identityToken,
               let identityTokenString = String(data: identityToken, encoding: .utf8) else {
-            errorMessage = "トークンの取得に失敗しました"
+            print("❌ LoginView: Failed to extract identity token")
+            errorMessage = "Failed to retrieve token"
             currentNonce = nil
             return
         }
+        print("✅ LoginView: Identity token extracted - length: \(identityTokenString.count)")
         
         // リクエスト時に設定したnonceを使用（元のnonce、ハッシュ化前）
+        print("🔍 LoginView: Checking nonce...")
         guard let nonce = currentNonce else {
-            errorMessage = "Nonceが見つかりません"
+            errorMessage = "Nonce not found"
             print("❌ LoginView: Nonce is nil")
             return
         }
-        
-        print("🍎 LoginView: Using nonce - \(nonce.prefix(8))...")
+        print("✅ LoginView: Using nonce - \(nonce.prefix(8))...")
         
         do {
-            // Supabaseに送信するnonceは、元のnonce（ハッシュ化前）を送信
-            // Supabaseが内部でハッシュ化して、id_tokenに含まれるnonceと比較する
-            let session = try await authService.supabase.auth.signInWithIdToken(
-                credentials: .init(
-                    provider: .apple,
-                    idToken: identityTokenString,
-                    nonce: nonce  // 元のnonceを送信（ハッシュ化しない）
-                )
+            print("🔐 LoginView: Calling AuthService.handleAppleSignIn...")
+            // AuthServiceのhandleAppleSignInメソッドを使用
+            try await authService.handleAppleSignIn(
+                identityToken: identityTokenString,
+                nonce: nonce,
+                fullName: appleIDCredential.fullName
             )
-            
-            // 初回サインイン時のみ、fullNameを保存
-            if let fullName = appleIDCredential.fullName {
-                let name = [fullName.givenName, fullName.familyName]
-                    .compactMap { $0 }
-                    .joined(separator: " ")
-                
-                if !name.isEmpty {
-                    // ユーザーメタデータを更新
-                    _ = try? await authService.supabase.auth.update(user: UserAttributes(data: ["full_name": AnyJSON.string(name)]))
-                }
-            }
             
             currentNonce = nil
             print("✅ LoginView: Apple Sign In completed successfully")
-            await authService.checkSession()
         } catch {
             currentNonce = nil
             print("❌ LoginView: Apple Sign In error - \(error.localizedDescription)")
+            print("   - Error: \(error)")
+            
+            // エラーの詳細を出力
+            if let nsError = error as NSError? {
+                print("   - Domain: \(nsError.domain)")
+                print("   - Code: \(nsError.code)")
+                print("   - UserInfo: \(nsError.userInfo)")
+            }
+            
             errorMessage = error.localizedDescription
         }
     }

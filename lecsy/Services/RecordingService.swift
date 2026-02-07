@@ -11,7 +11,7 @@ import Combine
 import ActivityKit
 import UIKit
 
-/// 録音サービス
+/// Recording service
 @MainActor
 class RecordingService: NSObject, ObservableObject {
     static let shared = RecordingService()
@@ -20,7 +20,7 @@ class RecordingService: NSObject, ObservableObject {
     @Published var isPaused = false
     @Published var recordingDuration: TimeInterval = 0
     @Published var recordingStartTime: Date?
-    @Published var pausedDuration: TimeInterval = 0 // ポーズ中の累積時間
+    @Published var pausedDuration: TimeInterval = 0 // Cumulative paused time
     
     private var audioRecorder: AVAudioRecorder?
     private var timer: Timer?
@@ -29,16 +29,16 @@ class RecordingService: NSObject, ObservableObject {
     private var liveActivity: Activity<LecsyWidgetAttributes>?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var currentLectureTitle: String = "New Recording"
-    private var pauseStartTime: Date? // ポーズ開始時刻
+    private var pauseStartTime: Date? // Pause start time
     
-    // 100分（6000秒）の録音に対応
-    private let maxRecordingDuration: TimeInterval = 6000 // 100分
+    // Support up to 100 minutes (6000 seconds) of recording
+    private let maxRecordingDuration: TimeInterval = 6000 // 100 minutes
     
     private override init() {
         super.init()
     }
     
-    /// マイク権限をリクエスト
+    /// Request microphone permission
     func requestMicrophonePermission() async -> Bool {
         await withCheckedContinuation { continuation in
             AVAudioSession.sharedInstance().requestRecordPermission { granted in
@@ -47,105 +47,105 @@ class RecordingService: NSObject, ObservableObject {
         }
     }
     
-    /// 録音開始
+    /// Start recording
     func startRecording(lectureTitle: String = "New Recording") async throws {
-        print("🔴 RecordingService.startRecording() が呼ばれました")
+        print("🔴 RecordingService.startRecording() called")
         
         guard !isRecording else {
-            print("🔴 既に録音中です")
+            print("🔴 Already recording")
             return
         }
         
-        // マイク権限チェック
+        // Check microphone permission
         let hasPermission = AVAudioSession.sharedInstance().recordPermission
-        print("🔴 マイク権限状態: \(hasPermission.rawValue)")
+        print("🔴 Microphone permission status: \(hasPermission.rawValue)")
         guard hasPermission == .granted else {
-            print("🔴 マイク権限がありません")
+            print("🔴 No microphone permission")
             throw RecordingError.permissionDenied
         }
         
-        // ディスク容量チェック（100分の録音には約50-100MB必要）
+        // Check disk space (approximately 50-100MB needed for 100 minutes of recording)
         let requiredSpace: Int64 = 100 * 1024 * 1024 // 100MB
         if let availableSpace = getAvailableDiskSpace(), availableSpace < requiredSpace {
-            print("🔴 ディスク容量不足: 利用可能 \(availableSpace / 1024 / 1024)MB, 必要 \(requiredSpace / 1024 / 1024)MB")
+            print("🔴 Insufficient disk space: Available \(availableSpace / 1024 / 1024)MB, Required \(requiredSpace / 1024 / 1024)MB")
             throw RecordingError.insufficientStorage
         }
         
-        // オーディオセッション設定（バックグラウンド録音対応）
-        print("🔴 オーディオセッションを設定します")
+        // Configure audio session (background recording support)
+        print("🔴 Setting up audio session")
         let audioSession = AVAudioSession.sharedInstance()
         
-        // 権限が確実に反映されるまで少し待機（権限リクエスト直後の場合）
+        // Wait a bit for permission to be reflected (if permission was just requested)
         if AVAudioSession.sharedInstance().recordPermission == .granted {
-            // 少し待機してからセッションを設定
-            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1秒待機
+            // Wait a bit before setting session
+            try? await Task.sleep(nanoseconds: 100_000_000) // Wait 0.1 seconds
         }
         
         do {
-            // 既存のセッションを非アクティブにする（エラー回避のため）
+            // Deactivate existing session (to avoid errors)
             try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
             
-            // バックグラウンド録音に最適化された設定
-            // .allowBluetoothA2DPは削除（録音には不要で、エラーの原因になる可能性がある）
+            // Optimized settings for background recording
+            // Removed .allowBluetoothA2DP (not needed for recording, may cause errors)
             try audioSession.setCategory(
                 .playAndRecord,
                 mode: .default,
                 options: [.defaultToSpeaker, .allowBluetooth]
             )
             
-            // バックグラウンド録音を有効化
+            // Enable background recording
             try audioSession.setActive(true, options: [])
             
-            // バックグラウンド録音が有効か確認
+            // Check if background recording is enabled
             if !audioSession.isOtherAudioPlaying {
-                print("🔴 オーディオセッション設定成功（バックグラウンド録音有効）")
+                print("🔴 Audio session setup successful (background recording enabled)")
             } else {
-                print("⚠️ 他のオーディオが再生中です")
+                print("⚠️ Other audio is playing")
             }
         } catch {
-            print("🔴 オーディオセッション設定エラー: \(error)")
+            print("🔴 Audio session setup error: \(error)")
             throw RecordingError.recordingFailed
         }
         
-        // バックグラウンドタスク開始
+        // Start background task
         setupBackgroundTask()
         
-        // 録音ファイルのURL
+        // Recording file URL
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let fileName = "recording_\(Date().timeIntervalSince1970).m4a"
         recordingURL = documentsPath.appendingPathComponent(fileName)
         
         guard let url = recordingURL else {
-            print("🔴 録音ファイルURLの作成に失敗")
+            print("🔴 Failed to create recording file URL")
             throw RecordingError.fileCreationFailed
         }
         
-        print("🔴 録音ファイルURL: \(url)")
+        print("🔴 Recording file URL: \(url)")
         
-        // 録音設定（長時間録音に最適化：品質とファイルサイズのバランス）
+        // Recording settings (optimized for long recording: balance quality and file size)
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
             AVSampleRateKey: 44100.0,
             AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue, // 長時間録音のためmediumに変更
-            AVEncoderBitRateKey: 64000 // 64kbps（100分で約50MB）
+            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue, // Changed to medium for long recording
+            AVEncoderBitRateKey: 64000 // 64kbps (approximately 50MB for 100 minutes)
         ]
         
-        // 録音開始
-        print("🔴 AVAudioRecorderを作成します")
+        // Start recording
+        print("🔴 Creating AVAudioRecorder")
         do {
             audioRecorder = try AVAudioRecorder(url: url, settings: settings)
             audioRecorder?.delegate = self
             
             let recordingStarted = audioRecorder?.record() ?? false
-            print("🔴 録音開始: \(recordingStarted)")
+            print("🔴 Recording started: \(recordingStarted)")
             
             if !recordingStarted {
-                print("🔴 録音開始に失敗しました")
+                print("🔴 Failed to start recording")
                 throw RecordingError.recordingFailed
             }
         } catch {
-            print("🔴 AVAudioRecorder作成/開始エラー: \(error)")
+            print("🔴 AVAudioRecorder creation/start error: \(error)")
             throw RecordingError.recordingFailed
         }
         
@@ -157,74 +157,74 @@ class RecordingService: NSObject, ObservableObject {
         pauseStartTime = nil
         currentLectureTitle = lectureTitle
         
-        print("🔴 録音状態を更新: isRecording = \(isRecording), isPaused = \(isPaused)")
+        print("🔴 Updated recording state: isRecording = \(isRecording), isPaused = \(isPaused)")
         
-        // Live Activity開始
+        // Start Live Activity
         startLiveActivity()
         
-        // タイマー開始（1秒ごとに更新、Live Activityも1秒ごとに更新）
-        // バックグラウンドでも動作するようにRunLoopに追加
+        // Start timer (update every 1 second, Live Activity also updates every 1 second)
+        // Add to RunLoop so it works in background too
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
             guard let self = self, let startTime = self.recordingStartTime else {
                 timer.invalidate()
                 return
             }
             
-            // ポーズ中でない場合のみ時間を更新
+            // Update time only if not paused
             if !self.isPaused {
                 let totalElapsed = Date().timeIntervalSince(startTime)
                 self.recordingDuration = totalElapsed - self.pausedDuration
             }
             
-            // 最大録音時間チェック（ポーズ時間を除いた実録音時間）
+            // Check max recording time (actual recording time excluding pause time)
             if self.recordingDuration >= self.maxRecordingDuration {
-                print("🔴 最大録音時間に達しました（100分）")
+                print("🔴 Reached max recording time (100 minutes)")
                 _ = self.stopRecording()
                 return
             }
             
-            // 録音が継続しているか確認（ロック画面時など、ポーズ中でない場合のみ）
+            // Check if recording is continuing (only when not paused, e.g., on lock screen)
             if !self.isPaused, let recorder = self.audioRecorder, !recorder.isRecording {
-                print("⚠️ 録音が停止しています。再開を試みます...")
-                // 録音を再開
+                print("⚠️ Recording has stopped. Attempting to resume...")
+                // Resume recording
                 recorder.record()
             }
             
-            // Live Activityを1秒ごとに更新（ロック画面のストップウォッチを滑らかに動かすため）
+            // Update Live Activity every 1 second (to smoothly move lock screen stopwatch)
             self.updateLiveActivity()
         }
         
-        // バックグラウンドでもタイマーが動作するようにRunLoopに追加
+        // Add timer to RunLoop so it works in background too
         if let timer = timer {
             RunLoop.current.add(timer, forMode: .common)
         }
         
-        // バックグラウンドタスクの定期更新（30秒ごと）
+        // Periodic background task renewal (every 30 seconds)
         setupBackgroundTaskRenewal()
         
-        print("🔴 タイマー開始完了")
+        print("🔴 Timer started")
     }
     
-    /// 録音ポーズ
+    /// Pause recording
     func pauseRecording() {
         guard isRecording, !isPaused else { return }
         
-        print("⏸️ 録音をポーズします")
+        print("⏸️ Pausing recording")
         audioRecorder?.pause()
         isPaused = true
         pauseStartTime = Date()
         
-        // Live Activityを更新（ポーズ状態を反映）
+        // Update Live Activity (reflect pause state)
         updateLiveActivity()
     }
     
-    /// 録音再開
+    /// Resume recording
     func resumeRecording() {
         guard isRecording, isPaused else { return }
         
-        print("▶️ 録音を再開します")
+        print("▶️ Resuming recording")
         
-        // ポーズ時間を累積
+        // Accumulate pause time
         if let pauseStart = pauseStartTime {
             let pauseDuration = Date().timeIntervalSince(pauseStart)
             pausedDuration += pauseDuration
@@ -234,11 +234,11 @@ class RecordingService: NSObject, ObservableObject {
         audioRecorder?.record()
         isPaused = false
         
-        // Live Activityを更新（再開状態を反映）
+        // Update Live Activity (reflect resume state)
         updateLiveActivity()
     }
     
-    /// 録音停止
+    /// Stop recording
     func stopRecording() -> URL? {
         guard isRecording else { return nil }
         
@@ -252,10 +252,10 @@ class RecordingService: NSObject, ObservableObject {
         isPaused = false
         pauseStartTime = nil
         
-        // Live Activity終了
+        // End Live Activity
         endLiveActivity()
         
-        // バックグラウンドタスク終了
+        // End background task
         endBackgroundTask()
         
         let url = recordingURL
@@ -263,7 +263,7 @@ class RecordingService: NSObject, ObservableObject {
         recordingStartTime = nil
         pausedDuration = 0
         
-        // オーディオセッションを非アクティブに
+        // Deactivate audio session
         try? AVAudioSession.sharedInstance().setActive(false)
         
         return url
@@ -271,7 +271,7 @@ class RecordingService: NSObject, ObservableObject {
     
     // MARK: - Disk Space Management
     
-    /// 利用可能なディスク容量を取得（バイト単位）
+    /// Get available disk space (in bytes)
     private func getAvailableDiskSpace() -> Int64? {
         guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
             return nil
@@ -283,7 +283,7 @@ class RecordingService: NSObject, ObservableObject {
                 return freeSpace
             }
         } catch {
-            print("🔴 ディスク容量取得エラー: \(error)")
+            print("🔴 Disk space retrieval error: \(error)")
         }
         
         return nil
@@ -291,33 +291,33 @@ class RecordingService: NSObject, ObservableObject {
     
     // MARK: - Background Task Management
     
-    /// バックグラウンドタスクの定期更新（長時間録音対応）
+    /// Periodic background task renewal (for long recording)
     private func setupBackgroundTaskRenewal() {
-        // 30秒ごとにバックグラウンドタスクを更新
+        // Renew background task every 30 seconds
         backgroundTaskTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
             guard let self = self, self.isRecording else {
                 return
             }
             
-            // 既存のタスクを終了
+            // End existing task
             if self.backgroundTask != .invalid {
                 UIApplication.shared.endBackgroundTask(self.backgroundTask)
             }
             
-            // 新しいタスクを開始
+            // Start new task
             self.setupBackgroundTask()
             
-            print("🔴 バックグラウンドタスクを更新しました")
+            print("🔴 Background task renewed")
         }
     }
     
     // MARK: - Live Activities
     
-    /// Live Activityを開始
+    /// Start Live Activity
     private func startLiveActivity() {
-        // ActivityKitが利用可能かチェック
+        // Check if ActivityKit is available
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            print("⚠️ Live Activitiesが有効になっていません")
+            print("⚠️ Live Activities are not enabled")
             return
         }
         
@@ -334,11 +334,11 @@ class RecordingService: NSObject, ObservableObject {
                 pushType: nil
             )
         } catch {
-            print("❌ Live Activityの開始に失敗しました: \(error)")
+            print("❌ Failed to start Live Activity: \(error)")
         }
     }
     
-    /// Live Activityを更新
+    /// Update Live Activity
     private func updateLiveActivity() {
         guard let liveActivity = liveActivity else { return }
         
@@ -347,8 +347,8 @@ class RecordingService: NSObject, ObservableObject {
             isRecording: isRecording && !isPaused
         )
         
-        // 非同期で更新（メインスレッドで実行）
-        // 1秒ごとの更新でロック画面のストップウォッチを滑らかに動かす
+        // Update asynchronously (execute on main thread)
+        // Update every 1 second to smoothly move lock screen stopwatch
         Task { @MainActor in
             do {
                 await liveActivity.update(
@@ -356,13 +356,13 @@ class RecordingService: NSObject, ObservableObject {
                     alertConfiguration: nil
                 )
             } catch {
-                // エラーが頻繁に発生する場合は、更新頻度を下げる
-                print("⚠️ Live Activity更新エラー: \(error)")
+                // If errors occur frequently, reduce update frequency
+                print("⚠️ Live Activity update error: \(error)")
             }
         }
     }
     
-    /// Live Activityを終了
+    /// End Live Activity
     private func endLiveActivity() {
         guard let liveActivity = liveActivity else { return }
         
@@ -380,14 +380,14 @@ class RecordingService: NSObject, ObservableObject {
     
     // MARK: - Background Task
     
-    /// バックグラウンドタスクを開始
+    /// Start background task
     private func setupBackgroundTask() {
         backgroundTask = UIApplication.shared.beginBackgroundTask { [weak self] in
             self?.endBackgroundTask()
         }
     }
     
-    /// バックグラウンドタスクを終了
+    /// End background task
     private func endBackgroundTask() {
         if backgroundTask != .invalid {
             UIApplication.shared.endBackgroundTask(backgroundTask)
@@ -395,7 +395,7 @@ class RecordingService: NSObject, ObservableObject {
         }
     }
     
-    /// 録音エラー
+    /// Recording error
     enum RecordingError: LocalizedError {
         case permissionDenied
         case fileCreationFailed
@@ -405,13 +405,13 @@ class RecordingService: NSObject, ObservableObject {
         var errorDescription: String? {
             switch self {
             case .permissionDenied:
-                return "マイクへのアクセス権限が必要です"
+                return "Microphone access permission is required"
             case .fileCreationFailed:
-                return "録音ファイルの作成に失敗しました"
+                return "Failed to create recording file"
             case .recordingFailed:
-                return "録音に失敗しました"
+                return "Recording failed"
             case .insufficientStorage:
-                return "ストレージ容量が不足しています。少なくとも100MBの空き容量が必要です。"
+                return "Insufficient storage space. At least 100MB of free space is required."
             }
         }
     }
@@ -431,7 +431,7 @@ extension RecordingService: AVAudioRecorderDelegate {
     
     nonisolated func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
         Task { @MainActor in
-            print("🔴 録音エンコードエラー: \(error?.localizedDescription ?? "不明なエラー")")
+            print("🔴 Recording encode error: \(error?.localizedDescription ?? "Unknown error")")
             isRecording = false
             timer?.invalidate()
             timer = nil
@@ -444,15 +444,15 @@ extension RecordingService: AVAudioRecorderDelegate {
     
     nonisolated func audioRecorderBeginInterruption(_ recorder: AVAudioRecorder) {
         Task { @MainActor in
-            print("🔴 録音が中断されました（電話など）")
-            // 中断時は録音を継続（iOSが自動的に処理）
+            print("🔴 Recording interrupted (e.g., phone call)")
+            // Continue recording on interruption (iOS handles automatically)
         }
     }
     
     nonisolated func audioRecorderEndInterruption(_ recorder: AVAudioRecorder, withOptions flags: Int) {
         Task { @MainActor in
-            print("🔴 録音中断が終了しました")
-            // 録音を再開（必要に応じて）
+            print("🔴 Recording interruption ended")
+            // Resume recording if needed
             if isRecording {
                 audioRecorder?.record()
             }

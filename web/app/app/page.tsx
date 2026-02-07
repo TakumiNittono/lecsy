@@ -2,6 +2,9 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import TranscriptList from '@/components/TranscriptList'
+import SubscriptionCard from '@/components/SubscriptionCard'
+import ToastProvider from './ToastProvider'
+import { Suspense } from 'react'
 
 // 動的レンダリングを強制（cookiesを使用するため）
 export const dynamic = 'force-dynamic'
@@ -14,6 +17,13 @@ export default async function AppPage() {
     if (error || !user) {
       redirect('/login')
     }
+
+  // サブスクリプション状態を取得
+  const { data: subscription } = await supabase
+    .from('subscriptions')
+    .select('status, current_period_end, cancel_at_period_end')
+    .eq('user_id', user.id)
+    .single()
 
   // 講義一覧を取得
   const { data: transcriptsRaw, error: transcriptsError } = await supabase
@@ -79,6 +89,11 @@ export default async function AppPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {/* Toast Provider */}
+      <Suspense fallback={null}>
+        <ToastProvider />
+      </Suspense>
+
       {/* Header */}
       <header className="border-b border-gray-200 bg-white sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
@@ -136,18 +151,11 @@ export default async function AppPage() {
             <p className="text-sm text-gray-500 mt-2">Recorded time</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Subscription</h2>
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                </svg>
-              </div>
-            </div>
-            <p className="text-lg font-semibold text-gray-900">Free</p>
-            <p className="text-sm text-gray-500 mt-2">Current plan</p>
-          </div>
+          <SubscriptionCard
+            status={subscription?.status || null}
+            currentPeriodEnd={subscription?.current_period_end || null}
+            cancelAtPeriodEnd={subscription?.cancel_at_period_end || null}
+          />
         </div>
 
         {/* Lectures List */}

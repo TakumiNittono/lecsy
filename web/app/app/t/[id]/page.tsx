@@ -5,6 +5,7 @@ import CopyButton from '@/components/CopyButton'
 import EditTitleForm from '@/components/EditTitleForm'
 import PrintButton from '@/components/PrintButton'
 import DeleteForm from '@/components/DeleteForm'
+import ProFeatureButton from '@/components/ProFeatureButton'
 import { sanitizeText } from '@/utils/sanitize'
 
 // 動的レンダリングを強制（cookiesを使用するため）
@@ -29,6 +30,15 @@ export default async function TranscriptDetailPage({
     if (authError || !user) {
       redirect('/login')
     }
+
+    // Pro状態を取得（テスト用）
+    const { data: subscription } = await supabase
+      .from('subscriptions')
+      .select('status')
+      .eq('user_id', user.id)
+      .single()
+
+    const isPro = subscription?.status === 'active'
 
     // 講義詳細を取得
     const { data: transcriptRaw, error: transcriptError } = await supabase
@@ -171,6 +181,18 @@ export default async function TranscriptDetailPage({
             )}
             <PrintButton />
             <DeleteForm transcriptId={transcript.id} />
+          </div>
+
+          {/* Pro Feature Test (簡易版) */}
+          <div className="mt-4 pt-4 border-t border-gray-200 no-print">
+            <ProFeatureButton
+              isPro={isPro}
+              featureName="AI Summary"
+              onProClick={async () => {
+                // テスト用: Proの場合はアラートを表示
+                alert('Pro feature is available! (Full implementation coming soon)')
+              }}
+            />
           </div>
         </div>
 

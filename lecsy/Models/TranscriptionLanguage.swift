@@ -7,31 +7,15 @@
 
 import Foundation
 
-/// 文字起こし言語
+/// 文字起こし言語（英語特化型）
 enum TranscriptionLanguage: String, Codable, CaseIterable {
-    case auto = "auto"
-    case japanese = "ja"
     case english = "en"
     
     var displayName: String {
-        switch self {
-        case .auto:
-            return "自動検出"
-        case .japanese:
-            return "日本語"
-        case .english:
-            return "English"
-        }
+        return "English"
     }
     
     var whisperLanguage: String? {
-        switch self {
-        case .auto:
-            return nil // WhisperKitが自動検出
-        case .japanese:
-            return "ja"
-        case .english:
-            return "en"
-        }
+        return "en" // 常に英語として処理
     }
 }

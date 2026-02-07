@@ -114,7 +114,15 @@ You can request access to the personal data we hold about you.
 You can request correction of inaccurate data.
 
 ### Right to Deletion
-You can request deletion of your account and all associated data.
+You can delete your account and all associated data at any time.
+
+#### How to Delete Your Account
+You can delete your account directly from the app:
+1. Open the **Settings** tab
+2. Tap **"Delete Account"**
+3. Confirm deletion in the dialog
+
+All your data (account information, transcripts, and recordings) will be permanently deleted immediately. This action cannot be undone.
 
 ### Right to Data Portability
 You can request a copy of your data in a portable format.
@@ -203,7 +211,7 @@ If you are in the European Economic Area (EEA), you have rights under the Genera
 
 If you have any questions, concerns, or requests regarding this Privacy Policy, please contact us:
 
-**Email**: support@lecsy.app
+**Email**: nittonotakumi@gmail.com
 
 ---
 

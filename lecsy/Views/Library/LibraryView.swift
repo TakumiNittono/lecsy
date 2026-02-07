@@ -40,7 +40,7 @@ struct LibraryView: View {
                 // 検索結果の件数表示（Listの外に配置）
                 if isSearching && !filteredLectures.isEmpty {
                     HStack {
-                        Text("\(filteredLectures.count)件の講義が見つかりました")
+                        Text("Found \(filteredLectures.count) lectures")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Spacer()
@@ -56,10 +56,10 @@ struct LibraryView: View {
                         Image(systemName: "books.vertical")
                             .font(.system(size: 60))
                             .foregroundColor(.gray)
-                        Text("講義がありません")
+                        Text("No Lectures")
                             .font(.title2)
                             .foregroundColor(.gray)
-                        Text(store.lectures.isEmpty ? "録音タブから最初の講義を録音してください" : "検索条件に一致する講義がありません")
+                        Text(store.lectures.isEmpty ? "Record your first lecture from the Record tab" : "No lectures match your search")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -81,11 +81,11 @@ struct LibraryView: View {
                     }
                 }
             }
-            .navigationTitle("ライブラリ")
+            .navigationTitle("Library")
             .searchable(
                 text: $searchText,
                 isPresented: $isSearchActive,
-                prompt: "講義を検索"
+                prompt: "Search lectures"
             )
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -104,7 +104,7 @@ struct LibraryView: View {
                     .disabled(isSyncingTitles || !authService.isAuthenticated)
                 }
             }
-            .alert("同期エラー", isPresented: $showSyncError) {
+            .alert("Sync Error", isPresented: $showSyncError) {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(syncErrorMessage)
@@ -116,7 +116,7 @@ struct LibraryView: View {
     @MainActor
     private func syncTitlesFromWeb() async {
         guard await authService.isSessionValid else {
-            syncErrorMessage = "認証されていません"
+            syncErrorMessage = "Not authenticated"
             showSyncError = true
             return
         }
@@ -128,11 +128,11 @@ struct LibraryView: View {
         
         do {
             try await syncService.syncTitlesFromWeb()
-            print("✅ LibraryView: タイトル同期成功")
+            print("✅ LibraryView: Title sync successful")
         } catch {
             syncErrorMessage = error.localizedDescription
             showSyncError = true
-            print("❌ LibraryView: タイトル同期失敗 - \(error.localizedDescription)")
+            print("❌ LibraryView: Title sync failed - \(error.localizedDescription)")
         }
     }
 }
@@ -182,11 +182,35 @@ struct LectureRow: View {
                 }
             }
             
-            Text(lecture.transcriptStatus.displayName)
-                .font(.caption2)
-                .foregroundColor(.blue)
+            // Transcription status with progress indicator
+            HStack(spacing: 6) {
+                if lecture.transcriptStatus == .processing || lecture.transcriptStatus == .downloading {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                    Text(lecture.transcriptStatus == .downloading ? "Downloading Model..." : "Transcribing...")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                } else {
+                    Text(lecture.transcriptStatus.displayName)
+                        .font(.caption2)
+                        .foregroundColor(statusColor(for: lecture.transcriptStatus))
+                }
+            }
         }
         .padding(.vertical, 4)
+    }
+    
+    private func statusColor(for status: TranscriptionStatus) -> Color {
+        switch status {
+        case .notStarted:
+            return .gray
+        case .downloading, .processing:
+            return .orange
+        case .completed:
+            return .green
+        case .failed:
+            return .red
+        }
     }
 }
 
