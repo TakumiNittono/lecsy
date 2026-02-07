@@ -21,7 +21,7 @@ export default async function AppPage() {
   // ホワイトリストチェック
   const whitelistEmails = process.env.WHITELIST_EMAILS || ''
   const whitelistedUsers = whitelistEmails.split(',').map(email => email.trim())
-  const isWhitelisted = user.email && whitelistedUsers.includes(user.email)
+  const isWhitelisted = !!(user.email && whitelistedUsers.includes(user.email))
 
   // サブスクリプション状態を取得
   const { data: subscription } = await supabase
