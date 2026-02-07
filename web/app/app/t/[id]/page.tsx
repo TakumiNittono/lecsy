@@ -6,6 +6,7 @@ import EditTitleForm from '@/components/EditTitleForm'
 import PrintButton from '@/components/PrintButton'
 import DeleteForm from '@/components/DeleteForm'
 import AISummaryButton from '@/components/AISummaryButton'
+import ExamModeButton from '@/components/ExamModeButton'
 import { sanitizeText } from '@/utils/sanitize'
 
 // 動的レンダリングを強制（cookiesを使用するため）
@@ -189,9 +190,13 @@ export default async function TranscriptDetailPage({
             <DeleteForm transcriptId={transcript.id} />
           </div>
 
-          {/* Pro Feature - AI Summary */}
-          <div className="mt-4 pt-4 border-t border-gray-200 no-print">
+          {/* Pro Features - AI Summary & Exam Prep */}
+          <div className="mt-4 pt-4 border-t border-gray-200 space-y-4 no-print">
             <AISummaryButton
+              transcriptId={transcript.id}
+              isPro={isPro}
+            />
+            <ExamModeButton
               transcriptId={transcript.id}
               isPro={isPro}
             />
