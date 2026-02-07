@@ -26,8 +26,11 @@ serve(async (req) => {
   try {
     // 認証
     const authHeader = req.headers.get("Authorization");
+    console.log("Authorization header received:", authHeader ? "Yes" : "No");
+    
     if (!authHeader) {
-      return createErrorResponse(req, "Unauthorized", 401);
+      console.error("No Authorization header");
+      return createErrorResponse(req, "Unauthorized: No auth header", 401);
     }
 
     const supabase = createClient(
@@ -41,10 +44,20 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return createErrorResponse(req, "Unauthorized", 401);
+    console.log("Calling supabase.auth.getUser()...");
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError) {
+      console.error("getUser error:", userError);
+      return createErrorResponse(req, `Auth error: ${userError.message}`, 401);
     }
+    
+    if (!user) {
+      console.error("No user found");
+      return createErrorResponse(req, "Unauthorized: No user", 401);
+    }
+
+    console.log("User authenticated:", user.id, user.email);
 
     // ホワイトリストチェック（環境変数から取得）
     const whitelistEmails = Deno.env.get("WHITELIST_EMAILS") || "";
