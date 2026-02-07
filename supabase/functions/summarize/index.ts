@@ -4,6 +4,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import OpenAI from "https://esm.sh/openai@4";
+import { decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import {
   createPreflightResponse,
   createJsonResponse,
@@ -35,60 +36,64 @@ serve(async (req) => {
 
     // トークンを抽出
     const token = authHeader.replace("Bearer ", "");
-    console.log("Token extracted:", token.substring(0, 20) + "...");
+    console.log("Token extracted, length:", token.length);
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      {
-        global: {
-          headers: {
-            Authorization: authHeader,
-          },
-        },
+    // JWTをデコードしてユーザー情報を取得
+    let userId: string;
+    let userEmail: string | undefined;
+    
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        throw new Error('Invalid JWT format');
       }
-    );
+      
+      const payload = JSON.parse(new TextDecoder().decode(decode(parts[1])));
+      userId = payload.sub;
+      userEmail = payload.email;
+      
+      console.log("User from JWT:", userId, userEmail);
+    } catch (jwtError) {
+      console.error("JWT decode error:", jwtError);
+      return createErrorResponse(req, "Invalid token", 401);
+    }
 
+    if (!userId) {
+      return createErrorResponse(req, "No user ID in token", 401);
+    }
+
+    // Service Clientでユーザー情報を取得
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    console.log("Calling supabase.auth.getUser()...");
-    const { data, error: userError } = await supabase.auth.getUser(token);
-    
-    if (userError) {
-      console.error("getUser error:", userError.message);
-      return createErrorResponse(req, `Auth error: ${userError.message}`, 401);
-    }
-    
-    const user = data.user;
-    
-    if (!user) {
-      console.error("No user found");
-      return createErrorResponse(req, "Unauthorized: No user", 401);
-    }
+    console.log("Fetching user data from database...");
 
-    console.log("User authenticated:", user.id, user.email);
+    console.log("Fetching user data from database...");
 
     // ホワイトリストチェック（環境変数から取得）
     const whitelistEmails = Deno.env.get("WHITELIST_EMAILS") || "";
     const whitelistedUsers = whitelistEmails.split(",").map(email => email.trim());
-    const isWhitelisted = user.email && whitelistedUsers.includes(user.email);
+    const isWhitelisted = userEmail && whitelistedUsers.includes(userEmail);
+
+    console.log("Whitelist check:", userEmail, "->", isWhitelisted);
 
     // ホワイトリストユーザーでない場合はPro状態チェック
     if (!isWhitelisted) {
-      const { data: subscription } = await supabase
+      const { data: subscription } = await serviceClient
         .from("subscriptions")
         .select("status")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .single();
 
       if (!subscription || subscription.status !== "active") {
+        console.log("User not Pro:", userId);
         return createErrorResponse(req, "Pro subscription required", 403);
       }
+      console.log("User is Pro:", userId);
     } else {
-      console.log(`[Whitelisted user] ${user.email} - skipping Pro check`);
+      console.log(`[Whitelisted user] ${userEmail} - skipping Pro check`);
     }
 
     // リクエスト
@@ -101,7 +106,7 @@ serve(async (req) => {
     const { count: dailyCount } = await serviceClient
       .from("usage_logs")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .gte("created_at", today.toISOString());
 
     if ((dailyCount || 0) >= DAILY_LIMIT) {
@@ -109,11 +114,11 @@ serve(async (req) => {
     }
 
     // transcript取得（所有権チェック付き）
-    const { data: transcript, error: transcriptError } = await supabase
+    const { data: transcript, error: transcriptError } = await serviceClient
       .from("transcripts")
       .select("id, content, title, user_id")
       .eq("id", body.transcript_id)
-      .eq("user_id", user.id)  // 所有権チェックを追加
+      .eq("user_id", userId)  // 所有権チェックを追加
       .single();
 
     if (transcriptError || !transcript) {
@@ -122,11 +127,11 @@ serve(async (req) => {
     }
 
     // キャッシュチェック（所有権チェック付き）
-    const { data: existingSummary } = await supabase
+    const { data: existingSummary } = await serviceClient
       .from("summaries")
       .select("*")
       .eq("transcript_id", body.transcript_id)
-      .eq("user_id", user.id)  // 所有権チェックを追加
+      .eq("user_id", userId)  // 所有権チェックを追加
       .single();
 
     if (existingSummary) {
@@ -191,7 +196,7 @@ ${transcript.content}
     // 保存
     const summaryData = {
       transcript_id: body.transcript_id,
-      user_id: user.id,
+      user_id: userId,
       model: "gpt-4-turbo",
       ...(body.mode === "summary"
         ? {
@@ -212,7 +217,7 @@ ${transcript.content}
 
     // 使用ログ記録
     await serviceClient.from("usage_logs").insert({
-      user_id: user.id,
+      user_id: userId,
       action: body.mode === "summary" ? "summarize" : "exam_mode",
       transcript_id: body.transcript_id,
     });
