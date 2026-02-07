@@ -4,7 +4,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import OpenAI from "https://esm.sh/openai@4";
-import { decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import {
   createPreflightResponse,
   createJsonResponse,
@@ -27,40 +26,54 @@ serve(async (req) => {
   try {
     // 認証
     const authHeader = req.headers.get("Authorization");
-    console.log("Authorization header received:", authHeader ? "Yes" : "No");
+    console.log("=== START AUTHENTICATION ===");
+    console.log("Authorization header:", authHeader ? "Present" : "Missing");
     
     if (!authHeader) {
-      console.error("No Authorization header");
+      console.error("ERROR: No Authorization header");
       return createErrorResponse(req, "Unauthorized: No auth header", 401);
     }
 
     // トークンを抽出
     const token = authHeader.replace("Bearer ", "");
-    console.log("Token extracted, length:", token.length);
+    console.log("Token length:", token.length);
 
     // JWTをデコードしてユーザー情報を取得
     let userId: string;
     let userEmail: string | undefined;
     
     try {
+      console.log("Decoding JWT...");
       const parts = token.split('.');
+      console.log("JWT parts count:", parts.length);
+      
       if (parts.length !== 3) {
         throw new Error('Invalid JWT format');
       }
       
-      const payload = JSON.parse(new TextDecoder().decode(decode(parts[1])));
+      // Base64 URLデコード（ネイティブ機能を使用）
+      const base64Url = parts[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = atob(base64);
+      const payload = JSON.parse(jsonPayload);
+      
       userId = payload.sub;
       userEmail = payload.email;
       
-      console.log("User from JWT:", userId, userEmail);
+      console.log("JWT decoded successfully");
+      console.log("User ID:", userId);
+      console.log("User Email:", userEmail);
     } catch (jwtError) {
-      console.error("JWT decode error:", jwtError);
-      return createErrorResponse(req, "Invalid token", 401);
+      console.error("ERROR: JWT decode failed:", jwtError);
+      return createErrorResponse(req, `Invalid token: ${jwtError.message}`, 401);
     }
 
     if (!userId) {
+      console.error("ERROR: No user ID in token");
       return createErrorResponse(req, "No user ID in token", 401);
     }
+
+    console.log("=== AUTHENTICATION SUCCESS ===");
 
     // Service Clientでユーザー情報を取得
     const serviceClient = createClient(
@@ -68,33 +81,42 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    console.log("Fetching user data from database...");
+    console.log("=== CHECKING WHITELIST ===");
 
-    console.log("Fetching user data from database...");
+    console.log("=== CHECKING WHITELIST ===");
 
     // ホワイトリストチェック（環境変数から取得）
     const whitelistEmails = Deno.env.get("WHITELIST_EMAILS") || "";
+    console.log("Whitelist emails configured:", whitelistEmails ? "Yes" : "No");
+    
     const whitelistedUsers = whitelistEmails.split(",").map(email => email.trim());
+    console.log("Whitelist users count:", whitelistedUsers.length);
+    
     const isWhitelisted = userEmail && whitelistedUsers.includes(userEmail);
-
-    console.log("Whitelist check:", userEmail, "->", isWhitelisted);
+    console.log("User email:", userEmail);
+    console.log("Is whitelisted:", isWhitelisted);
 
     // ホワイトリストユーザーでない場合はPro状態チェック
     if (!isWhitelisted) {
+      console.log("=== CHECKING PRO STATUS ===");
       const { data: subscription } = await serviceClient
         .from("subscriptions")
         .select("status")
         .eq("user_id", userId)
         .single();
 
+      console.log("Subscription status:", subscription?.status || "none");
+
       if (!subscription || subscription.status !== "active") {
-        console.log("User not Pro:", userId);
+        console.log("ERROR: User not Pro");
         return createErrorResponse(req, "Pro subscription required", 403);
       }
-      console.log("User is Pro:", userId);
+      console.log("User is Pro");
     } else {
-      console.log(`[Whitelisted user] ${userEmail} - skipping Pro check`);
+      console.log(`✅ [Whitelisted user] ${userEmail} - skipping Pro check`);
     }
+
+    console.log("=== AUTHORIZATION SUCCESS ===");
 
     // リクエスト
     const body: SummarizeRequest = await req.json();
