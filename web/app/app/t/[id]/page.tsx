@@ -31,14 +31,20 @@ export default async function TranscriptDetailPage({
       redirect('/login')
     }
 
-    // Pro状態を取得（テスト用）
+    // ホワイトリストチェック
+    const whitelistEmails = process.env.WHITELIST_EMAILS || ''
+    const whitelistedUsers = whitelistEmails.split(',').map(email => email.trim())
+    const isWhitelisted = !!(user.email && whitelistedUsers.includes(user.email))
+
+    // Pro状態を取得
     const { data: subscription } = await supabase
       .from('subscriptions')
       .select('status')
       .eq('user_id', user.id)
       .single()
 
-    const isPro = subscription?.status === 'active'
+    // ホワイトリストユーザーは自動的にProとして扱う
+    const isPro = isWhitelisted || subscription?.status === 'active'
 
     // 講義詳細を取得
     const { data: transcriptRaw, error: transcriptError } = await supabase
