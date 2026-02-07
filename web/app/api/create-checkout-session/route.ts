@@ -14,6 +14,23 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   try {
+    // 環境変数のチェック
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.error("STRIPE_SECRET_KEY is not set");
+      return NextResponse.json(
+        { error: "Server configuration error: STRIPE_SECRET_KEY is missing" },
+        { status: 500 }
+      );
+    }
+
+    if (!process.env.STRIPE_PRICE_ID) {
+      console.error("STRIPE_PRICE_ID is not set");
+      return NextResponse.json(
+        { error: "Server configuration error: STRIPE_PRICE_ID is missing" },
+        { status: 500 }
+      );
+    }
+
     // Supabase認証チェック
     const supabase = createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -61,8 +78,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ url: session.url });
   } catch (error: any) {
     console.error("Error creating checkout session:", error);
+    // 本番環境では詳細なエラー情報を返さない（セキュリティのため）
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? error.message 
+      : "Failed to create checkout session";
+    
     return NextResponse.json(
-      { error: "Internal server error", details: error.message },
+      { error: "Internal server error", details: errorMessage },
       { status: 500 }
     );
   }
