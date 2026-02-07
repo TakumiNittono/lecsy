@@ -46,15 +46,24 @@ serve(async (req) => {
       return createErrorResponse(req, "Unauthorized", 401);
     }
 
-    // Pro状態チェック
-    const { data: subscription } = await supabase
-      .from("subscriptions")
-      .select("status")
-      .eq("user_id", user.id)
-      .single();
+    // ホワイトリストチェック（環境変数から取得）
+    const whitelistEmails = Deno.env.get("WHITELIST_EMAILS") || "";
+    const whitelistedUsers = whitelistEmails.split(",").map(email => email.trim());
+    const isWhitelisted = user.email && whitelistedUsers.includes(user.email);
 
-    if (!subscription || subscription.status !== "active") {
-      return createErrorResponse(req, "Pro subscription required", 403);
+    // ホワイトリストユーザーでない場合はPro状態チェック
+    if (!isWhitelisted) {
+      const { data: subscription } = await supabase
+        .from("subscriptions")
+        .select("status")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!subscription || subscription.status !== "active") {
+        return createErrorResponse(req, "Pro subscription required", 403);
+      }
+    } else {
+      console.log(`[Whitelisted user] ${user.email} - skipping Pro check`);
     }
 
     // リクエスト
