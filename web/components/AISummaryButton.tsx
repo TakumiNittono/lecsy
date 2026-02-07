@@ -49,12 +49,19 @@ export default function AISummaryButton({ transcriptId, isPro }: AISummaryButton
     setError(null)
     
     try {
-      // Supabase authトークンを取得
-      const { data: { session } } = await (await import('@/utils/supabase/client')).createClient().auth.getSession()
+      // Supabase clientをインポートして認証トークンを取得
+      const { createClient } = await import('@/utils/supabase/client')
+      const supabase = createClient()
       
-      if (!session) {
-        throw new Error('Not authenticated')
+      // セッションを取得
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        console.error('Session error:', sessionError)
+        throw new Error('Not authenticated. Please log in again.')
       }
+
+      console.log('Making API request with token:', session.access_token.substring(0, 20) + '...')
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/summarize`, {
         method: 'POST',
@@ -68,15 +75,28 @@ export default function AISummaryButton({ transcriptId, isPro }: AISummaryButton
         }),
       })
 
+      console.log('API response status:', response.status)
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to generate summary')
+        const errorText = await response.text()
+        console.error('API error response:', errorText)
+        
+        let errorData
+        try {
+          errorData = JSON.parse(errorText)
+        } catch {
+          throw new Error(`Server error (${response.status}): ${errorText}`)
+        }
+        
+        throw new Error(errorData.error || `Failed to generate summary (${response.status})`)
       }
 
       const data = await response.json()
+      console.log('Summary generated successfully')
       setSummary(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+      setError(errorMessage)
       console.error('Summary error:', err)
     } finally {
       setLoading(false)
