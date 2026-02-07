@@ -5,9 +5,19 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2023-10-16",
-});
+// Stripeインスタンスの初期化（環境変数チェック付き）
+let stripe: Stripe;
+try {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error("STRIPE_SECRET_KEY is not set");
+  }
+  stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: "2023-10-16",
+  });
+} catch (error: any) {
+  console.error("Failed to initialize Stripe:", error.message);
+  throw error;
+}
 
 // 動的レンダリングを強制（認証が必要なAPI）
 export const dynamic = 'force-dynamic'
@@ -58,6 +68,14 @@ export async function POST(req: Request) {
     }
 
     // Checkout Session作成
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3020";
+    console.log("Creating checkout session with:", {
+      customerId,
+      priceId: process.env.STRIPE_PRICE_ID,
+      appUrl,
+      userId: user.id,
+    });
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
@@ -68,12 +86,14 @@ export async function POST(req: Request) {
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3020"}/app?success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3020"}/app?canceled=true`,
+      success_url: `${appUrl}/app?success=true`,
+      cancel_url: `${appUrl}/app?canceled=true`,
       metadata: {
         user_id: user.id,
       },
     });
+
+    console.log("Checkout session created successfully:", session.id);
 
     return NextResponse.json({ url: session.url });
   } catch (error: any) {
