@@ -5,7 +5,7 @@ import CopyButton from '@/components/CopyButton'
 import EditTitleForm from '@/components/EditTitleForm'
 import PrintButton from '@/components/PrintButton'
 import DeleteForm from '@/components/DeleteForm'
-import ProFeatureButton from '@/components/ProFeatureButton'
+import AISummaryButton from '@/components/AISummaryButton'
 import { sanitizeText } from '@/utils/sanitize'
 
 // 動的レンダリングを強制（cookiesを使用するため）
@@ -189,15 +189,11 @@ export default async function TranscriptDetailPage({
             <DeleteForm transcriptId={transcript.id} />
           </div>
 
-          {/* Pro Feature Test (簡易版) */}
+          {/* Pro Feature - AI Summary */}
           <div className="mt-4 pt-4 border-t border-gray-200 no-print">
-            <ProFeatureButton
+            <AISummaryButton
+              transcriptId={transcript.id}
               isPro={isPro}
-              featureName="AI Summary"
-              onProClick={async () => {
-                // テスト用: Proの場合はアラートを表示
-                alert('Pro feature is available! (Full implementation coming soon)')
-              }}
             />
           </div>
         </div>
