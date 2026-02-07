@@ -24,58 +24,53 @@ serve(async (req) => {
   }
 
   try {
+    console.log("=== SUMMARIZE FUNCTION STARTED ===");
+    console.log("Request method:", req.method);
+    console.log("Request URL:", req.url);
+    
     // 認証
     const authHeader = req.headers.get("Authorization");
-    console.log("=== START AUTHENTICATION ===");
-    console.log("Authorization header:", authHeader ? "Present" : "Missing");
+    console.log("Authorization header exists:", !!authHeader);
     
     if (!authHeader) {
       console.error("ERROR: No Authorization header");
       return createErrorResponse(req, "Unauthorized: No auth header", 401);
     }
 
-    // トークンを抽出
-    const token = authHeader.replace("Bearer ", "");
-    console.log("Token length:", token.length);
+    console.log("Creating Supabase client...");
+    console.log("SUPABASE_URL:", Deno.env.get("SUPABASE_URL") ? "Set" : "Missing");
+    console.log("SUPABASE_ANON_KEY:", Deno.env.get("SUPABASE_ANON_KEY") ? "Set" : "Missing");
 
-    // JWTをデコードしてユーザー情報を取得
-    let userId: string;
-    let userEmail: string | undefined;
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    console.log("Calling supabase.auth.getUser()...");
+    const getUserResult = await supabase.auth.getUser();
+    console.log("getUser result:", {
+      hasData: !!getUserResult.data,
+      hasUser: !!getUserResult.data?.user,
+      hasError: !!getUserResult.error,
+      errorMessage: getUserResult.error?.message
+    });
+
+    const { data: { user }, error: userError } = getUserResult;
     
-    try {
-      console.log("Decoding JWT...");
-      const parts = token.split('.');
-      console.log("JWT parts count:", parts.length);
-      
-      if (parts.length !== 3) {
-        throw new Error('Invalid JWT format');
-      }
-      
-      // Base64 URLデコード（ネイティブ機能を使用）
-      const base64Url = parts[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = atob(base64);
-      const payload = JSON.parse(jsonPayload);
-      
-      userId = payload.sub;
-      userEmail = payload.email;
-      
-      console.log("JWT decoded successfully");
-      console.log("User ID:", userId);
-      console.log("User Email:", userEmail);
-    } catch (jwtError) {
-      console.error("ERROR: JWT decode failed:", jwtError);
-      return createErrorResponse(req, `Invalid token: ${jwtError.message}`, 401);
+    if (userError) {
+      console.error("ERROR: getUser failed:", userError.message);
+      return createErrorResponse(req, `Auth error: ${userError.message}`, 401);
+    }
+    
+    if (!user) {
+      console.error("ERROR: No user in response");
+      return createErrorResponse(req, "Unauthorized: No user", 401);
     }
 
-    if (!userId) {
-      console.error("ERROR: No user ID in token");
-      return createErrorResponse(req, "No user ID in token", 401);
-    }
+    console.log("✅ User authenticated:", user.id);
+    console.log("User email:", user.email);
 
-    console.log("=== AUTHENTICATION SUCCESS ===");
-
-    // Service Clientでユーザー情報を取得
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -87,33 +82,35 @@ serve(async (req) => {
 
     // ホワイトリストチェック（環境変数から取得）
     const whitelistEmails = Deno.env.get("WHITELIST_EMAILS") || "";
-    console.log("Whitelist emails configured:", whitelistEmails ? "Yes" : "No");
+    console.log("WHITELIST_EMAILS env var:", whitelistEmails ? "Set" : "Not set");
+    console.log("Whitelist value:", whitelistEmails);
     
     const whitelistedUsers = whitelistEmails.split(",").map(email => email.trim());
-    console.log("Whitelist users count:", whitelistedUsers.length);
+    console.log("Whitelisted users:", JSON.stringify(whitelistedUsers));
     
-    const isWhitelisted = userEmail && whitelistedUsers.includes(userEmail);
-    console.log("User email:", userEmail);
+    const isWhitelisted = user.email && whitelistedUsers.includes(user.email);
+    console.log("User email:", user.email);
     console.log("Is whitelisted:", isWhitelisted);
 
     // ホワイトリストユーザーでない場合はPro状態チェック
     if (!isWhitelisted) {
       console.log("=== CHECKING PRO STATUS ===");
-      const { data: subscription } = await serviceClient
+      const { data: subscription, error: subError } = await serviceClient
         .from("subscriptions")
         .select("status")
-        .eq("user_id", userId)
+        .eq("user_id", user.id)
         .single();
 
+      console.log("Subscription query error:", subError?.message || "none");
       console.log("Subscription status:", subscription?.status || "none");
 
       if (!subscription || subscription.status !== "active") {
         console.log("ERROR: User not Pro");
         return createErrorResponse(req, "Pro subscription required", 403);
       }
-      console.log("User is Pro");
+      console.log("✅ User is Pro");
     } else {
-      console.log(`✅ [Whitelisted user] ${userEmail} - skipping Pro check`);
+      console.log(`✅ [Whitelisted user] ${user.email} - skipping Pro check`);
     }
 
     console.log("=== AUTHORIZATION SUCCESS ===");
@@ -128,7 +125,7 @@ serve(async (req) => {
     const { count: dailyCount } = await serviceClient
       .from("usage_logs")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .gte("created_at", today.toISOString());
 
     if ((dailyCount || 0) >= DAILY_LIMIT) {
@@ -140,7 +137,7 @@ serve(async (req) => {
       .from("transcripts")
       .select("id, content, title, user_id")
       .eq("id", body.transcript_id)
-      .eq("user_id", userId)  // 所有権チェックを追加
+      .eq("user_id", user.id)  // 所有権チェックを追加
       .single();
 
     if (transcriptError || !transcript) {
@@ -153,7 +150,7 @@ serve(async (req) => {
       .from("summaries")
       .select("*")
       .eq("transcript_id", body.transcript_id)
-      .eq("user_id", userId)  // 所有権チェックを追加
+      .eq("user_id", user.id)  // 所有権チェックを追加
       .single();
 
     if (existingSummary) {
@@ -218,7 +215,7 @@ ${transcript.content}
     // 保存
     const summaryData = {
       transcript_id: body.transcript_id,
-      user_id: userId,
+      user_id: user.id,
       model: "gpt-4-turbo",
       ...(body.mode === "summary"
         ? {
@@ -239,7 +236,7 @@ ${transcript.content}
 
     // 使用ログ記録
     await serviceClient.from("usage_logs").insert({
-      user_id: userId,
+      user_id: user.id,
       action: body.mode === "summary" ? "summarize" : "exam_mode",
       transcript_id: body.transcript_id,
     });
