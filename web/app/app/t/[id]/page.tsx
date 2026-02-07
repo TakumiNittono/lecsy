@@ -272,7 +272,14 @@ export default async function TranscriptDetailPage({
       </main>
     )
   } catch (error) {
-    console.error('TranscriptDetailPage error:', error)
+    // 詳細なエラーログを出力
+    console.error('TranscriptDetailPage error:', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString(),
+    })
+    
     // エラーを再スローしてerror.tsxで処理
     throw error
   }

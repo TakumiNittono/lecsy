@@ -205,7 +205,19 @@ export default async function AppPage() {
     </main>
   )
   } catch (error) {
-    console.error('AppPage error:', error)
+    // 詳細なエラーログを出力
+    console.error('AppPage error:', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString(),
+      env: {
+        hasWhitelistEmails: !!process.env.WHITELIST_EMAILS,
+        hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        hasSupabaseAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      }
+    })
+    
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -216,6 +228,11 @@ export default async function AppPage() {
           <p className="text-sm text-gray-500">
             Please check your environment variables in Vercel settings.
           </p>
+          {process.env.NODE_ENV === 'development' && error instanceof Error && (
+            <pre className="mt-4 p-4 bg-gray-100 rounded text-left text-xs overflow-auto max-w-2xl">
+              {error.stack}
+            </pre>
+          )}
         </div>
       </main>
     )
