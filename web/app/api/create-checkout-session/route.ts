@@ -5,20 +5,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import Stripe from "stripe";
 
-// Stripeインスタンスの初期化（環境変数チェック付き）
-let stripe: Stripe;
-try {
-  if (!process.env.STRIPE_SECRET_KEY) {
-    throw new Error("STRIPE_SECRET_KEY is not set");
-  }
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: "2023-10-16",
-  });
-} catch (error: any) {
-  console.error("Failed to initialize Stripe:", error.message);
-  throw error;
-}
-
 // 動的レンダリングを強制（認証が必要なAPI）
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +26,11 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+
+    // Stripeインスタンスの初期化（環境変数チェック後）
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: "2023-10-16",
+    });
 
     // Supabase認証チェック
     const supabase = createClient();
