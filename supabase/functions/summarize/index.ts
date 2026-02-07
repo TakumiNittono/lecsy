@@ -164,27 +164,10 @@ serve(async (req) => {
     console.log("✅ Transcript retrieved");
 
     // キャッシュチェック（所有権チェック付き）
+    // 注: 言語が変わった場合は再生成が必要なので、キャッシュはスキップ
     console.log("=== CHECKING CACHE ===");
-    const { data: existingSummary, error: cacheError } = await serviceClient
-      .from("summaries")
-      .select("*")
-      .eq("transcript_id", body.transcript_id)
-      .eq("user_id", user.id)  // 所有権チェックを追加
-      .single();
-
-    console.log("Cache error:", cacheError?.message || "none");
-    console.log("Existing summary found:", !!existingSummary);
-
-    if (existingSummary) {
-      if (body.mode === "summary" && existingSummary.summary) {
-        console.log("✅ Returning cached summary");
-        return createJsonResponse(req, existingSummary);
-      }
-      if (body.mode === "exam" && existingSummary.exam_mode) {
-        console.log("✅ Returning cached exam mode");
-        return createJsonResponse(req, existingSummary);
-      }
-    }
+    console.log("Requested language:", body.output_language || "ja");
+    console.log("Cache skipped - generating fresh summary for requested language");
 
     // OpenAI呼び出し
     console.log("=== CALLING OPENAI API ===");
@@ -193,70 +176,103 @@ serve(async (req) => {
     
     const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 
-    // 言語名マッピング
-    const languageNames: Record<string, string> = {
-      ja: "Japanese",
-      en: "English",
-      es: "Spanish",
-      zh: "Chinese",
-      ko: "Korean",
-      fr: "French",
-      de: "German",
+    // 言語名マッピング（より詳細な指示）
+    const languageConfigs: Record<string, { name: string; instruction: string }> = {
+      ja: { 
+        name: "Japanese",
+        instruction: "すべての出力は日本語で書いてください。summary、key_points、sections、questions、answersなど、すべてのテキストフィールドを日本語で記述してください。"
+      },
+      en: { 
+        name: "English",
+        instruction: "Write ALL output in English. All text fields including summary, key_points, sections, questions, and answers must be in English."
+      },
+      es: { 
+        name: "Spanish",
+        instruction: "Escribe TODA la salida en español. Todos los campos de texto, incluyendo resumen, puntos clave, secciones, preguntas y respuestas deben estar en español."
+      },
+      zh: { 
+        name: "Chinese",
+        instruction: "用中文写所有输出。所有文本字段，包括摘要、要点、部分、问题和答案都必须用中文。"
+      },
+      ko: { 
+        name: "Korean",
+        instruction: "모든 출력을 한국어로 작성하세요. 요약, 핵심 포인트, 섹션, 질문 및 답변을 포함한 모든 텍스트 필드는 한국어로 작성해야 합니다."
+      },
+      fr: { 
+        name: "French",
+        instruction: "Écrivez TOUTE la sortie en français. Tous les champs de texte, y compris le résumé, les points clés, les sections, les questions et les réponses doivent être en français."
+      },
+      de: { 
+        name: "German",
+        instruction: "Schreiben Sie die GESAMTE Ausgabe auf Deutsch. Alle Textfelder einschließlich Zusammenfassung, Schlüsselpunkte, Abschnitte, Fragen und Antworten müssen auf Deutsch sein."
+      },
     };
     
     const outputLanguage = body.output_language || "ja";
-    const languageName = languageNames[outputLanguage] || "Japanese";
-    const languageInstruction = `You must respond ONLY in ${languageName}. All text in your response must be in ${languageName}.`;
+    const langConfig = languageConfigs[outputLanguage] || languageConfigs["ja"];
+    const languageName = langConfig.name;
+    const languageInstruction = langConfig.instruction;
 
     let prompt: string;
     if (body.mode === "summary") {
-      prompt = `${languageInstruction}
+      prompt = `IMPORTANT: ${languageInstruction}
 
 Analyze the following lecture transcript and generate a summary in JSON format.
+The lecture content is in English, but you MUST provide ALL output text in ${languageName}.
 
 Lecture content:
 ${transcript.content}
 
-Output format (in ${languageName}):
+Required JSON format:
 {
-  "summary": "Overall summary (200-300 characters)",
-  "key_points": ["Key point 1", "Key point 2", ...],
+  "summary": "Comprehensive summary in ${languageName} (200-300 characters)",
+  "key_points": ["Key point 1 in ${languageName}", "Key point 2 in ${languageName}", "..."],
   "sections": [
-    {"heading": "Section name", "content": "One-line summary"},
-    ...
+    {"heading": "Section heading in ${languageName}", "content": "Section summary in ${languageName}"},
+    "..."
   ]
-}`;
-    } else {
-      prompt = `${languageInstruction}
+}
 
-Analyze the following lecture transcript and generate exam preparation information in JSON format.
+Remember: ALL text values must be in ${languageName}!`;
+    } else {
+      prompt = `IMPORTANT: ${languageInstruction}
+
+Analyze the following lecture transcript and generate exam preparation materials in JSON format.
+The lecture content is in English, but you MUST provide ALL output text in ${languageName}.
 
 Lecture content:
 ${transcript.content}
 
-Output format (in ${languageName}):
+Required JSON format:
 {
   "key_terms": [
-    {"term": "Term", "definition": "Definition"},
-    ...
+    {"term": "Term in ${languageName}", "definition": "Definition in ${languageName}"},
+    "..."
   ],
   "questions": [
-    {"question": "Question", "answer": "Answer"},
-    ...
+    {"question": "Question in ${languageName}", "answer": "Answer in ${languageName}"},
+    "..."
   ],
-  "predictions": ["Prediction 1", "Prediction 2", ...]
-}`;
+  "predictions": ["Prediction 1 in ${languageName}", "Prediction 2 in ${languageName}", "..."]
+}
+
+Remember: ALL text values (terms, definitions, questions, answers, predictions) must be in ${languageName}!`;
     }
 
     console.log("Creating OpenAI prompt for mode:", body.mode);
+    console.log("Target language:", languageName);
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4-turbo",
       messages: [
-        { role: "system", content: `You are an expert in summarizing university lectures and preparing exam materials. ${languageInstruction}` },
+        { 
+          role: "system", 
+          content: `You are an expert in summarizing university lectures and preparing exam materials. ${languageInstruction} Do NOT use English if the target language is not English.` 
+        },
         { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },
+      temperature: 0.3,
     });
 
     console.log("✅ OpenAI API call successful");
