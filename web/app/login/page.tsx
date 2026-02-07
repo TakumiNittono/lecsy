@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const searchParams = useSearchParams();
+  const router = useRouter();
   const redirectTo = searchParams.get('redirectTo') || '/app';
 
   useEffect(() => {
@@ -16,7 +18,28 @@ function LoginForm() {
     if (errorParam) {
       setError(decodeURIComponent(errorParam));
     }
-  }, [searchParams]);
+    
+    // 既にログインしているか確認
+    const checkSession = async () => {
+      try {
+        const { createClient } = await import('@/utils/supabase/client')
+        const supabase = createClient()
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (session && !sessionError) {
+          // 既にログインしている場合は/appにリダイレクト
+          router.replace(redirectTo)
+          return
+        }
+      } catch (err) {
+        console.error('Session check error:', err)
+      } finally {
+        setCheckingSession(false)
+      }
+    }
+    
+    checkSession()
+  }, [searchParams, router, redirectTo]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -27,29 +50,41 @@ function LoginForm() {
       const { createClient } = await import('@/utils/supabase/client')
       const supabase = createClient()
       
+      // リダイレクトURLを構築（現在のoriginを使用）
+      const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
+      console.log('Starting Google OAuth with redirect:', redirectUrl)
+      
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       })
 
       if (signInError) {
         console.error('OAuth error:', signInError)
-        setError(signInError.message)
+        setError(`ログインエラー: ${signInError.message}`)
+        setLoading(false)
         return
       }
 
       if (data?.url) {
+        console.log('Redirecting to OAuth URL:', data.url.substring(0, 100) + '...')
         // OAuth URLにリダイレクト
         window.location.href = data.url
+        // リダイレクト後はこのコードは実行されないが、念のため
       } else {
-        setError('認証URLの取得に失敗しました')
+        console.error('No OAuth URL received')
+        setError('認証URLの取得に失敗しました。もう一度お試しください。')
+        setLoading(false)
       }
     } catch (err: any) {
       console.error("Login error:", err);
-      setError(err.message || "ログインに失敗しました");
-    } finally {
+      setError(`ログインに失敗しました: ${err.message || '予期しないエラーが発生しました'}`);
       setLoading(false);
     }
   };
@@ -66,10 +101,14 @@ function LoginForm() {
       const supabase = createClient()
       console.log('🍎 Supabase client created');
       
+      // リダイレクトURLを構築（現在のoriginを使用）
+      const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
+      console.log('🍎 Redirect URL:', redirectUrl)
+      
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+          redirectTo: redirectUrl,
         },
       })
 
@@ -77,26 +116,35 @@ function LoginForm() {
 
       if (signInError) {
         console.error('🍎 OAuth error:', signInError)
-        setError(signInError.message)
+        setError(`ログインエラー: ${signInError.message}`)
         setLoading(false);
         return
       }
 
       if (data?.url) {
-        console.log('🍎 Redirecting to:', data.url);
+        console.log('🍎 Redirecting to:', data.url.substring(0, 100) + '...');
         // OAuth URLにリダイレクト
         window.location.href = data.url
+        // リダイレクト後はこのコードは実行されないが、念のため
       } else {
         console.error('🍎 No OAuth URL received');
-        setError('認証URLの取得に失敗しました')
+        setError('認証URLの取得に失敗しました。もう一度お試しください。')
         setLoading(false);
       }
     } catch (err: any) {
       console.error("🍎 Login error:", err);
-      setError(err.message || "ログインに失敗しました");
+      setError(`ログインに失敗しました: ${err.message || '予期しないエラーが発生しました'}`);
       setLoading(false);
     }
   };
+
+  if (checkingSession) {
+    return (
+      <main className="min-h-screen bg-white flex flex-col items-center justify-center">
+        <div className="text-gray-600">セッションを確認中...</div>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen bg-white flex flex-col">
@@ -121,7 +169,17 @@ function LoginForm() {
 
           {error && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-800 text-sm">{error}</p>
+              <p className="text-red-800 text-sm mb-2">{error}</p>
+              <button
+                onClick={() => {
+                  setError(null)
+                  // ページをリロードして再試行
+                  window.location.reload()
+                }}
+                className="text-red-700 hover:text-red-900 text-sm underline"
+              >
+                もう一度お試しください
+              </button>
             </div>
           )}
 

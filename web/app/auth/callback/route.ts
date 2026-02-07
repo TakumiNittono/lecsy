@@ -6,6 +6,11 @@ export const dynamic = 'force-dynamic'
 
 async function handleCallback(request: NextRequest) {
   const requestUrl = new URL(request.url)
+  console.log('Callback received:', {
+    method: request.method,
+    pathname: requestUrl.pathname,
+    searchParams: Object.fromEntries(requestUrl.searchParams),
+  })
   
   // GETリクエストの場合（Google OAuthなど）
   let code = requestUrl.searchParams.get('code')
@@ -21,35 +26,48 @@ async function handleCallback(request: NextRequest) {
       error = formData.get('error') as string | null
       errorDescription = formData.get('error_description') as string | null
       state = formData.get('state') as string | null
+      console.log('POST form data parsed:', { hasCode: !!code, hasError: !!error })
     } catch (err) {
       console.error('Failed to parse form data:', err)
     }
   }
   
   const next = requestUrl.searchParams.get('next') || '/app'
+  console.log('Redirect target:', next)
 
   // 環境変数の確認
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('Missing Supabase environment variables')
+    console.error('Missing Supabase environment variables', {
+      hasUrl: !!supabaseUrl,
+      hasKey: !!supabaseAnonKey,
+    })
     return NextResponse.redirect(
       new URL('/login?error=' + encodeURIComponent('サーバー設定エラー'), requestUrl.origin)
     )
   }
 
   if (error) {
-    console.error('OAuth error:', error, errorDescription)
+    console.error('OAuth error received:', {
+      error,
+      errorDescription,
+      state,
+    })
+    const errorMessage = errorDescription || error || '認証に失敗しました'
     return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(error)}`, requestUrl.origin)
+      new URL(`/login?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
     )
   }
 
   if (!code) {
-    console.error('No code parameter found in callback')
+    console.error('No code parameter found in callback', {
+      method: request.method,
+      searchParams: Object.fromEntries(requestUrl.searchParams),
+    })
     return NextResponse.redirect(
-      new URL('/login?error=' + encodeURIComponent('認証コードが見つかりません'), requestUrl.origin)
+      new URL('/login?error=' + encodeURIComponent('認証コードが見つかりません。もう一度ログインをお試しください。'), requestUrl.origin)
     )
   }
 
@@ -105,19 +123,62 @@ async function handleCallback(request: NextRequest) {
 
     console.log('Authentication successful:', { userId: data.user.id })
     
+    // セッションが確立されたことを確認（リトライロジック付き）
+    let sessionConfirmed = false
+    let retryCount = 0
+    const maxRetries = 3
+    
+    while (!sessionConfirmed && retryCount < maxRetries) {
+      // 少し待ってからセッションを確認
+      if (retryCount > 0) {
+        await new Promise(resolve => setTimeout(resolve, 500 * retryCount))
+      }
+      
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError) {
+        console.error(`Session check error (attempt ${retryCount + 1}):`, sessionError)
+      }
+      
+      if (session?.user?.id === data.user.id) {
+        sessionConfirmed = true
+        console.log('Session confirmed:', { userId: session.user.id })
+      } else {
+        retryCount++
+        console.warn(`Session not confirmed yet (attempt ${retryCount}/${maxRetries})`)
+      }
+    }
+    
+    if (!sessionConfirmed) {
+      console.error('Session confirmation failed after retries')
+      return NextResponse.redirect(
+        new URL('/login?error=' + encodeURIComponent('セッションの確立に失敗しました。もう一度お試しください。'), requestUrl.origin)
+      )
+    }
+    
     // 認証成功 - リダイレクト（クッキーを含む）
     const redirectResponse = NextResponse.redirect(new URL(next, requestUrl.origin))
     
-    // セッションクッキーをコピー
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
+    // セッションクッキーを確実にコピー
+    const allCookies = supabaseResponse.cookies.getAll()
+    console.log('Copying cookies to redirect response:', allCookies.length, 'cookies')
+    
+    allCookies.forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, {
         path: cookie.path || '/',
-        sameSite: cookie.sameSite as 'lax' | 'strict' | 'none' | undefined,
-        secure: cookie.secure ?? true,
+        sameSite: (cookie.sameSite as 'lax' | 'strict' | 'none') || 'lax',
+        secure: cookie.secure ?? (requestUrl.protocol === 'https:'),
         httpOnly: cookie.httpOnly ?? true,
         maxAge: cookie.maxAge,
+        domain: cookie.domain,
       })
     })
+    
+    // セッションクッキーが確実に設定されていることを確認
+    const sessionCookie = allCookies.find(c => c.name.includes('auth-token') || c.name.includes('sb-'))
+    if (!sessionCookie) {
+      console.warn('No session cookie found, but proceeding with redirect')
+    }
     
     return redirectResponse
   } catch (err: any) {
