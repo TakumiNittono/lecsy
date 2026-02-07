@@ -116,23 +116,34 @@ serve(async (req) => {
     console.log("=== AUTHORIZATION SUCCESS ===");
 
     // リクエスト
+    console.log("Parsing request body...");
     const body: SummarizeRequest = await req.json();
+    console.log("Request body:", JSON.stringify(body));
 
     // フェアリミットチェック
+    console.log("=== CHECKING USAGE LIMIT ===");
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const { count: dailyCount } = await serviceClient
+    const { count: dailyCount, error: countError } = await serviceClient
       .from("usage_logs")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id)
       .gte("created_at", today.toISOString());
 
+    console.log("Count error:", countError?.message || "none");
+    console.log("Daily count:", dailyCount || 0);
+
     if ((dailyCount || 0) >= DAILY_LIMIT) {
+      console.log("ERROR: Daily limit reached");
       return createErrorResponse(req, "Daily limit reached. Try again tomorrow.", 429);
     }
+    console.log("✅ Usage limit OK");
 
     // transcript取得（所有権チェック付き）
+    console.log("=== FETCHING TRANSCRIPT ===");
+    console.log("Transcript ID:", body.transcript_id);
+    
     const { data: transcript, error: transcriptError } = await serviceClient
       .from("transcripts")
       .select("id, content, title, user_id")
@@ -140,29 +151,44 @@ serve(async (req) => {
       .eq("user_id", user.id)  // 所有権チェックを追加
       .single();
 
+    console.log("Transcript error:", transcriptError?.message || "none");
+    console.log("Transcript found:", !!transcript);
+    console.log("Transcript content length:", transcript?.content?.length || 0);
+
     if (transcriptError || !transcript) {
+      console.log("ERROR: Transcript not found");
       // 存在しない場合も権限がない場合も同じエラーを返す（情報漏洩防止）
       return createErrorResponse(req, "Transcript not found or access denied", 404);
     }
+    console.log("✅ Transcript retrieved");
 
     // キャッシュチェック（所有権チェック付き）
-    const { data: existingSummary } = await serviceClient
+    console.log("=== CHECKING CACHE ===");
+    const { data: existingSummary, error: cacheError } = await serviceClient
       .from("summaries")
       .select("*")
       .eq("transcript_id", body.transcript_id)
       .eq("user_id", user.id)  // 所有権チェックを追加
       .single();
 
+    console.log("Cache error:", cacheError?.message || "none");
+    console.log("Existing summary found:", !!existingSummary);
+
     if (existingSummary) {
       if (body.mode === "summary" && existingSummary.summary) {
+        console.log("✅ Returning cached summary");
         return createJsonResponse(req, existingSummary);
       }
       if (body.mode === "exam" && existingSummary.exam_mode) {
+        console.log("✅ Returning cached exam mode");
         return createJsonResponse(req, existingSummary);
       }
     }
 
     // OpenAI呼び出し
+    console.log("=== CALLING OPENAI API ===");
+    console.log("OPENAI_API_KEY exists:", !!Deno.env.get("OPENAI_API_KEY"));
+    
     const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 
     let prompt: string;
@@ -201,6 +227,8 @@ ${transcript.content}
 }`;
     }
 
+    console.log("Creating OpenAI prompt for mode:", body.mode);
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4-turbo",
       messages: [
@@ -210,9 +238,13 @@ ${transcript.content}
       response_format: { type: "json_object" },
     });
 
+    console.log("✅ OpenAI API call successful");
+    console.log("Response length:", completion.choices[0].message.content?.length || 0);
+
     const result = JSON.parse(completion.choices[0].message.content || "{}");
 
     // 保存
+    console.log("=== SAVING SUMMARY ===");
     const summaryData = {
       transcript_id: body.transcript_id,
       user_id: user.id,
@@ -226,24 +258,40 @@ ${transcript.content}
         : { exam_mode: result }),
     };
 
+    console.log("Upserting summary data...");
     const { data: savedSummary, error: saveError } = await serviceClient
       .from("summaries")
       .upsert(summaryData, { onConflict: "transcript_id" })
       .select()
       .single();
 
-    if (saveError) throw saveError;
+    if (saveError) {
+      console.error("ERROR: Failed to save summary:", saveError.message);
+      throw saveError;
+    }
+    console.log("✅ Summary saved");
 
     // 使用ログ記録
-    await serviceClient.from("usage_logs").insert({
+    console.log("=== RECORDING USAGE ===");
+    const { error: logError } = await serviceClient.from("usage_logs").insert({
       user_id: user.id,
       action: body.mode === "summary" ? "summarize" : "exam_mode",
       transcript_id: body.transcript_id,
     });
 
+    if (logError) {
+      console.error("WARNING: Failed to log usage:", logError.message);
+    } else {
+      console.log("✅ Usage logged");
+    }
+
+    console.log("=== SUCCESS - RETURNING RESPONSE ===");
     return createJsonResponse(req, savedSummary);
   } catch (error) {
-    console.error("Error:", error);
+    console.error("=== FATAL ERROR ===");
+    console.error("Error type:", error?.constructor?.name);
+    console.error("Error message:", error instanceof Error ? error.message : String(error));
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack");
     return createErrorResponse(req, "Internal server error", 500);
   }
 });
