@@ -33,10 +33,20 @@ serve(async (req) => {
       return createErrorResponse(req, "Unauthorized: No auth header", 401);
     }
 
+    // トークンを抽出
+    const token = authHeader.replace("Bearer ", "");
+    console.log("Token extracted:", token.substring(0, 20) + "...");
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
+      {
+        global: {
+          headers: {
+            Authorization: authHeader,
+          },
+        },
+      }
     );
 
     const serviceClient = createClient(
@@ -45,12 +55,14 @@ serve(async (req) => {
     );
 
     console.log("Calling supabase.auth.getUser()...");
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data, error: userError } = await supabase.auth.getUser(token);
     
     if (userError) {
-      console.error("getUser error:", userError);
+      console.error("getUser error:", userError.message);
       return createErrorResponse(req, `Auth error: ${userError.message}`, 401);
     }
+    
+    const user = data.user;
     
     if (!user) {
       console.error("No user found");
