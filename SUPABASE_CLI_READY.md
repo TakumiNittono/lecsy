@@ -103,11 +103,16 @@ supabase functions deploy stripe-webhook
 supabase functions deploy
 ```
 
-### ログをリアルタイム表示
+### ログを確認
+
+Supabase ダッシュボードでログを確認：
 
 ```bash
-supabase functions logs summarize --follow
+# ダッシュボードを開く
+open https://supabase.com/dashboard/project/bjqilokchrqfxzimfnpm/functions
 ```
+
+または、Edge Function の詳細ページで「Logs」タブを確認してください。
 
 ## 📝 現在の状態
 
@@ -171,9 +176,11 @@ supabase functions deploy summarize
 
 ### ログで確認
 
-```bash
-supabase functions logs summarize --follow
-```
+Supabase ダッシュボードでログを確認：
+
+1. [Functions ページ](https://supabase.com/dashboard/project/bjqilokchrqfxzimfnpm/functions)を開く
+2. `summarize` 関数をクリック
+3. 「Logs」タブを選択
 
 ホワイトリストユーザーがログインすると以下のログが表示されます：
 
