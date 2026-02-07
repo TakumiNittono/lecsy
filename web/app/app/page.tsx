@@ -18,12 +18,20 @@ export default async function AppPage() {
       redirect('/login')
     }
 
+  // ホワイトリストチェック
+  const whitelistEmails = process.env.WHITELIST_EMAILS || ''
+  const whitelistedUsers = whitelistEmails.split(',').map(email => email.trim())
+  const isWhitelisted = user.email && whitelistedUsers.includes(user.email)
+
   // サブスクリプション状態を取得
   const { data: subscription } = await supabase
     .from('subscriptions')
     .select('status, current_period_end, cancel_at_period_end')
     .eq('user_id', user.id)
     .single()
+
+  // ホワイトリストユーザーは自動的にProとして扱う
+  const effectiveStatus = isWhitelisted ? 'active' : (subscription?.status || null)
 
   // 講義一覧を取得
   const { data: transcriptsRaw, error: transcriptsError } = await supabase
@@ -152,9 +160,10 @@ export default async function AppPage() {
           </div>
 
           <SubscriptionCard
-            status={subscription?.status || null}
+            status={effectiveStatus}
             currentPeriodEnd={subscription?.current_period_end || null}
             cancelAtPeriodEnd={subscription?.cancel_at_period_end || null}
+            isWhitelisted={isWhitelisted}
           />
         </div>
 

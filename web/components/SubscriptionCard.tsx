@@ -7,9 +7,10 @@ interface SubscriptionCardProps {
   status: string | null
   currentPeriodEnd: string | null
   cancelAtPeriodEnd: boolean | null
+  isWhitelisted?: boolean
 }
 
-export default function SubscriptionCard({ status, currentPeriodEnd, cancelAtPeriodEnd }: SubscriptionCardProps) {
+export default function SubscriptionCard({ status, currentPeriodEnd, cancelAtPeriodEnd, isWhitelisted = false }: SubscriptionCardProps) {
   const isPro = status === 'active'
   const willCancel = cancelAtPeriodEnd === true
 
@@ -41,8 +42,14 @@ export default function SubscriptionCard({ status, currentPeriodEnd, cancelAtPer
         <>
           <div className="mb-4">
             <p className="text-lg font-semibold text-gray-900">Pro</p>
-            <p className="text-sm text-gray-500 mt-1">Current plan</p>
-            {willCancel ? (
+            <p className="text-sm text-gray-500 mt-1">
+              {isWhitelisted ? 'Developer access' : 'Current plan'}
+            </p>
+            {isWhitelisted ? (
+              <p className="text-xs text-blue-600 mt-2 font-medium">
+                ✨ Complimentary access
+              </p>
+            ) : willCancel ? (
               <p className="text-xs text-orange-600 mt-2 font-medium">
                 ⚠️ Cancels on {formatNextBillingDate(currentPeriodEnd)}
               </p>
@@ -52,9 +59,11 @@ export default function SubscriptionCard({ status, currentPeriodEnd, cancelAtPer
               </p>
             ) : null}
           </div>
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <ManageSubscriptionButton className="w-full text-center justify-center" />
-          </div>
+          {!isWhitelisted && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <ManageSubscriptionButton className="w-full text-center justify-center" />
+            </div>
+          )}
         </>
       ) : (
         <>
