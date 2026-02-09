@@ -1,9 +1,96 @@
 import Link from "next/link";
+import type { Metadata } from 'next';
 import ProCardUpgradeButton from "@/components/ProCardUpgradeButton";
+import { APP_STORE_URL } from "@/lib/constants";
+
+export const metadata: Metadata = {
+  title: "Lecsy | Lecture Recording & AI Transcription App for Students",
+  description: "Record college lectures on your iPhone, transcribe with AI completely offline, and review anytime. The best lecture recording app for college and international students. Free to start.",
+  alternates: {
+    canonical: "https://www.lecsy.app/",
+  },
+};
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-white">
+      {/* JSON-LD Structured Data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Is my data safe?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Audio never leaves your device. Only text is saved to the cloud — and only when you choose to."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Do I need internet to record?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. Recording and transcription work completely offline."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What languages are supported?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Japanese and English. Auto-detection is available."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How do I upgrade to Pro?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Simply log in to your account and click \"Upgrade to Pro\" on the dashboard. You'll be redirected to a secure checkout page powered by Stripe."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I cancel my Pro subscription?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes! You can cancel your Pro subscription anytime from the dashboard. Your subscription will remain active until the end of the current billing period."
+                }
+              }
+            ]
+          })
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            "name": "Lecsy",
+            "operatingSystem": "iOS 17.6+",
+            "applicationCategory": "EducationApplication",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "description": "Lecture recording and AI transcription app for college and international students",
+            "url": "https://www.lecsy.app/",
+            "downloadUrl": APP_STORE_URL,
+            "installUrl": APP_STORE_URL,
+            "author": {
+              "@type": "Person",
+              "name": "Takumi Nittono"
+            }
+          })
+        }}
+      />
       {/* Header */}
       <header className="border-b border-gray-200 sticky top-0 bg-white/80 backdrop-blur-sm z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
@@ -65,11 +152,25 @@ export default function Home() {
                 href="/login"
                 className="group inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl text-lg font-semibold hover:from-blue-700 hover:to-blue-600 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105"
               >
-                Get the app — it&apos;s free
+                Get Started Free
                 <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
               </Link>
+              <a
+                href={APP_STORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-3 px-6 py-3 bg-black text-white rounded-xl hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl"
+              >
+                <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.71 19.5C17.88 20.74 17 21.95 15.66 21.97C14.32 22 13.89 21.18 12.37 21.18C10.84 21.18 10.37 21.95 9.09997 22C7.78997 22.05 6.79997 20.68 5.95997 19.47C4.24997 17 2.93997 12.45 4.69997 9.39C5.56997 7.87 7.12997 6.91 8.81997 6.88C10.1 6.86 11.32 7.75 12.11 7.75C12.89 7.75 14.37 6.68 15.92 6.84C16.57 6.87 18.39 7.1 19.56 8.82C19.47 8.88 17.39 10.1 17.41 12.63C17.44 15.65 20.06 16.66 20.09 16.67C20.06 16.74 19.67 18.11 18.71 19.5ZM13 3.5C13.73 2.67 14.94 2.04 15.94 2C16.07 3.17 15.6 4.35 14.9 5.19C14.21 6.04 13.07 6.7 11.95 6.61C11.8 5.46 12.36 4.26 13 3.5Z"/>
+                </svg>
+                <div className="text-left">
+                  <div className="text-[10px] leading-tight">Download on the</div>
+                  <div className="text-lg font-semibold leading-tight">App Store</div>
+                </div>
+              </a>
               <Link
                 href="#how-it-works"
                 className="px-8 py-4 text-gray-700 hover:text-gray-900 font-medium transition-colors"
@@ -419,6 +520,14 @@ export default function Home() {
               >
                 Get Started Free
               </Link>
+              <a
+                href={APP_STORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full text-center mt-3 text-sm text-gray-500 hover:text-gray-700 underline"
+              >
+                or download from App Store →
+              </a>
             </div>
             <div className="border-2 border-blue-600 rounded-2xl p-8 hover-lift bg-gradient-to-br from-blue-50 to-sky-50 relative overflow-hidden">
               <div className="absolute top-4 right-4">
@@ -513,27 +622,75 @@ export default function Home() {
           <p className="text-xl mb-8 opacity-90">
             Just open the app and hit record.
           </p>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-white text-blue-600 rounded-xl text-lg font-semibold hover:bg-gray-100 transition-all shadow-2xl hover:shadow-3xl transform hover:scale-105"
-          >
-            Download Lecsy — Free
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 px-8 py-4 bg-white text-blue-600 rounded-xl text-lg font-semibold hover:bg-gray-100 transition-all shadow-2xl hover:shadow-3xl transform hover:scale-105"
+            >
+              Get Started on Web
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+            <a
+              href={APP_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-3 px-6 py-3 bg-white/10 border-2 border-white text-white rounded-xl hover:bg-white/20 transition-all"
+            >
+              <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.71 19.5C17.88 20.74 17 21.95 15.66 21.97C14.32 22 13.89 21.18 12.37 21.18C10.84 21.18 10.37 21.95 9.09997 22C7.78997 22.05 6.79997 20.68 5.95997 19.47C4.24997 17 2.93997 12.45 4.69997 9.39C5.56997 7.87 7.12997 6.91 8.81997 6.88C10.1 6.86 11.32 7.75 12.11 7.75C12.89 7.75 14.37 6.68 15.92 6.84C16.57 6.87 18.39 7.1 19.56 8.82C19.47 8.88 17.39 10.1 17.41 12.63C17.44 15.65 20.06 16.66 20.09 16.67C20.06 16.74 19.67 18.11 18.71 19.5ZM13 3.5C13.73 2.67 14.94 2.04 15.94 2C16.07 3.17 15.6 4.35 14.9 5.19C14.21 6.04 13.07 6.7 11.95 6.61C11.8 5.46 12.36 4.26 13 3.5Z"/>
+              </svg>
+              <div className="text-left">
+                <div className="text-[10px] leading-tight">Download on the</div>
+                <div className="text-lg font-semibold leading-tight">App Store</div>
+              </div>
+            </a>
+          </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 py-8 bg-white">
+      <footer className="border-t border-gray-200 py-12 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center text-gray-600 text-sm">
-            <div className="mb-4 md:mb-0">© 2026 lecsy. All rights reserved.</div>
-            <div className="flex gap-6">
-              <Link href="/privacy" className="hover:text-gray-900 transition-colors">Privacy Policy</Link>
-              <Link href="/terms" className="hover:text-gray-900 transition-colors">Terms of Service</Link>
+          <div className="grid md:grid-cols-4 gap-8 mb-8">
+            {/* Brand */}
+            <div>
+              <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent mb-4">
+                lecsy
+              </div>
+              <p className="text-gray-600 text-sm">
+                Lecture recording & AI transcription app built for college and international students.
+              </p>
             </div>
+            {/* Features */}
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-4">Features</h4>
+              <ul className="space-y-2 text-sm text-gray-600">
+                <li><Link href="/ai-transcription-for-students" className="hover:text-gray-900 transition-colors">AI Transcription for Students</Link></li>
+                <li><Link href="/lecture-recording-app-college" className="hover:text-gray-900 transition-colors">Lecture Recording App</Link></li>
+                <li><Link href="/ai-note-taking-for-international-students" className="hover:text-gray-900 transition-colors">AI Note Taking for International Students</Link></li>
+              </ul>
+            </div>
+            {/* Resources */}
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-4">Resources</h4>
+              <ul className="space-y-2 text-sm text-gray-600">
+                <li><Link href="/otter-alternative-for-lectures" className="hover:text-gray-900 transition-colors">Otter Alternative for Lectures</Link></li>
+                <li><Link href="/how-to-record-lectures-legally" className="hover:text-gray-900 transition-colors">How to Record Lectures Legally</Link></li>
+              </ul>
+            </div>
+            {/* Legal */}
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-4">Legal</h4>
+              <ul className="space-y-2 text-sm text-gray-600">
+                <li><Link href="/privacy" className="hover:text-gray-900 transition-colors">Privacy Policy</Link></li>
+                <li><Link href="/terms" className="hover:text-gray-900 transition-colors">Terms of Service</Link></li>
+              </ul>
+            </div>
+          </div>
+          <div className="border-t border-gray-200 pt-8 text-center text-gray-600 text-sm">
+            © 2026 lecsy. All rights reserved.
           </div>
         </div>
       </footer>
