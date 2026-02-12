@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
+import { isValidUUID } from '@/utils/api/auth'
 import Link from 'next/link'
 import CopyButton from '@/components/CopyButton'
 import EditTitleForm from '@/components/EditTitleForm'
@@ -20,8 +21,8 @@ export default async function TranscriptDetailPage({
   try {
     const { id } = await params
     
-    // IDのバリデーション
-    if (!id || typeof id !== 'string') {
+    // IDのバリデーション（UUID形式）
+    if (!id || typeof id !== 'string' || !isValidUUID(id)) {
       notFound()
     }
 

@@ -1,16 +1,15 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getSafeRedirectPath } from '@/utils/redirect'
 
 // 動的レンダリングを強制（request.urlを使用するため）
 export const dynamic = 'force-dynamic'
 
 async function handleCallback(request: NextRequest) {
   const requestUrl = new URL(request.url)
-  console.log('Callback received:', {
-    method: request.method,
-    pathname: requestUrl.pathname,
-    searchParams: Object.fromEntries(requestUrl.searchParams),
-  })
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Callback received:', { method: request.method, pathname: requestUrl.pathname })
+  }
   
   // GETリクエストの場合（Google OAuthなど）
   let code = requestUrl.searchParams.get('code')
@@ -32,8 +31,9 @@ async function handleCallback(request: NextRequest) {
     }
   }
   
-  const next = requestUrl.searchParams.get('next') || '/app'
-  console.log('Redirect target:', next)
+  // オープンリダイレクト対策: リダイレクト先を検証
+  const nextParam = requestUrl.searchParams.get('next') || '/app'
+  const next = getSafeRedirectPath(nextParam, '/app')
 
   // 環境変数の確認
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -101,16 +101,14 @@ async function handleCallback(request: NextRequest) {
     const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
     if (exchangeError) {
-      console.error('Exchange error:', {
-        message: exchangeError.message,
-        status: exchangeError.status,
-        name: exchangeError.name,
-      })
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Exchange error:', exchangeError)
+      }
+      const errorMsg = process.env.NODE_ENV === 'development'
+        ? (exchangeError.message || '認証に失敗しました')
+        : '認証に失敗しました'
       return NextResponse.redirect(
-        new URL(
-          `/login?error=${encodeURIComponent(exchangeError.message || '認証に失敗しました')}`,
-          requestUrl.origin
-        )
+        new URL(`/login?error=${encodeURIComponent(errorMsg)}`, requestUrl.origin)
       )
     }
 
@@ -181,16 +179,14 @@ async function handleCallback(request: NextRequest) {
     }
     
     return redirectResponse
-  } catch (err: any) {
-    console.error('Unexpected error in callback handler:', {
-      message: err?.message,
-      stack: err?.stack,
-    })
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : '予期しないエラーが発生しました'
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Unexpected error in callback handler:', err)
+    }
+    const errorMsg = process.env.NODE_ENV === 'development' ? errMsg : '予期しないエラーが発生しました'
     return NextResponse.redirect(
-      new URL(
-        `/login?error=${encodeURIComponent(err?.message || '予期しないエラーが発生しました')}`,
-        requestUrl.origin
-      )
+      new URL(`/login?error=${encodeURIComponent(errorMsg)}`, requestUrl.origin)
     )
   }
 }

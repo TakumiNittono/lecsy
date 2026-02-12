@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { getSafeRedirectPath } from "@/utils/redirect";
 
 function LoginForm() {
   const [error, setError] = useState<string | null>(null);
@@ -10,7 +11,8 @@ function LoginForm() {
   const [checkingSession, setCheckingSession] = useState(true);
   const searchParams = useSearchParams();
   const router = useRouter();
-  const redirectTo = searchParams.get('redirectTo') || '/app';
+  // オープンリダイレクト対策: redirectToを検証
+  const redirectTo = getSafeRedirectPath(searchParams.get('redirectTo'), '/app');
 
   useEffect(() => {
     // URLパラメータからエラーを取得

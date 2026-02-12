@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
+import { getSafeRedirectPath } from '@/utils/redirect'
 
 // 動的レンダリングを強制（request.urlを使用するため）
 export const dynamic = 'force-dynamic'
@@ -7,7 +8,8 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const redirectTo = searchParams.get('redirectTo') || '/app'
+    // オープンリダイレクト対策
+    const redirectTo = getSafeRedirectPath(searchParams.get('redirectTo'), '/app')
 
     // 環境変数の確認
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -31,7 +33,8 @@ export async function GET(request: Request) {
 
     if (error) {
       console.error('OAuth error:', error)
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      const message = process.env.NODE_ENV === 'development' ? error.message : 'Authentication failed'
+      return NextResponse.json({ error: message }, { status: 400 })
     }
 
     if (data?.url) {
@@ -44,11 +47,11 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ error: 'Failed to get OAuth URL' }, { status: 500 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('API route error:', error)
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    )
+    const message = process.env.NODE_ENV === 'development' && error instanceof Error
+      ? error.message
+      : 'Internal server error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

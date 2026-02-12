@@ -60,6 +60,9 @@ export async function authenticateRequest(): Promise<AuthResult> {
   }
 }
 
+// リダイレクト検証（オープンリダイレクト対策）- utils/redirect.tsから再エクスポート
+export { isValidRedirectPath, getSafeRedirectPath } from '@/utils/redirect'
+
 /**
  * UUIDの形式を検証
  */

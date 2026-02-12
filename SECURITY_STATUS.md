@@ -1,6 +1,6 @@
 # セキュリティ実装状況
 
-**最終確認日**: 2026年1月28日
+**最終確認日**: 2026年2月12日
 
 ---
 
@@ -16,7 +16,8 @@
 ### 2. 入力検証
 
 - [x] **タイトル検証**: 最大200文字、空文字チェック
-- [x] **UUID検証**: 不正なID形式を拒否
+- [x] **UUID検証**: 不正なID形式を拒否（Transcript詳細ページ含む）
+- [x] **リダイレクト検証**: オープンリダイレクト対策（`getSafeRedirectPath`）
 - [x] **Stripe Webhook**: `user_id`のUUID検証を実装
 
 ### 3. XSS対策
@@ -34,6 +35,7 @@
 ### 5. レート制限
 
 - [x] **APIレート制限**: 削除API（20回/時間）、タイトル更新（30回/分）
+- [x] **Stripe API**: Checkout（5回/分）、Portal（10回/分）
 - [x] **クライアント識別**: ユーザーIDまたはIPアドレスで識別
 - [x] **レスポンスヘッダー**: `X-RateLimit-Remaining`、`Retry-After`を返す
 
@@ -51,9 +53,16 @@
 
 ### 8. エラーハンドリング
 
-- [x] **情報漏洩防止**: 詳細なエラーメッセージを返さない
+- [x] **情報漏洩防止**: 本番環境では詳細なエラーメッセージを返さない
 - [x] **Stripe Webhook**: エラー時に適切なログを記録
 - [x] **所有権エラー**: "not found or access denied"で統一
+
+### 9. Webセキュリティ（2026年2月追加）
+
+- [x] **オープンリダイレクト対策**: auth callback、login、Google OAuthで`redirectTo`検証
+- [x] **Stripe API強化**: Origin検証、レート制限、環境変数チェック
+- [x] **セキュリティヘッダー**: X-XSS-Protection、Permissions-Policyを追加
+- [x] **Transcript詳細**: UUIDバリデーションで不正IDを早期拒否
 
 ---
 
@@ -62,10 +71,13 @@
 ### Webアプリ
 
 - `web/utils/api/auth.ts` - 認証・UUID検証・Origin検証
+- `web/utils/redirect.ts` - オープンリダイレクト対策
 - `web/utils/sanitize.ts` - XSS対策
 - `web/utils/rateLimit.ts` - レート制限
 - `web/app/api/transcripts/[id]/route.ts` - 削除API（認証・レート制限付き）
 - `web/app/api/transcripts/[id]/title/route.ts` - タイトル更新API（認証・レート制限付き）
+- `web/app/api/create-checkout-session/route.ts` - Stripe Checkout（Origin検証・レート制限付き）
+- `web/app/api/create-portal-session/route.ts` - Stripe Portal（同上）
 
 ### Edge Functions
 
@@ -164,4 +176,4 @@ curl -X POST https://lecsy.vercel.app/api/transcripts/123/title \
 
 ---
 
-**最終更新**: 2026年1月28日
+**最終更新**: 2026年2月12日
