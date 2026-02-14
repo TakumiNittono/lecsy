@@ -1,91 +1,82 @@
-// 簡易レート制限（インメモリ）
-// 本番環境では Upstash Redis を使用することを推奨
+// Supabase-backed rate limiting for Vercel serverless
+// In-memory rate limiting doesn't work on serverless platforms because
+// each invocation gets a fresh process. This uses Supabase to persist
+// rate limit state across invocations.
 
-interface RateLimitEntry {
-  count: number
-  resetAt: number
-}
-
-const cache = new Map<string, RateLimitEntry>()
-
-// キャッシュのクリーンアップ（定期的に実行）
-function cleanupCache(): void {
-  const now = Date.now()
-  for (const [key, entry] of cache.entries()) {
-    if (entry.resetAt < now) {
-      cache.delete(key)
-    }
-  }
-}
-
-// 5分ごとにクリーンアップ
-if (typeof setInterval !== 'undefined') {
-  setInterval(cleanupCache, 5 * 60 * 1000)
-}
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
- * レート制限をチェック
+ * Check and enforce rate limits using Supabase
+ * @param supabase - Authenticated Supabase client
+ * @param userId - The authenticated user's ID
+ * @param action - Action identifier (e.g., "checkout", "delete_transcript")
+ * @param limit - Maximum number of requests allowed in the window
+ * @param windowMs - Time window in milliseconds
  */
-export function checkRateLimit(
-  key: string,
+export async function checkRateLimit(
+  supabase: SupabaseClient,
+  userId: string,
+  action: string,
   limit: number,
   windowMs: number
-): { allowed: boolean; remaining: number; resetAt: number } {
-  const now = Date.now()
-  const entry = cache.get(key)
-  
-  // エントリがない、または期限切れの場合
-  if (!entry || entry.resetAt < now) {
-    const resetAt = now + windowMs
-    cache.set(key, { count: 1, resetAt })
-    return { allowed: true, remaining: limit - 1, resetAt }
+): Promise<{ allowed: boolean; remaining: number }> {
+  const windowStart = new Date(Date.now() - windowMs).toISOString()
+
+  try {
+    // Clean up old entries for this user+action
+    await supabase
+      .from('rate_limit_logs')
+      .delete()
+      .eq('user_id', userId)
+      .eq('action', action)
+      .lt('created_at', windowStart)
+
+    // Count requests in the current window
+    const { count, error } = await supabase
+      .from('rate_limit_logs')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('action', action)
+      .gte('created_at', windowStart)
+
+    if (error) {
+      console.error('Rate limit check failed:', error.message)
+      // Fail open: allow request if DB check fails
+      return { allowed: true, remaining: limit }
+    }
+
+    const currentCount = count || 0
+    if (currentCount >= limit) {
+      return { allowed: false, remaining: 0 }
+    }
+
+    // Record this request
+    await supabase
+      .from('rate_limit_logs')
+      .insert({ user_id: userId, action })
+
+    return { allowed: true, remaining: limit - currentCount - 1 }
+  } catch (error) {
+    console.error('Rate limit error:', error instanceof Error ? error.message : 'Unknown')
+    // Fail open
+    return { allowed: true, remaining: limit }
   }
-  
-  // 制限内の場合
-  if (entry.count < limit) {
-    entry.count++
-    return { allowed: true, remaining: limit - entry.count, resetAt: entry.resetAt }
-  }
-  
-  // 制限超過
-  return { allowed: false, remaining: 0, resetAt: entry.resetAt }
 }
 
 /**
- * クライアントの識別子を取得
+ * Create a 429 Too Many Requests response
  */
-export function getClientIdentifier(request: Request, userId?: string): string {
-  // 認証済みユーザーはユーザーIDを使用
-  if (userId) {
-    return `user:${userId}`
-  }
-  
-  // 未認証ユーザーはIPアドレスを使用
-  const forwarded = request.headers.get('x-forwarded-for')
-  const ip = forwarded?.split(',')[0].trim() || 
-             request.headers.get('x-real-ip') || 
-             'unknown'
-  
-  return `ip:${ip}`
-}
-
-/**
- * レート制限のレスポンスを作成
- */
-export function createRateLimitResponse(remaining: number, reset: number) {
+export function createRateLimitResponse(): Response {
   return new Response(
     JSON.stringify({
       error: 'Too many requests',
       message: 'Please try again later',
-      retryAfter: Math.ceil((reset - Date.now()) / 1000),
     }),
     {
       status: 429,
       headers: {
         'Content-Type': 'application/json',
-        'X-RateLimit-Remaining': String(remaining),
-        'X-RateLimit-Reset': String(reset),
-        'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)),
+        'Retry-After': '60',
       },
     }
   )

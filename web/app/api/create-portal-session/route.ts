@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import Stripe from "stripe";
 import { validateOrigin } from "@/utils/api/auth";
-import { checkRateLimit, getClientIdentifier, createRateLimitResponse } from "@/utils/rateLimit";
+import { checkRateLimit, createRateLimitResponse } from "@/utils/rateLimit";
 
 // 動的レンダリングを強制（認証が必要なAPI）
 export const dynamic = 'force-dynamic'
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   try {
     // 環境変数チェック
     if (!process.env.STRIPE_SECRET_KEY) {
-      console.error("STRIPE_SECRET_KEY is not set");
+      console.error("Missing Stripe environment variables");
       return NextResponse.json(
         { error: "Server configuration error" },
         { status: 500 }
@@ -39,10 +39,9 @@ export async function POST(req: NextRequest) {
     }
 
     // レート制限（1分間に10回まで）
-    const identifier = getClientIdentifier(req, user.id);
-    const { allowed, remaining, resetAt } = checkRateLimit(identifier, 10, 60 * 1000);
+    const { allowed } = await checkRateLimit(supabase, user.id, 'portal', 10, 60 * 1000);
     if (!allowed) {
-      return createRateLimitResponse(remaining, resetAt) as NextResponse;
+      return createRateLimitResponse() as NextResponse;
     }
 
     // Stripe Customer IDを取得
@@ -71,12 +70,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: portalSession.url });
   } catch (error: unknown) {
-    console.error("Error creating portal session:", error);
-    const errorMessage = process.env.NODE_ENV === 'development' && error instanceof Error
-      ? error.message
-      : "Failed to create portal session";
+    console.error("Error creating portal session:", error instanceof Error ? error.message : "Unknown error");
     return NextResponse.json(
-      { error: "Internal server error", details: errorMessage },
+      { error: "Failed to create portal session" },
       { status: 500 }
     );
   }

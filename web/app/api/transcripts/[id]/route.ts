@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
-import { authenticateRequest, isValidUUID, validateOrigin } from "@/utils/api/auth"
-import { checkRateLimit, getClientIdentifier, createRateLimitResponse } from "@/utils/rateLimit"
+import { isValidUUID, validateOrigin } from "@/utils/api/auth"
+import { checkRateLimit, createRateLimitResponse } from "@/utils/rateLimit"
 
 // 動的レンダリングを強制（認証が必要なAPI、動的パラメータ）
 export const dynamic = 'force-dynamic'
@@ -12,7 +12,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    
+
     // Origin/Referer検証（CSRF対策）
     if (!validateOrigin(request)) {
       return NextResponse.json(
@@ -20,7 +20,7 @@ export async function DELETE(
         { status: 403 }
       )
     }
-    
+
     // ID形式のバリデーション
     if (!isValidUUID(id)) {
       return NextResponse.json(
@@ -30,44 +30,45 @@ export async function DELETE(
     }
 
     // 認証チェック
-    const { user, error: authError } = await authenticateRequest()
-    if (authError) return authError
+    const supabase = createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-    // レート制限チェック（1時間に20回まで）
-    const identifier = getClientIdentifier(request, user!.id)
-    const { allowed, remaining, resetAt } = checkRateLimit(identifier, 20, 60 * 60 * 1000)
-    
-    if (!allowed) {
-      return createRateLimitResponse(remaining, resetAt) as NextResponse
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      )
     }
 
-    const supabase = createClient()
+    // レート制限チェック（1時間に20回まで）
+    const { allowed } = await checkRateLimit(supabase, user.id, 'delete_transcript', 20, 60 * 60 * 1000)
+    if (!allowed) {
+      return createRateLimitResponse() as NextResponse
+    }
 
     // 削除を実行し、結果を確認
     const { data, error } = await supabase
       .from("transcripts")
       .delete()
       .eq("id", id)
-      .eq("user_id", user!.id)
-      .select('id')  // 削除されたレコードを返す
+      .eq("user_id", user.id)
+      .select('id')
       .single()
 
     if (error) {
-      // レコードが見つからない場合
       if (error.code === 'PGRST116') {
         return NextResponse.json(
           { error: "Transcript not found or access denied" },
           { status: 404 }
         )
       }
-      console.error("Error deleting transcript:", error)
+      console.error("Error deleting transcript:", error.message)
       return NextResponse.json(
         { error: "Failed to delete transcript" },
         { status: 500 }
       )
     }
 
-    // 削除が成功したかを確認
     if (!data) {
       return NextResponse.json(
         { error: "Transcript not found or access denied" },
@@ -77,7 +78,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, deletedId: data.id })
   } catch (error) {
-    console.error("Error in DELETE /api/transcripts/[id]:", error)
+    console.error("Error in DELETE /api/transcripts/[id]:", error instanceof Error ? error.message : "Unknown error")
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

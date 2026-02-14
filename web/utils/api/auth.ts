@@ -13,7 +13,6 @@ export interface AuthResult {
 
 /**
  * APIルートで認証チェックを行う
- * @returns user: 認証されたユーザー、error: エラーレスポンス
  */
 export async function authenticateRequest(): Promise<AuthResult> {
   try {
@@ -21,7 +20,6 @@ export async function authenticateRequest(): Promise<AuthResult> {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError) {
-      console.error('Authentication error:', authError)
       return {
         user: null,
         error: NextResponse.json(
@@ -48,8 +46,7 @@ export async function authenticateRequest(): Promise<AuthResult> {
       },
       error: null
     }
-  } catch (error) {
-    console.error('Unexpected auth error:', error)
+  } catch {
     return {
       user: null,
       error: NextResponse.json(
@@ -60,7 +57,7 @@ export async function authenticateRequest(): Promise<AuthResult> {
   }
 }
 
-// リダイレクト検証（オープンリダイレクト対策）- utils/redirect.tsから再エクスポート
+// リダイレクト検証（オープンリダイレクト対策）
 export { isValidRedirectPath, getSafeRedirectPath } from '@/utils/redirect'
 
 /**
@@ -72,117 +69,53 @@ export function isValidUUID(id: string): boolean {
 }
 
 /**
- * OriginとRefererを検証（簡易CSRF対策）
+ * 許可されたオリジンのリスト
+ */
+function getAllowedOrigins(): string[] {
+  const origins = [
+    'https://lecsy.vercel.app',
+    'https://lecsy.app',
+    'https://www.lecsy.app',
+  ]
+
+  // 環境変数から追加のオリジン
+  if (process.env.NEXT_PUBLIC_SITE_URL) origins.push(process.env.NEXT_PUBLIC_SITE_URL)
+  if (process.env.NEXT_PUBLIC_APP_URL) origins.push(process.env.NEXT_PUBLIC_APP_URL)
+  if (process.env.VERCEL_URL) origins.push(`https://${process.env.VERCEL_URL}`)
+
+  // 開発環境のみ localhost を許可
+  if (process.env.NODE_ENV === 'development') {
+    origins.push('http://localhost:3000', 'http://localhost:3020')
+  }
+
+  return [...new Set(origins)]
+}
+
+/**
+ * OriginまたはRefererが許可リストに含まれるか検証（CSRF対策）
+ * デフォルト拒否: Origin/Refererが不明な場合はブロック
  */
 export function validateOrigin(request: Request): boolean {
   const origin = request.headers.get('origin')
   const referer = request.headers.get('referer')
-  const host = request.headers.get('host')
-  
-  // 許可されたオリジンリスト
-  const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null
-  const allowedOrigins = [
-    process.env.NEXT_PUBLIC_SITE_URL,
-    process.env.NEXT_PUBLIC_APP_URL,
-    vercelOrigin,
-    'http://localhost:3000',
-    'http://localhost:3020',
-    'https://localhost:3000',
-    'https://localhost:3020',
-    'https://lecsy.vercel.app', // Vercel本番環境
-    'https://lecsy.app', // カスタムドメイン
-    'https://www.lecsy.app',
-    'https://*.vercel.app', // Vercelのプレビュー環境（ワイルドカードは後で処理）
-  ].filter(Boolean) as string[]
-  
-  // 同じオリジンからのリクエスト（Same-Origin Request）の場合は許可
-  // Same-Origin Requestでは、Originヘッダーが送信されないことがある
-  if (!origin && referer && host) {
-    try {
-      const refererUrl = new URL(referer)
-      // Refererのホストがリクエストのホストと一致する場合は許可
-      if (refererUrl.host === host) {
-        return true
-      }
-    } catch {
-      // URL解析エラーは無視
-    }
-  }
-  
-  // Originヘッダーが存在する場合
+  const allowedOrigins = getAllowedOrigins()
+
+  // Originヘッダーがある場合（ブラウザのPOST/DELETE/PATCHでは必ず送信される）
   if (origin) {
-    // 許可リストに含まれているか確認
-    const isAllowed = allowedOrigins.some(allowed => {
-      // ワイルドカード対応（*.vercel.app）
-      if (allowed.includes('*')) {
-        const pattern = allowed.replace('*', '.*')
-        const regex = new RegExp(`^${pattern}$`)
-        return regex.test(origin)
-      }
-      return allowed === origin
-    })
-    
-    if (!isAllowed) {
-      console.warn(`Origin validation failed: ${origin} not in allowed list`)
-      return false
-    }
+    return allowedOrigins.includes(origin)
   }
-  
-  // Refererヘッダーが存在する場合
+
+  // Refererヘッダーのオリジン部分で判定
   if (referer) {
     try {
-      const url = new URL(referer)
-      const refOrigin = `${url.protocol}//${url.host}`
-      
-      // 許可リストに含まれているか確認
-      const isAllowed = allowedOrigins.some(allowed => {
-        // ワイルドカード対応
-        if (allowed.includes('*')) {
-          const pattern = allowed.replace('*', '.*')
-          const regex = new RegExp(`^${pattern}$`)
-          return regex.test(refOrigin)
-        }
-        return allowed === refOrigin
-      })
-      
-      if (!isAllowed) {
-        // 同じホストからのリクエストの場合は許可（Same-Origin Request）
-        if (host && url.host === host) {
-          return true
-        }
-        console.warn(`Referer validation failed: ${refOrigin} not in allowed list`)
-        return false
-      }
+      const refererOrigin = new URL(referer).origin
+      return allowedOrigins.includes(refererOrigin)
     } catch {
-      // URL解析エラーは無視（Same-Origin Requestの可能性があるため）
-      // ただし、hostヘッダーが存在する場合は許可
-      if (host) {
-        return true
-      }
       return false
     }
   }
-  
-  // OriginもRefererも存在しない場合、Same-Origin Requestの可能性があるため許可
-  // （ただし、これは開発環境でのみ発生する可能性が高い）
-  // iOSアプリからのリクエストの場合、Origin/Refererが存在しない可能性がある
-  if (!origin && !referer) {
-    // 開発環境では許可
-    if (process.env.NODE_ENV === 'development') {
-      return true
-    }
-    // 本番環境では、hostヘッダーが存在する場合は許可
-    // iOSアプリからのリクエストの場合、認証トークンで検証するため、Origin検証をスキップ
-    if (host) {
-      return true
-    }
-    // iOSアプリからのリクエストの場合、認証トークンで検証するため、Origin検証をスキップ
-    // User-AgentヘッダーでiOSアプリからのリクエストかどうかを判断
-    const userAgent = request.headers.get('user-agent')
-    if (userAgent && (userAgent.includes('iOS') || userAgent.includes('iPhone') || userAgent.includes('iPad'))) {
-      return true
-    }
-  }
-  
-  return true
+
+  // Origin も Referer もない場合
+  // 開発環境では許可、本番ではブロック
+  return process.env.NODE_ENV === 'development'
 }

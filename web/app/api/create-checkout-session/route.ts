@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import Stripe from "stripe";
 import { validateOrigin } from "@/utils/api/auth";
-import { checkRateLimit, getClientIdentifier, createRateLimitResponse } from "@/utils/rateLimit";
+import { checkRateLimit, createRateLimitResponse } from "@/utils/rateLimit";
 
 // 動的レンダリングを強制（認証が必要なAPI）
 export const dynamic = 'force-dynamic'
@@ -13,23 +13,15 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   try {
     // 環境変数のチェック
-    if (!process.env.STRIPE_SECRET_KEY) {
-      console.error("STRIPE_SECRET_KEY is not set");
+    if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_PRICE_ID) {
+      console.error("Missing Stripe environment variables");
       return NextResponse.json(
-        { error: "Server configuration error: STRIPE_SECRET_KEY is missing" },
+        { error: "Server configuration error" },
         { status: 500 }
       );
     }
 
-    if (!process.env.STRIPE_PRICE_ID) {
-      console.error("STRIPE_PRICE_ID is not set");
-      return NextResponse.json(
-        { error: "Server configuration error: STRIPE_PRICE_ID is missing" },
-        { status: 500 }
-      );
-    }
-
-    // Stripeインスタンスの初期化（環境変数チェック後）
+    // Stripeインスタンスの初期化
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
       apiVersion: "2023-10-16",
     });
@@ -48,10 +40,9 @@ export async function POST(req: NextRequest) {
     }
 
     // レート制限（1分間に5回まで）
-    const identifier = getClientIdentifier(req, user.id);
-    const { allowed, remaining, resetAt } = checkRateLimit(identifier, 5, 60 * 1000);
+    const { allowed } = await checkRateLimit(supabase, user.id, 'checkout', 5, 60 * 1000);
     if (!allowed) {
-      return createRateLimitResponse(remaining, resetAt) as NextResponse;
+      return createRateLimitResponse() as NextResponse;
     }
 
     // 既存のStripe Customerを確認
@@ -73,7 +64,6 @@ export async function POST(req: NextRequest) {
     }
 
     // Checkout Session作成
-    // Vercelデプロイ時はVERCEL_URLが自動設定される（プロトコルなし）
     const appUrl = process.env.NEXT_PUBLIC_APP_URL
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3020");
 
@@ -96,12 +86,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (error: unknown) {
-    console.error("Error creating checkout session:", error);
-    const errorMessage = process.env.NODE_ENV === 'development' && error instanceof Error
-      ? error.message
-      : "Failed to create checkout session";
+    console.error("Error creating checkout session:", error instanceof Error ? error.message : "Unknown error");
     return NextResponse.json(
-      { error: "Internal server error", details: errorMessage },
+      { error: "Failed to create checkout session" },
       { status: 500 }
     );
   }
