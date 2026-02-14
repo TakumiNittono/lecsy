@@ -16,6 +16,7 @@ export default function UpgradeButton({ className = '', variant = 'default' }: U
       const res = await fetch('/api/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Cookie（認証）を確実に送信
       })
 
       if (!res.ok) {

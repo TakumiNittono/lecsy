@@ -62,9 +62,11 @@ export async function POST(req: NextRequest) {
     const customerId = subscription.stripe_customer_id;
 
     // Customer Portal Session作成
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3020");
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3020"}/app/settings`,
+      return_url: `${appUrl}/app`,
     });
 
     return NextResponse.json({ url: portalSession.url });

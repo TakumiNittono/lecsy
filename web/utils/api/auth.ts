@@ -80,8 +80,11 @@ export function validateOrigin(request: Request): boolean {
   const host = request.headers.get('host')
   
   // 許可されたオリジンリスト
+  const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null
   const allowedOrigins = [
     process.env.NEXT_PUBLIC_SITE_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    vercelOrigin,
     'http://localhost:3000',
     'http://localhost:3020',
     'https://localhost:3000',

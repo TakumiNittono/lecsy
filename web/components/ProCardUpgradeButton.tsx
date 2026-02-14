@@ -41,6 +41,7 @@ export default function ProCardUpgradeButton() {
             const res = await fetch('/api/create-checkout-session', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'include', // Cookie（認証）を確実に送信
             })
             if (!res.ok) throw new Error('Failed to create checkout session')
             const data = await res.json()

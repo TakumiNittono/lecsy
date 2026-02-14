@@ -73,7 +73,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Checkout Session作成
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3020";
+    // Vercelデプロイ時はVERCEL_URLが自動設定される（プロトコルなし）
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3020");
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

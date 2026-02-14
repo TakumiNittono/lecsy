@@ -15,6 +15,7 @@ export default function ManageSubscriptionButton({ className = '' }: ManageSubsc
       const res = await fetch('/api/create-portal-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Cookie（認証）を確実に送信
       })
 
       if (!res.ok) {
