@@ -90,6 +90,8 @@ export function validateOrigin(request: Request): boolean {
     'https://localhost:3000',
     'https://localhost:3020',
     'https://lecsy.vercel.app', // Vercel本番環境
+    'https://lecsy.app', // カスタムドメイン
+    'https://www.lecsy.app',
     'https://*.vercel.app', // Vercelのプレビュー環境（ワイルドカードは後で処理）
   ].filter(Boolean) as string[]
   
