@@ -21,9 +21,12 @@ class RecordingService: NSObject, ObservableObject {
     @Published var recordingDuration: TimeInterval = 0
     @Published var recordingStartTime: Date?
     @Published var pausedDuration: TimeInterval = 0 // Cumulative paused time
-    
+    @Published var audioLevel: Float = 0
+    @Published var audioLevelHistory: [Float] = Array(repeating: 0, count: 30)
+
     private var audioRecorder: AVAudioRecorder?
     private var timer: Timer?
+    private var meteringTimer: Timer?
     private var backgroundTaskTimer: Timer?
     private var recordingURL: URL?
     private var liveActivity: Activity<LecsyWidgetAttributes>?
@@ -34,8 +37,36 @@ class RecordingService: NSObject, ObservableObject {
     // Support up to 100 minutes (6000 seconds) of recording
     private let maxRecordingDuration: TimeInterval = 6000 // 100 minutes
     
+    private var isAudioSessionPrepared = false
+
     private override init() {
         super.init()
+    }
+
+    /// Pre-configure audio session so recording starts instantly
+    func prepareAudioSession() {
+        guard !isAudioSessionPrepared else { return }
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.setCategory(
+                .playAndRecord,
+                mode: .default,
+                options: [.defaultToSpeaker, .allowBluetooth]
+            )
+            try audioSession.setActive(true, options: [])
+
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                if let availableInputs = audioSession.availableInputs,
+                   let builtInMic = availableInputs.first(where: { $0.portType == .builtInMic }) {
+                    try? audioSession.setPreferredInput(builtInMic)
+                }
+            }
+
+            isAudioSessionPrepared = true
+            AppLogger.debug("Audio session pre-configured", category: .recording)
+        } catch {
+            AppLogger.warning("Failed to pre-configure audio session: \(error)", category: .recording)
+        }
     }
     
     /// Request microphone permission
@@ -49,61 +80,41 @@ class RecordingService: NSObject, ObservableObject {
     
     /// Start recording
     func startRecording(lectureTitle: String = "New Recording") async throws {
-        print("🔴 RecordingService.startRecording() called")
+        AppLogger.debug("RecordingService.startRecording() called", category: .recording)
         
         guard !isRecording else {
-            print("🔴 Already recording")
+            AppLogger.debug("Already recording", category: .recording)
             return
         }
         
         // Check microphone permission
         let hasPermission = AVAudioSession.sharedInstance().recordPermission
-        print("🔴 Microphone permission status: \(hasPermission.rawValue)")
+        AppLogger.debug("Microphone permission status: \(hasPermission.rawValue)", category: .recording)
         guard hasPermission == .granted else {
-            print("🔴 No microphone permission")
+            AppLogger.debug("No microphone permission", category: .recording)
             throw RecordingError.permissionDenied
         }
         
         // Check disk space (approximately 50-100MB needed for 100 minutes of recording)
         let requiredSpace: Int64 = 100 * 1024 * 1024 // 100MB
         if let availableSpace = getAvailableDiskSpace(), availableSpace < requiredSpace {
-            print("🔴 Insufficient disk space: Available \(availableSpace / 1024 / 1024)MB, Required \(requiredSpace / 1024 / 1024)MB")
+            AppLogger.debug("Insufficient disk space: Available \(availableSpace / 1024 / 1024)MB, Required \(requiredSpace / 1024 / 1024)MB", category: .recording)
             throw RecordingError.insufficientStorage
         }
         
-        // Configure audio session (background recording support)
-        print("🔴 Setting up audio session")
-        let audioSession = AVAudioSession.sharedInstance()
-        
-        // Wait a bit for permission to be reflected (if permission was just requested)
-        if AVAudioSession.sharedInstance().recordPermission == .granted {
-            // Wait a bit before setting session
-            try? await Task.sleep(nanoseconds: 100_000_000) // Wait 0.1 seconds
+        // Ensure audio session is ready (should already be prepared)
+        if !isAudioSessionPrepared {
+            prepareAudioSession()
         }
-        
+
+        // Re-activate if needed (e.g., after previous deactivation on stop)
+        let audioSession = AVAudioSession.sharedInstance()
         do {
-            // Deactivate existing session (to avoid errors)
-            try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
-            
-            // Optimized settings for background recording
-            // Removed .allowBluetoothA2DP (not needed for recording, may cause errors)
-            try audioSession.setCategory(
-                .playAndRecord,
-                mode: .default,
-                options: [.defaultToSpeaker, .allowBluetooth]
-            )
-            
-            // Enable background recording
-            try audioSession.setActive(true, options: [])
-            
-            // Check if background recording is enabled
             if !audioSession.isOtherAudioPlaying {
-                print("🔴 Audio session setup successful (background recording enabled)")
-            } else {
-                print("⚠️ Other audio is playing")
+                try audioSession.setActive(true, options: [])
             }
         } catch {
-            print("🔴 Audio session setup error: \(error)")
+            AppLogger.error("Audio session activation error: \(error)", category: .recording)
             throw RecordingError.recordingFailed
         }
         
@@ -116,11 +127,11 @@ class RecordingService: NSObject, ObservableObject {
         recordingURL = documentsPath.appendingPathComponent(fileName)
         
         guard let url = recordingURL else {
-            print("🔴 Failed to create recording file URL")
+            AppLogger.error("Failed to create recording file URL", category: .recording)
             throw RecordingError.fileCreationFailed
         }
         
-        print("🔴 Recording file URL: \(url)")
+        AppLogger.debug("Recording file URL: \(url)", category: .recording)
         
         // Recording settings (optimized for long recording: balance quality and file size)
         let settings: [String: Any] = [
@@ -132,20 +143,21 @@ class RecordingService: NSObject, ObservableObject {
         ]
         
         // Start recording
-        print("🔴 Creating AVAudioRecorder")
+        AppLogger.debug("Creating AVAudioRecorder", category: .recording)
         do {
             audioRecorder = try AVAudioRecorder(url: url, settings: settings)
             audioRecorder?.delegate = self
-            
+            audioRecorder?.isMeteringEnabled = true
+
             let recordingStarted = audioRecorder?.record() ?? false
-            print("🔴 Recording started: \(recordingStarted)")
+            AppLogger.debug("Recording started: \(recordingStarted)", category: .recording)
             
             if !recordingStarted {
-                print("🔴 Failed to start recording")
+                AppLogger.error("Failed to start recording", category: .recording)
                 throw RecordingError.recordingFailed
             }
         } catch {
-            print("🔴 AVAudioRecorder creation/start error: \(error)")
+            AppLogger.error("AVAudioRecorder creation/start error: \(error)", category: .recording)
             throw RecordingError.recordingFailed
         }
         
@@ -157,41 +169,42 @@ class RecordingService: NSObject, ObservableObject {
         pauseStartTime = nil
         currentLectureTitle = lectureTitle
         
-        print("🔴 Updated recording state: isRecording = \(isRecording), isPaused = \(isPaused)")
+        AppLogger.debug("Updated recording state: isRecording = \(isRecording), isPaused = \(isPaused)", category: .recording)
         
         // Start Live Activity
         startLiveActivity()
         
-        // Start timer (update every 1 second, Live Activity also updates every 1 second)
-        // Add to RunLoop so it works in background too
+        // Start timer (update duration every 1 second)
+        var liveActivityCounter = 0
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
             guard let self = self, let startTime = self.recordingStartTime else {
                 timer.invalidate()
                 return
             }
-            
+
             // Update time only if not paused
             if !self.isPaused {
                 let totalElapsed = Date().timeIntervalSince(startTime)
                 self.recordingDuration = totalElapsed - self.pausedDuration
             }
-            
-            // Check max recording time (actual recording time excluding pause time)
+
+            // Check max recording time
             if self.recordingDuration >= self.maxRecordingDuration {
-                print("🔴 Reached max recording time (100 minutes)")
                 _ = self.stopRecording()
                 return
             }
-            
-            // Check if recording is continuing (only when not paused, e.g., on lock screen)
+
+            // Check if recording is continuing (e.g., on lock screen)
             if !self.isPaused, let recorder = self.audioRecorder, !recorder.isRecording {
-                print("⚠️ Recording has stopped. Attempting to resume...")
-                // Resume recording
                 recorder.record()
             }
-            
-            // Update Live Activity every 1 second (to smoothly move lock screen stopwatch)
-            self.updateLiveActivity()
+
+            // Update Live Activity every 5 seconds (battery optimization)
+            liveActivityCounter += 1
+            if liveActivityCounter >= 5 {
+                liveActivityCounter = 0
+                self.updateLiveActivity()
+            }
         }
         
         // Add timer to RunLoop so it works in background too
@@ -199,17 +212,34 @@ class RecordingService: NSObject, ObservableObject {
             RunLoop.current.add(timer, forMode: .common)
         }
         
+        // Start metering timer (12Hz for smooth waveform)
+        meteringTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 12.0, repeats: true) { [weak self] _ in
+            guard let self = self, self.isRecording, !self.isPaused else { return }
+            self.audioRecorder?.updateMeters()
+            let db = self.audioRecorder?.averagePower(forChannel: 0) ?? -160
+            let normalized = max(0, min(1, (db + 50) / 50))
+            self.audioLevel = normalized
+            // Ring buffer: cap at 60 entries for memory efficiency
+            if self.audioLevelHistory.count >= 60 {
+                self.audioLevelHistory.removeFirst(self.audioLevelHistory.count - 29)
+            }
+            self.audioLevelHistory.append(normalized)
+        }
+        if let meteringTimer = meteringTimer {
+            RunLoop.current.add(meteringTimer, forMode: .common)
+        }
+
         // Periodic background task renewal (every 30 seconds)
         setupBackgroundTaskRenewal()
-        
-        print("🔴 Timer started")
+
+        AppLogger.debug("Timer started", category: .recording)
     }
     
     /// Pause recording
     func pauseRecording() {
         guard isRecording, !isPaused else { return }
         
-        print("⏸️ Pausing recording")
+        AppLogger.debug("Pausing recording", category: .recording)
         audioRecorder?.pause()
         isPaused = true
         pauseStartTime = Date()
@@ -222,7 +252,7 @@ class RecordingService: NSObject, ObservableObject {
     func resumeRecording() {
         guard isRecording, isPaused else { return }
         
-        print("▶️ Resuming recording")
+        AppLogger.debug("Resuming recording", category: .recording)
         
         // Accumulate pause time
         if let pauseStart = pauseStartTime {
@@ -245,12 +275,16 @@ class RecordingService: NSObject, ObservableObject {
         audioRecorder?.stop()
         timer?.invalidate()
         timer = nil
+        meteringTimer?.invalidate()
+        meteringTimer = nil
         backgroundTaskTimer?.invalidate()
         backgroundTaskTimer = nil
-        
+
         isRecording = false
         isPaused = false
         pauseStartTime = nil
+        audioLevel = 0
+        audioLevelHistory = Array(repeating: 0, count: 30)
         
         // End Live Activity
         endLiveActivity()
@@ -262,10 +296,27 @@ class RecordingService: NSObject, ObservableObject {
         recordingURL = nil
         recordingStartTime = nil
         pausedDuration = 0
-        
+
         // Deactivate audio session
         try? AVAudioSession.sharedInstance().setActive(false)
-        
+        isAudioSessionPrepared = false
+
+        // Validate recording file
+        if let url = url {
+            if !FileManager.default.fileExists(atPath: url.path) {
+                AppLogger.error("Recording file does not exist after stop: \(url.path)", category: .recording)
+                return nil
+            }
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+               let size = attrs[.size] as? Int64 {
+                AppLogger.debug("Recording file size: \(size) bytes", category: .recording)
+                if size == 0 {
+                    AppLogger.error("Recording file is empty (0 bytes)", category: .recording)
+                    return nil
+                }
+            }
+        }
+
         return url
     }
     
@@ -283,7 +334,7 @@ class RecordingService: NSObject, ObservableObject {
                 return freeSpace
             }
         } catch {
-            print("🔴 Disk space retrieval error: \(error)")
+            AppLogger.error("Disk space retrieval error: \(error)", category: .recording)
         }
         
         return nil
@@ -307,7 +358,7 @@ class RecordingService: NSObject, ObservableObject {
             // Start new task
             self.setupBackgroundTask()
             
-            print("🔴 Background task renewed")
+            AppLogger.debug("Background task renewed", category: .recording)
         }
     }
     
@@ -317,7 +368,7 @@ class RecordingService: NSObject, ObservableObject {
     private func startLiveActivity() {
         // Check if ActivityKit is available
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            print("⚠️ Live Activities are not enabled")
+            AppLogger.warning("Live Activities are not enabled", category: .recording)
             return
         }
         
@@ -334,7 +385,7 @@ class RecordingService: NSObject, ObservableObject {
                 pushType: nil
             )
         } catch {
-            print("❌ Failed to start Live Activity: \(error)")
+            AppLogger.error("Failed to start Live Activity: \(error)", category: .recording)
         }
     }
     
@@ -357,7 +408,7 @@ class RecordingService: NSObject, ObservableObject {
                 )
             } catch {
                 // If errors occur frequently, reduce update frequency
-                print("⚠️ Live Activity update error: \(error)")
+                AppLogger.warning("Live Activity update error: \(error)", category: .recording)
             }
         }
     }
@@ -431,10 +482,12 @@ extension RecordingService: AVAudioRecorderDelegate {
     
     nonisolated func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
         Task { @MainActor in
-            print("🔴 Recording encode error: \(error?.localizedDescription ?? "Unknown error")")
+            AppLogger.error("Recording encode error: \(error?.localizedDescription ?? "Unknown error")", category: .recording)
             isRecording = false
             timer?.invalidate()
             timer = nil
+            meteringTimer?.invalidate()
+            meteringTimer = nil
             backgroundTaskTimer?.invalidate()
             backgroundTaskTimer = nil
             endLiveActivity()
@@ -444,14 +497,14 @@ extension RecordingService: AVAudioRecorderDelegate {
     
     nonisolated func audioRecorderBeginInterruption(_ recorder: AVAudioRecorder) {
         Task { @MainActor in
-            print("🔴 Recording interrupted (e.g., phone call)")
+            AppLogger.debug("Recording interrupted (e.g., phone call)", category: .recording)
             // Continue recording on interruption (iOS handles automatically)
         }
     }
     
     nonisolated func audioRecorderEndInterruption(_ recorder: AVAudioRecorder, withOptions flags: Int) {
         Task { @MainActor in
-            print("🔴 Recording interruption ended")
+            AppLogger.debug("Recording interruption ended", category: .recording)
             // Resume recording if needed
             if isRecording {
                 audioRecorder?.record()

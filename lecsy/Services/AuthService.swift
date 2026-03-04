@@ -19,6 +19,7 @@ class AuthService: NSObject, ObservableObject {
     static let shared = AuthService()
     
     @Published var isAuthenticated: Bool = false
+    @Published var isInitialized: Bool = false
     @Published var currentUser: User?
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
@@ -44,10 +45,7 @@ class AuthService: NSObject, ObservableObject {
     private override init() {
         // Initialize Supabase client (must initialize before super.init())
         let config = SupabaseConfig.shared
-        print("🔍 AuthService: Initializing Supabase client")
-        print("   - URL: \(config.supabaseURL.absoluteString)")
-        print("   - Anon Key (first 20): \(config.supabaseAnonKey.prefix(20))...")
-        print("   - Anon Key length: \(config.supabaseAnonKey.count)")
+        AppLogger.debug("AuthService: Initializing Supabase client", category: .auth)
         
         // Set emitLocalSessionAsInitialSession: true to resolve warnings
         let options = SupabaseClientOptions(
@@ -60,23 +58,27 @@ class AuthService: NSObject, ObservableObject {
             supabaseKey: config.supabaseAnonKey,
             options: options
         )
-        print("✅ AuthService: Supabase client initialization completed")
+        AppLogger.info("AuthService: Supabase client initialization completed", category: .auth)
         super.init()
-        
-        // Monitor session state (implemented according to Supabase Swift 2.40 API)
-        authStateTask = Task { @MainActor in
-            for await change in await supabase.auth.authStateChanges {
-                await handleAuthStateChange(change.event, session: change.session)
-            }
-        }
         
         // Restore hasSkippedLogin state
         hasSkippedLogin = UserDefaults.standard.bool(forKey: hasSkippedLoginKey)
-        
-        // Restore saved session on launch
+
+        // Restore saved session on launch, THEN start listening for auth state changes
         Task {
             await restoreSessionIfNeeded()
             await checkSession()
+            isInitialized = true
+
+            // Start monitoring auth state changes AFTER session is restored
+            // This prevents signedOut events from firing before we've had a chance to restore
+            authStateTask = Task { @MainActor in
+                for await change in await supabase.auth.authStateChanges {
+                    // Skip initialSession since we already handled it above
+                    if change.event == .initialSession { continue }
+                    await handleAuthStateChange(change.event, session: change.session)
+                }
+            }
         }
     }
     
@@ -84,7 +86,7 @@ class AuthService: NSObject, ObservableObject {
     func skipLogin() {
         hasSkippedLogin = true
         UserDefaults.standard.set(true, forKey: hasSkippedLoginKey)
-        print("✅ AuthService: Login skipped - using app without account")
+        AppLogger.info("AuthService: Login skipped - using app without account", category: .auth)
     }
     
     /// Reset skip login state (used when user wants to sign in later)
@@ -100,18 +102,38 @@ class AuthService: NSObject, ObservableObject {
         case .initialSession:
             await checkSession()
         case .signedIn:
-            print("🔐 AuthService: Sign in successful - Event: signedIn")
+            AppLogger.info("AuthService: Sign in successful - Event: signedIn", category: .auth)
             if let session = session {
-                print("🔐 AuthService: Session retrieved - User ID: \(session.user.id)")
+                AppLogger.info("AuthService: Session retrieved - User ID: \(session.user.id)", category: .auth)
             }
             isLoading = false
             errorMessage = nil
+            // Clear skip-login flag when user actually signs in
+            if hasSkippedLogin {
+                resetSkipLogin()
+            }
             await checkSession()
         case .signedOut:
-            print("🔐 AuthService: Signed out")
+            AppLogger.info("AuthService: Signed out event received", category: .auth)
             isLoading = false
-            isAuthenticated = false
-            currentUser = nil
+            // Only sign out if we don't have cached tokens
+            // (Supabase SDK may emit signedOut during token refresh failures)
+            if cachedAccessToken == nil && KeychainService.read(key: accessTokenKey) == nil {
+                AppLogger.info("AuthService: No cached tokens, signing out", category: .auth)
+                isAuthenticated = false
+                currentUser = nil
+            } else {
+                AppLogger.info("AuthService: Cached tokens exist, attempting refresh before signing out", category: .auth)
+                let refreshed = await refreshSession()
+                if !refreshed {
+                    AppLogger.warning("AuthService: Refresh failed, signing out", category: .auth)
+                    isAuthenticated = false
+                    currentUser = nil
+                    cachedAccessToken = nil
+                    cachedRefreshToken = nil
+                    clearPersistedSession()
+                }
+            }
         case .tokenRefreshed:
             await checkSession()
         case .userUpdated:
@@ -125,28 +147,31 @@ class AuthService: NSObject, ObservableObject {
     
     /// Restore saved session
     private func restoreSessionIfNeeded() async {
-        // Get saved tokens from UserDefaults
-        if let savedAccessToken = UserDefaults.standard.string(forKey: accessTokenKey),
-           let savedRefreshToken = UserDefaults.standard.string(forKey: refreshTokenKey) {
-            print("🔍 AuthService: Restoring saved session...")
-            
+        // Migrate tokens from UserDefaults to Keychain (one-time migration)
+        migrateTokensToKeychainIfNeeded()
+
+        // Get saved tokens from Keychain
+        if let savedAccessToken = KeychainService.read(key: accessTokenKey),
+           let savedRefreshToken = KeychainService.read(key: refreshTokenKey) {
+            AppLogger.debug("AuthService: Restoring saved session...", category: .auth)
+
             // Save to cache
             cachedAccessToken = savedAccessToken
             cachedRefreshToken = savedRefreshToken
-            
+
             // セッションを設定
             do {
                 let session = try await supabase.auth.setSession(
                     accessToken: savedAccessToken,
                     refreshToken: savedRefreshToken
                 )
-                print("✅ AuthService: セッション復元成功 - User ID: \(session.user.id)")
-                
+                AppLogger.info("AuthService: セッション復元成功 - User ID: \(session.user.id)", category: .auth)
+
                 // ユーザー情報を復元
-                let savedEmail = UserDefaults.standard.string(forKey: userEmailKey)
-                let savedUserIdString = UserDefaults.standard.string(forKey: userIdKey)
-                let savedName = UserDefaults.standard.string(forKey: userNameKey)
-                
+                let savedEmail = KeychainService.read(key: userEmailKey)
+                let savedUserIdString = KeychainService.read(key: userIdKey)
+                let savedName = KeychainService.read(key: userNameKey)
+
                 if let savedUserIdString = savedUserIdString,
                    let savedUserId = UUID(uuidString: savedUserIdString) {
                     currentUser = User(
@@ -155,16 +180,15 @@ class AuthService: NSObject, ObservableObject {
                         name: savedName
                     )
                     isAuthenticated = true
-                    print("✅ AuthService: ユーザー情報復元成功")
+                    AppLogger.info("AuthService: ユーザー情報復元成功", category: .auth)
                 }
             } catch {
-                print("⚠️ AuthService: セッション復元失敗 - \(error.localizedDescription)")
+                AppLogger.warning("AuthService: セッション復元失敗 - \(error.localizedDescription)", category: .auth)
                 // セッション復元に失敗した場合でも、キャッシュされたトークンを使用する
-                // ユーザー情報を復元
-                let savedEmail = UserDefaults.standard.string(forKey: userEmailKey)
-                let savedUserIdString = UserDefaults.standard.string(forKey: userIdKey)
-                let savedName = UserDefaults.standard.string(forKey: userNameKey)
-                
+                let savedEmail = KeychainService.read(key: userEmailKey)
+                let savedUserIdString = KeychainService.read(key: userIdKey)
+                let savedName = KeychainService.read(key: userNameKey)
+
                 if let savedUserIdString = savedUserIdString,
                    let savedUserId = UUID(uuidString: savedUserIdString) {
                     currentUser = User(
@@ -173,32 +197,65 @@ class AuthService: NSObject, ObservableObject {
                         name: savedName
                     )
                     isAuthenticated = true
-                    print("✅ AuthService: キャッシュからユーザー情報復元成功")
+                    AppLogger.info("AuthService: キャッシュからユーザー情報復元成功", category: .auth)
                 }
             }
         } else {
-            print("ℹ️ AuthService: 保存されたセッションが見つかりません")
+            AppLogger.info("AuthService: 保存されたセッションが見つかりません", category: .auth)
         }
+    }
+
+    /// Migrate tokens from UserDefaults to Keychain (one-time)
+    private func migrateTokensToKeychainIfNeeded() {
+        let migrationKey = "lecsy.keychainMigrationDone"
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+
+        if let token = UserDefaults.standard.string(forKey: accessTokenKey) {
+            KeychainService.save(key: accessTokenKey, value: token)
+            UserDefaults.standard.removeObject(forKey: accessTokenKey)
+        }
+        if let token = UserDefaults.standard.string(forKey: refreshTokenKey) {
+            KeychainService.save(key: refreshTokenKey, value: token)
+            UserDefaults.standard.removeObject(forKey: refreshTokenKey)
+        }
+        if let value = UserDefaults.standard.string(forKey: userIdKey) {
+            KeychainService.save(key: userIdKey, value: value)
+            UserDefaults.standard.removeObject(forKey: userIdKey)
+        }
+        if let value = UserDefaults.standard.string(forKey: userEmailKey) {
+            KeychainService.save(key: userEmailKey, value: value)
+            UserDefaults.standard.removeObject(forKey: userEmailKey)
+        }
+        if let value = UserDefaults.standard.string(forKey: userNameKey) {
+            KeychainService.save(key: userNameKey, value: value)
+            UserDefaults.standard.removeObject(forKey: userNameKey)
+        }
+
+        UserDefaults.standard.set(true, forKey: migrationKey)
     }
     
     /// セッションを永続化
     private func persistSession(accessToken: String, refreshToken: String, userId: UUID, email: String?, name: String?) {
-        UserDefaults.standard.set(accessToken, forKey: accessTokenKey)
-        UserDefaults.standard.set(refreshToken, forKey: refreshTokenKey)
-        UserDefaults.standard.set(userId.uuidString, forKey: userIdKey)
-        UserDefaults.standard.set(email, forKey: userEmailKey)
-        UserDefaults.standard.set(name, forKey: userNameKey)
-        print("✅ AuthService: セッションを永続化しました")
+        KeychainService.save(key: accessTokenKey, value: accessToken)
+        KeychainService.save(key: refreshTokenKey, value: refreshToken)
+        KeychainService.save(key: userIdKey, value: userId.uuidString)
+        if let email = email {
+            KeychainService.save(key: userEmailKey, value: email)
+        }
+        if let name = name {
+            KeychainService.save(key: userNameKey, value: name)
+        }
+        AppLogger.info("AuthService: セッションを永続化しました", category: .auth)
     }
-    
+
     /// 保存されたセッションをクリア
     private func clearPersistedSession() {
-        UserDefaults.standard.removeObject(forKey: accessTokenKey)
-        UserDefaults.standard.removeObject(forKey: refreshTokenKey)
-        UserDefaults.standard.removeObject(forKey: userIdKey)
-        UserDefaults.standard.removeObject(forKey: userEmailKey)
-        UserDefaults.standard.removeObject(forKey: userNameKey)
-        print("✅ AuthService: 保存されたセッションをクリアしました")
+        KeychainService.delete(key: accessTokenKey)
+        KeychainService.delete(key: refreshTokenKey)
+        KeychainService.delete(key: userIdKey)
+        KeychainService.delete(key: userEmailKey)
+        KeychainService.delete(key: userNameKey)
+        AppLogger.info("AuthService: 保存されたセッションをクリアしました", category: .auth)
     }
     
     /// セッションを確認
@@ -231,10 +288,10 @@ class AuthService: NSObject, ObservableObject {
                 name: fullName
             )
         } catch {
-            print("⚠️ AuthService: セッション確認失敗 - \(error.localizedDescription)")
+            AppLogger.warning("AuthService: セッション確認失敗 - \(error.localizedDescription)", category: .auth)
             // セッション確認に失敗した場合でも、キャッシュされたトークンがある場合は認証状態を維持
             if cachedAccessToken != nil {
-                print("ℹ️ AuthService: キャッシュされたトークンを使用して認証状態を維持")
+                AppLogger.info("AuthService: キャッシュされたトークンを使用して認証状態を維持", category: .auth)
                 isAuthenticated = true
             } else {
                 isAuthenticated = false
@@ -245,7 +302,7 @@ class AuthService: NSObject, ObservableObject {
     
     /// Googleでサインイン
     func signInWithGoogle() async throws {
-            print("🔐 AuthService: Starting Google sign in")
+            AppLogger.info("AuthService: Starting Google sign in", category: .auth)
         isLoading = true
         errorMessage = nil
         
@@ -267,7 +324,7 @@ class AuthService: NSObject, ObservableObject {
                 throw AuthError.signInFailed("Failed to create auth URL")
             }
             
-            print("🔐 AuthService: OAuth URL created - \(authURL)")
+            AppLogger.info("AuthService: OAuth URL created", category: .auth)
             
             // Start OAuth flow using ASWebAuthenticationSession
             let session = ASWebAuthenticationSession(
@@ -278,20 +335,20 @@ class AuthService: NSObject, ObservableObject {
                     guard let self = self else { return }
                     
                     if let error = error {
-                        print("❌ AuthService: OAuthエラー - \(error.localizedDescription)")
+                        AppLogger.error("AuthService: OAuthエラー - \(error.localizedDescription)", category: .auth)
                         self.isLoading = false
                         self.errorMessage = error.localizedDescription
                         return
                     }
                     
                     guard let callbackURL = callbackURL else {
-                        print("❌ AuthService: Callback URL is nil")
+                        AppLogger.error("AuthService: Callback URL is nil", category: .auth)
                         self.isLoading = false
                         self.errorMessage = "Callback URL is nil"
                         return
                     }
                     
-                    print("🔐 AuthService: コールバックURL受信 - \(callbackURL)")
+                    AppLogger.info("AuthService: コールバックURL受信", category: .auth)
                     
                     // URLからアクセストークンを抽出してセッションを設定
                     await self.handleOAuthCallback(callbackURL: callbackURL)
@@ -309,11 +366,11 @@ class AuthService: NSObject, ObservableObject {
                 throw AuthError.signInFailed("Failed to start OAuth session")
             }
             
-            print("🔐 AuthService: Google OAuth session started")
+            AppLogger.info("AuthService: Google OAuth session started", category: .auth)
             // Note: OAuth flow proceeds asynchronously, handleOAuthCallback is called when callback URL is processed
             // isLoading is set to false in handleOAuthCallback or on error
         } catch {
-            print("❌ AuthService: Google sign in error - \(error.localizedDescription)")
+            AppLogger.error("AuthService: Google sign in error - \(error.localizedDescription)", category: .auth)
             isLoading = false
             errorMessage = error.localizedDescription
             throw AuthError.signInFailed(error.localizedDescription)
@@ -322,11 +379,11 @@ class AuthService: NSObject, ObservableObject {
     
     /// OAuthコールバックを処理
     private func handleOAuthCallback(callbackURL: URL) async {
-        print("🔐 AuthService: OAuthコールバック処理開始")
+        AppLogger.info("AuthService: OAuthコールバック処理開始", category: .auth)
         
         // URLフラグメントからトークンを抽出（#access_token=...&refresh_token=...）
         guard let fragment = callbackURL.fragment else {
-            print("❌ AuthService: コールバックURLにフラグメントがありません")
+            AppLogger.error("AuthService: コールバックURLにフラグメントがありません", category: .auth)
             isLoading = false
             errorMessage = "Invalid callback URL"
             return
@@ -345,7 +402,7 @@ class AuthService: NSObject, ObservableObject {
         
         guard let accessToken = params["access_token"],
               let refreshToken = params["refresh_token"] else {
-            print("❌ AuthService: Tokens not found")
+            AppLogger.error("AuthService: Tokens not found", category: .auth)
             isLoading = false
             errorMessage = "Tokens not found in callback"
             return
@@ -363,20 +420,16 @@ class AuthService: NSObject, ObservableObject {
         do {
             // Check Supabase client configuration
             let config = SupabaseConfig.shared
-            print("🔍 AuthService: Checking Supabase configuration")
-            print("   - URL: \(config.supabaseURL.absoluteString)")
-            print("   - Anon Key (first 20): \(config.supabaseAnonKey.prefix(20))...")
-            
+            AppLogger.debug("AuthService: Checking Supabase configuration", category: .auth)
+
             // Use Supabase Swift SDK's setSession method
             // Create session from access token and refresh token
-            print("🔍 AuthService: Before calling setSession")
-            print("   - Access Token (first 20): \(accessToken.prefix(20))...")
-            print("   - Refresh Token (first 20): \(refreshToken.prefix(20))...")
+            AppLogger.debug("AuthService: Before calling setSession", category: .auth)
             
             // setSession uses refresh token to get new session
             // This method also retrieves user information internally, so no need to call checkSession
             // Note: setSession sends request to /auth/v1/user internally, so API key is required
-            print("🔍 AuthService: Calling setSession - Updating session using refresh token")
+            AppLogger.debug("AuthService: Calling setSession - Updating session using refresh token", category: .auth)
             
             // Decode JWT from access token to get user information
             // setSession sends request to /auth/v1/user internally, so API key is required
@@ -432,7 +485,7 @@ class AuthService: NSObject, ObservableObject {
                     accessToken: accessToken,
                     refreshToken: refreshToken
                 )
-                print("✅ AuthService: setSession成功 - User ID: \(session.user.id)")
+                AppLogger.info("AuthService: setSession成功 - User ID: \(session.user.id)", category: .auth)
                 // セッションが正しく設定されている場合、最新の情報で永続化を更新
                 persistSession(
                     accessToken: session.accessToken,
@@ -443,18 +496,12 @@ class AuthService: NSObject, ObservableObject {
                 )
             } catch {
                 // setSessionがエラーを返しても、JWTから取得したユーザー情報を使用する
-                print("⚠️ AuthService: setSessionエラー（JWTからユーザー情報を取得） - \(error.localizedDescription)")
-                // エラーの詳細をログに出力
-                if let nsError = error as NSError? {
-                    print("   - Domain: \(nsError.domain)")
-                    print("   - Code: \(nsError.code)")
-                    print("   - UserInfo: \(nsError.userInfo)")
-                }
+                AppLogger.warning("AuthService: setSessionエラー（JWTからユーザー情報を取得） - \(error.localizedDescription)", category: .auth)
                 // セッションが設定されていない可能性があるが、キャッシュされたトークンを使用する
                 // セッションが正しく設定されているか確認
                 do {
                     let currentSession = try await supabase.auth.session
-                    print("✅ AuthService: セッション確認成功（setSessionエラー後） - User ID: \(currentSession.user.id)")
+                    AppLogger.info("AuthService: セッション確認成功（setSessionエラー後） - User ID: \(currentSession.user.id)", category: .auth)
                     // セッションが正しく設定されている場合、最新の情報で永続化を更新
                     persistSession(
                         accessToken: currentSession.accessToken,
@@ -464,15 +511,13 @@ class AuthService: NSObject, ObservableObject {
                         name: fullName
                     )
                 } catch {
-                    print("⚠️ AuthService: セッション確認失敗 - \(error.localizedDescription)")
+                    AppLogger.warning("AuthService: セッション確認失敗 - \(error.localizedDescription)", category: .auth)
                     // セッションが設定されていない場合でも、キャッシュされたトークンを使用する
                     // 既に永続化されているので、そのまま使用する
                 }
             }
             
-            print("✅ AuthService: セッション設定成功（JWTからユーザー情報を取得）")
-            print("   - User ID: \(userId)")
-            print("   - Email: \(email ?? "N/A")")
+            AppLogger.info("AuthService: セッション設定成功（JWTからユーザー情報を取得）", category: .auth)
             
             // セッションから直接ユーザー情報を取得
             isAuthenticated = true
@@ -486,14 +531,7 @@ class AuthService: NSObject, ObservableObject {
             isLoading = false
             errorMessage = nil
         } catch {
-            print("❌ AuthService: セッション設定エラー")
-            print("   - Error: \(error)")
-            print("   - Localized: \(error.localizedDescription)")
-            if let nsError = error as NSError? {
-                print("   - Domain: \(nsError.domain)")
-                print("   - Code: \(nsError.code)")
-                print("   - UserInfo: \(nsError.userInfo)")
-            }
+            AppLogger.error("AuthService: セッション設定エラー - \(error.localizedDescription)", category: .auth)
             isLoading = false
             errorMessage = error.localizedDescription
         }
@@ -506,23 +544,17 @@ class AuthService: NSObject, ObservableObject {
     
     /// Apple Sign Inの結果を処理（LoginViewから呼ばれる）
     func handleAppleSignIn(identityToken: String, nonce: String, fullName: PersonNameComponents?) async throws {
-        print("🔐 AuthService: handleAppleSignIn開始")
+        AppLogger.info("AuthService: handleAppleSignIn開始", category: .auth)
         isLoading = true
         errorMessage = nil
         
         // Supabaseクライアントの設定を確認
         let config = SupabaseConfig.shared
-        print("🔍 AuthService: Apple Sign In - Supabase設定確認")
-        print("   - URL: \(config.supabaseURL.absoluteString)")
-        print("   - Anon Key (first 20): \(config.supabaseAnonKey.prefix(20))...")
-        print("   - Anon Key length: \(config.supabaseAnonKey.count)")
-        print("   - Identity Token (first 20): \(identityToken.prefix(20))...")
-        print("   - Identity Token length: \(identityToken.count)")
-        print("   - Nonce: \(nonce.prefix(8))...")
+        AppLogger.debug("AuthService: Apple Sign In - Supabase設定確認", category: .auth)
         
         do {
             // まず、直接HTTPリクエストでSupabase Auth APIを呼び出す方法を試す
-            print("🔐 AuthService: 直接HTTPリクエストでSupabase Auth APIを呼び出し")
+            AppLogger.info("AuthService: 直接HTTPリクエストでSupabase Auth APIを呼び出し", category: .auth)
             let tokenURL = config.supabaseURL.appendingPathComponent("auth/v1/token")
             var urlComponents = URLComponents(string: tokenURL.absoluteString)!
             // APIキーをクエリパラメータとしても追加（一部のエンドポイントで必要）
@@ -554,12 +586,7 @@ class AuthService: NSObject, ObservableObject {
             
             urlRequest.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
             
-            print("🔍 AuthService: HTTPリクエスト送信")
-            print("   - URL: \(requestURL)")
-            print("   - Method: POST")
-            print("   - Headers: apikey=\(config.supabaseAnonKey.prefix(20))...")
-            print("   - Nonce (original): \(nonce.prefix(16))...")
-            print("   - Request body: provider=apple, id_token length=\(identityToken.count), nonce length=\(nonce.count)")
+            AppLogger.debug("AuthService: HTTPリクエスト送信", category: .auth)
             
             let (data, response) = try await URLSession.shared.data(for: urlRequest)
             
@@ -567,24 +594,18 @@ class AuthService: NSObject, ObservableObject {
                 throw AuthError.signInFailed("Invalid response type")
             }
             
-            print("🔍 AuthService: HTTPレスポンス受信 - Status: \(httpResponse.statusCode)")
+            AppLogger.debug("AuthService: HTTPレスポンス受信 - Status: \(httpResponse.statusCode)", category: .auth)
             
             guard httpResponse.statusCode == 200 else {
                 // エラーレスポンスをパース
                 let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-                print("❌ AuthService: HTTPエラー - Status: \(httpResponse.statusCode), Message: \(errorMessage)")
+                AppLogger.error("AuthService: HTTPエラー - Status: \(httpResponse.statusCode)", category: .auth)
                 
                 // 401エラーの場合、Anon Keyの問題である可能性が高い
                 if httpResponse.statusCode == 401 {
-                    print("⚠️ AuthService: 401エラー - Anon Keyが無効の可能性があります")
-                    print("   確認事項:")
-                    print("   1. Supabase Dashboard > Settings > API で最新のAnon Keyを取得")
-                    print("   2. Debug.xcconfig と Release.xcconfig の SUPABASE_ANON_KEY を更新")
-                    print("   3. Xcodeで Clean Build Folder を実行")
-                    print("   現在のAnon Key (first 20): \(config.supabaseAnonKey.prefix(20))...")
-                    print("   現在のAnon Key length: \(config.supabaseAnonKey.count)")
+                    AppLogger.warning("AuthService: 401エラー - Anon Keyが無効の可能性があります", category: .auth)
                 }
-                
+
                 throw AuthError.signInFailed("HTTP error: \(httpResponse.statusCode) - \(errorMessage)")
             }
             
@@ -592,16 +613,14 @@ class AuthService: NSObject, ObservableObject {
             let decoder = JSONDecoder()
             let tokenResponse = try decoder.decode(TokenResponse.self, from: data)
             
-            print("✅ AuthService: トークン取得成功")
-            print("   - Access Token (first 20): \(tokenResponse.accessToken.prefix(20))...")
-            print("   - Refresh Token (first 20): \(tokenResponse.refreshToken.prefix(20))...")
+            AppLogger.info("AuthService: トークン取得成功", category: .auth)
             
             // セッションを設定
             let session = try await supabase.auth.setSession(
                 accessToken: tokenResponse.accessToken,
                 refreshToken: tokenResponse.refreshToken
             )
-            print("✅ AuthService: セッション設定成功 - User ID: \(session.user.id)")
+            AppLogger.info("AuthService: セッション設定成功 - User ID: \(session.user.id)", category: .auth)
             
             // トークンをキャッシュに保存
             cachedAccessToken = session.accessToken
@@ -633,7 +652,7 @@ class AuthService: NSObject, ObservableObject {
                     // ユーザーメタデータを更新（エラーが発生しても続行）
                     do {
                         _ = try await supabase.auth.update(user: UserAttributes(data: ["full_name": AnyJSON.string(name)]))
-                        print("✅ AuthService: ユーザーメタデータ更新成功")
+                        AppLogger.info("AuthService: ユーザーメタデータ更新成功", category: .auth)
                         // 名前を更新して永続化
                         persistSession(
                             accessToken: session.accessToken,
@@ -643,46 +662,38 @@ class AuthService: NSObject, ObservableObject {
                             name: name
                         )
                     } catch {
-                        print("⚠️ AuthService: ユーザーメタデータ更新エラー（無視） - \(error.localizedDescription)")
+                        AppLogger.warning("AuthService: ユーザーメタデータ更新エラー（無視） - \(error.localizedDescription)", category: .auth)
                     }
                 }
             }
-            
+
             isLoading = false
             errorMessage = nil
-            print("✅ AuthService: Appleサインイン成功")
+            AppLogger.info("AuthService: Appleサインイン成功", category: .auth)
             await checkSession()
         } catch {
             isLoading = false
-            print("❌ AuthService: Appleサインイン処理エラー")
-            print("   - Error: \(error)")
-            print("   - Localized: \(error.localizedDescription)")
-            
+            AppLogger.error("AuthService: Appleサインイン処理エラー - \(error.localizedDescription)", category: .auth)
+
             // エラーの詳細を出力
             var detailedErrorInfo: [String] = []
             var httpStatusCode: Int?
-            
+
             if let nsError = error as NSError? {
-                print("   - Domain: \(nsError.domain)")
-                print("   - Code: \(nsError.code)")
-                print("   - UserInfo: \(nsError.userInfo)")
                 detailedErrorInfo.append("Domain: \(nsError.domain)")
                 detailedErrorInfo.append("Code: \(nsError.code)")
-                
+
                 // エラーメッセージから詳細を取得
                 if let errorDescription = nsError.userInfo[NSLocalizedDescriptionKey] as? String {
-                    print("   - Description: \(errorDescription)")
                     detailedErrorInfo.append("Description: \(errorDescription)")
                 }
                 if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
-                    print("   - Underlying Error: \(underlyingError)")
                     detailedErrorInfo.append("Underlying: \(underlyingError.localizedDescription)")
                 }
-                
+
                 // HTTPステータスコードを確認
                 if let statusCode = nsError.userInfo["statusCode"] as? Int {
                     httpStatusCode = statusCode
-                    print("   - HTTP Status Code: \(statusCode)")
                     detailedErrorInfo.append("HTTP Status: \(statusCode)")
                 }
             }
@@ -749,16 +760,15 @@ class AuthService: NSObject, ObservableObject {
             }
             
             errorMessage = userFriendlyMessage
-            print("📋 ユーザー向けエラーメッセージ:")
-            print(userFriendlyMessage)
-            
+            AppLogger.debug("AuthService: ユーザー向けエラーメッセージ設定", category: .auth)
+
             throw AuthError.signInFailed(userFriendlyMessage)
         }
     }
-    
+
     /// Appleでサインイン
     func signInWithApple() async throws {
-        print("🔐 AuthService: Appleサインイン開始")
+        AppLogger.info("AuthService: Appleサインイン開始", category: .auth)
         await MainActor.run {
             isLoading = true
             errorMessage = nil
@@ -767,7 +777,7 @@ class AuthService: NSObject, ObservableObject {
         // nonceを生成
         let nonce = randomNonceString()
         currentNonce = nonce
-        print("🔐 AuthService: Nonce生成完了 - \(nonce.prefix(8))...")
+        AppLogger.info("AuthService: Nonce生成完了", category: .auth)
         
         // メインスレッドで実行する必要がある
         await MainActor.run {
@@ -776,19 +786,19 @@ class AuthService: NSObject, ObservableObject {
                 let request = ASAuthorizationAppleIDProvider().createRequest()
                 request.requestedScopes = [.fullName, .email]
                 request.nonce = sha256(nonce)
-                print("🔐 AuthService: Apple認証リクエスト作成完了")
+                AppLogger.info("AuthService: Apple認証リクエスト作成完了", category: .auth)
                 
                 let authorizationController = ASAuthorizationController(authorizationRequests: [request])
                 authorizationController.delegate = self
                 authorizationController.presentationContextProvider = self
                 
-                print("🔐 AuthService: performRequests()を呼び出し")
+                AppLogger.info("AuthService: performRequests()を呼び出し", category: .auth)
                 authorizationController.performRequests()
-                print("🔐 AuthService: Apple認証リクエスト送信完了")
+                AppLogger.info("AuthService: Apple認証リクエスト送信完了", category: .auth)
                 // 注意: isLoadingは認証完了またはエラー時にfalseに設定される
                 // didCompleteWithAuthorization または didCompleteWithError で設定
             } catch {
-                print("❌ AuthService: Appleサインインエラー - \(error.localizedDescription)")
+                AppLogger.error("AuthService: Appleサインインエラー - \(error.localizedDescription)", category: .auth)
                 isLoading = false
                 errorMessage = error.localizedDescription
             }
@@ -918,30 +928,30 @@ class AuthService: NSObject, ObservableObject {
         // キャッシュされたリフレッシュトークンがない場合、永続化されたセッションから取得を試みる
         var refreshToken = cachedRefreshToken
         if refreshToken == nil {
-            refreshToken = UserDefaults.standard.string(forKey: refreshTokenKey)
+            refreshToken = KeychainService.read(key: refreshTokenKey)
             if let token = refreshToken {
                 cachedRefreshToken = token
-                cachedAccessToken = UserDefaults.standard.string(forKey: accessTokenKey)
-                print("ℹ️ AuthService: 永続化されたセッションからリフレッシュトークンを取得")
+                cachedAccessToken = KeychainService.read(key: accessTokenKey)
+                AppLogger.info("AuthService: 永続化されたセッションからリフレッシュトークンを取得", category: .auth)
             }
         }
         
         guard let refreshToken = refreshToken else {
-            print("⚠️ AuthService: リフレッシュトークンがキャッシュされていません")
+            AppLogger.warning("AuthService: リフレッシュトークンがキャッシュされていません", category: .auth)
             // キャッシュされたアクセストークンがあり、有効であればtrueを返す
             if let cachedToken = cachedAccessToken, isTokenValid(cachedToken) {
-                print("✅ AuthService: キャッシュされたアクセストークンを使用します（有効期限内）")
+                AppLogger.info("AuthService: キャッシュされたアクセストークンを使用します（有効期限内）", category: .auth)
                 return true
             }
             return false
         }
         
-        print("🔄 AuthService: セッションをリフレッシュ中...")
+        AppLogger.debug("AuthService: セッションをリフレッシュ中...", category: .auth)
         
         // Supabase Swift SDKのrefreshSessionを使用
         do {
             let session = try await supabase.auth.refreshSession(refreshToken: refreshToken)
-            print("✅ AuthService: セッションリフレッシュ成功 - User ID: \(session.user.id)")
+            AppLogger.info("AuthService: セッションリフレッシュ成功 - User ID: \(session.user.id)", category: .auth)
             AppLogger.logToken("新しいAccess Token", token: session.accessToken, category: .auth)
             
             // 新しいトークンをキャッシュに保存（これが重要！）
@@ -966,16 +976,16 @@ class AuthService: NSObject, ObservableObject {
             
             return true
         } catch {
-            print("⚠️ AuthService: Supabase SDK refreshSession失敗 - \(error.localizedDescription)")
+            AppLogger.warning("AuthService: Supabase SDK refreshSession失敗 - \(error.localizedDescription)", category: .auth)
             
             // SDKが失敗した場合、キャッシュされたアクセストークンが有効かチェック
             if let cachedToken = cachedAccessToken, isTokenValid(cachedToken) {
-                print("✅ AuthService: リフレッシュ失敗ですが、キャッシュされたアクセストークンは有効期限内です")
+                AppLogger.info("AuthService: リフレッシュ失敗ですが、キャッシュされたアクセストークンは有効期限内です", category: .auth)
                 return true
             }
             
             // キャッシュも期限切れの場合、直接HTTPリクエストでリフレッシュを試みる
-            print("🔄 AuthService: 直接HTTPリクエストでリフレッシュを試みます...")
+            AppLogger.debug("AuthService: 直接HTTPリクエストでリフレッシュを試みます...", category: .auth)
             return await refreshSessionViaHTTP(refreshToken: refreshToken)
         }
     }
@@ -991,7 +1001,7 @@ class AuthService: NSObject, ObservableObject {
         ]
         
         guard let requestURL = urlComponents.url else {
-            print("❌ AuthService: リフレッシュURL作成失敗")
+            AppLogger.error("AuthService: リフレッシュURL作成失敗", category: .auth)
             return false
         }
         
@@ -1008,24 +1018,18 @@ class AuthService: NSObject, ObservableObject {
             
             // HTTPレスポンスを取得
             guard let httpResponse = response as? HTTPURLResponse else {
-                print("❌ AuthService: HTTPリフレッシュ失敗 - Invalid response type")
+                AppLogger.error("AuthService: HTTPリフレッシュ失敗 - Invalid response type", category: .auth)
                 return false
             }
             
             // ステータスコードをチェック
             guard httpResponse.statusCode == 200 else {
                 let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-                print("❌ AuthService: HTTPリフレッシュ失敗 - Status: \(httpResponse.statusCode), Message: \(errorMessage)")
+                AppLogger.error("AuthService: HTTPリフレッシュ失敗 - Status: \(httpResponse.statusCode)", category: .auth)
                 
                 // 401エラーの場合、Anon Keyの問題である可能性が高い
                 if httpResponse.statusCode == 401 {
-                    print("⚠️ AuthService: 401エラー - Anon Keyが無効の可能性があります")
-                    print("   確認事項:")
-                    print("   1. Supabase Dashboard > Settings > API で最新のAnon Keyを取得")
-                    print("   2. Debug.xcconfig と Release.xcconfig の SUPABASE_ANON_KEY を更新")
-                    print("   3. Xcodeで Clean Build Folder を実行")
-                    print("   現在のAnon Key (first 20): \(config.supabaseAnonKey.prefix(20))...")
-                    print("   現在のAnon Key length: \(config.supabaseAnonKey.count)")
+                    AppLogger.warning("AuthService: 401エラー - Anon Keyが無効の可能性があります", category: .auth)
                 }
                 
                 return false
@@ -1034,7 +1038,7 @@ class AuthService: NSObject, ObservableObject {
             let decoder = JSONDecoder()
             let tokenResponse = try decoder.decode(TokenResponse.self, from: data)
             
-            print("✅ AuthService: HTTPリフレッシュ成功")
+            AppLogger.info("AuthService: HTTPリフレッシュ成功", category: .auth)
             AppLogger.logToken("新しいAccess Token (HTTP)", token: tokenResponse.accessToken, category: .auth)
             
             // 新しいトークンをキャッシュに保存
@@ -1048,7 +1052,7 @@ class AuthService: NSObject, ObservableObject {
                     refreshToken: tokenResponse.refreshToken
                 )
             } catch {
-                print("⚠️ AuthService: setSession失敗（無視） - \(error.localizedDescription)")
+                AppLogger.warning("AuthService: setSession失敗（無視） - \(error.localizedDescription)", category: .auth)
             }
             
             // 永続化
@@ -1065,7 +1069,7 @@ class AuthService: NSObject, ObservableObject {
             
             return true
         } catch {
-            print("❌ AuthService: HTTPリフレッシュエラー - \(error.localizedDescription)")
+            AppLogger.error("AuthService: HTTPリフレッシュエラー - \(error.localizedDescription)", category: .auth)
             return false
         }
     }
@@ -1090,7 +1094,7 @@ class AuthService: NSObject, ObservableObject {
                 cachedRefreshToken = session.refreshToken
                 return session.accessToken
             } catch {
-                print("⚠️ AuthService: セッション取得失敗 - \(error.localizedDescription)")
+                AppLogger.warning("AuthService: セッション取得失敗 - \(error.localizedDescription)", category: .auth)
                 // セッションが取得できない場合、リフレッシュを試みる
                 await refreshSession()
                 
@@ -1108,10 +1112,10 @@ class AuthService: NSObject, ObservableObject {
                     return session.accessToken
                 } catch {
                     // それでも失敗した場合、永続化されたトークンを試す（最後の手段）
-                    if let persistedToken = UserDefaults.standard.string(forKey: accessTokenKey) {
+                    if let persistedToken = KeychainService.read(key: accessTokenKey) {
                         if isTokenValid(persistedToken) {
                             cachedAccessToken = persistedToken
-                            print("⚠️ AuthService: 永続化されたアクセストークンを使用（セッション取得失敗）")
+                            AppLogger.warning("AuthService: 永続化されたアクセストークンを使用（セッション取得失敗）", category: .auth)
                             return persistedToken
                         }
                     }
@@ -1147,7 +1151,7 @@ class AuthService: NSObject, ObservableObject {
         let isValid = expirationDate > Date().addingTimeInterval(30)
         
         if !isValid {
-            print("⚠️ AuthService: トークン期限切れ - 有効期限: \(expirationDate)")
+            AppLogger.warning("AuthService: トークン期限切れ - 有効期限: \(expirationDate)", category: .auth)
         }
         
         return isValid
@@ -1163,12 +1167,12 @@ class AuthService: NSObject, ObservableObject {
             } catch {
                 // セッションが取得できない場合、キャッシュされたトークンがあるか確認
                 if cachedAccessToken != nil {
-                    print("🔍 AuthService: キャッシュされたトークンを使用してセッション有効と判断")
+                    AppLogger.debug("AuthService: キャッシュされたトークンを使用してセッション有効と判断", category: .auth)
                     return true
                 }
                 // キャッシュにもない場合、永続化されたセッションがあるか確認
-                if UserDefaults.standard.string(forKey: accessTokenKey) != nil {
-                    print("🔍 AuthService: 永続化されたトークンを使用してセッション有効と判断")
+                if KeychainService.read(key: accessTokenKey) != nil {
+                    AppLogger.debug("AuthService: 永続化されたトークンを使用してセッション有効と判断", category: .auth)
                     return true
                 }
                 return false
@@ -1192,16 +1196,10 @@ extension AuthService: ASAuthorizationControllerDelegate {
                 do {
                     // Supabaseクライアントの設定を確認
                     let config = SupabaseConfig.shared
-                    print("🔍 AuthService: Apple Sign In - Supabase設定確認")
-                    print("   - URL: \(config.supabaseURL.absoluteString)")
-                    print("   - Anon Key (first 20): \(config.supabaseAnonKey.prefix(20))...")
-                    print("   - Anon Key length: \(config.supabaseAnonKey.count)")
-                    print("   - Identity Token (first 20): \(identityTokenString.prefix(20))...")
-                    print("   - Identity Token length: \(identityTokenString.count)")
-                    print("   - Nonce: \(nonce.prefix(8))...")
+                    AppLogger.debug("AuthService: Apple Sign In - Supabase設定確認", category: .auth)
                     
                     // signInWithIdTokenを試みる
-                    print("🔐 AuthService: signInWithIdToken呼び出し開始")
+                    AppLogger.info("AuthService: signInWithIdToken呼び出し開始", category: .auth)
                     let session = try await supabase.auth.signInWithIdToken(
                         credentials: .init(
                             provider: .apple,
@@ -1209,7 +1207,7 @@ extension AuthService: ASAuthorizationControllerDelegate {
                             nonce: nonce
                         )
                     )
-                    print("✅ AuthService: signInWithIdToken成功 - User ID: \(session.user.id)")
+                    AppLogger.info("AuthService: signInWithIdToken成功 - User ID: \(session.user.id)", category: .auth)
                     
                     // トークンをキャッシュに保存
                     cachedAccessToken = session.accessToken
@@ -1242,7 +1240,7 @@ extension AuthService: ASAuthorizationControllerDelegate {
                             do {
                                 _ = try await supabase.auth.update(user: UserAttributes(data: ["full_name": AnyJSON.string(name)]))
                             } catch {
-                                print("⚠️ AuthService: ユーザーメタデータ更新エラー（無視） - \(error.localizedDescription)")
+                                AppLogger.warning("AuthService: ユーザーメタデータ更新エラー（無視） - \(error.localizedDescription)", category: .auth)
                             }
                         }
                     }
@@ -1250,37 +1248,29 @@ extension AuthService: ASAuthorizationControllerDelegate {
                     currentNonce = nil
                     isLoading = false
                     errorMessage = nil
-                    print("✅ AuthService: Appleサインイン成功")
+                    AppLogger.info("AuthService: Appleサインイン成功", category: .auth)
                     await checkSession()
                 } catch {
                     currentNonce = nil
                     isLoading = false
-                    print("❌ AuthService: Appleサインイン処理エラー")
-                    print("   - Error: \(error)")
-                    print("   - Localized: \(error.localizedDescription)")
-                    
+                    AppLogger.error("AuthService: Appleサインイン処理エラー - \(error.localizedDescription)", category: .auth)
+
                     // エラーの詳細を出力
                     var detailedErrorInfo: [String] = []
                     if let nsError = error as NSError? {
-                        print("   - Domain: \(nsError.domain)")
-                        print("   - Code: \(nsError.code)")
-                        print("   - UserInfo: \(nsError.userInfo)")
                         detailedErrorInfo.append("Domain: \(nsError.domain)")
                         detailedErrorInfo.append("Code: \(nsError.code)")
-                        
+
                         // エラーメッセージから詳細を取得
                         if let errorDescription = nsError.userInfo[NSLocalizedDescriptionKey] as? String {
-                            print("   - Description: \(errorDescription)")
                             detailedErrorInfo.append("Description: \(errorDescription)")
                         }
                         if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
-                            print("   - Underlying Error: \(underlyingError)")
                             detailedErrorInfo.append("Underlying: \(underlyingError.localizedDescription)")
                         }
-                        
+
                         // HTTPステータスコードを確認
                         if let httpStatusCode = nsError.userInfo["statusCode"] as? Int {
-                            print("   - HTTP Status Code: \(httpStatusCode)")
                             detailedErrorInfo.append("HTTP Status: \(httpStatusCode)")
                         }
                     }
@@ -1353,8 +1343,7 @@ extension AuthService: ASAuthorizationControllerDelegate {
                         """
                     }
                     
-                    print("📋 ユーザー向けエラーメッセージ:")
-                    print(errorMessage ?? "エラーが発生しました")
+                    AppLogger.debug("AuthService: ユーザー向けエラーメッセージ設定", category: .auth)
                 }
             } else {
                 isLoading = false
@@ -1367,7 +1356,7 @@ extension AuthService: ASAuthorizationControllerDelegate {
             currentNonce = nil
             isLoading = false
             errorMessage = error.localizedDescription
-            print("❌ AuthService: Apple認証エラー - \(error.localizedDescription)")
+            AppLogger.error("AuthService: Apple認証エラー - \(error.localizedDescription)", category: .auth)
         }
     }
 }
@@ -1375,25 +1364,25 @@ extension AuthService: ASAuthorizationControllerDelegate {
 // MARK: - ASAuthorizationControllerPresentationContextProviding
 extension AuthService: ASAuthorizationControllerPresentationContextProviding {
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        print("🍎 AuthService: Getting presentation anchor for Apple Sign In")
-        
+        AppLogger.debug("AuthService: Getting presentation anchor for Apple Sign In", category: .auth)
+
         // iPadマルチウィンドウ対応: フォアグラウンドのシーンを優先的に探す
         let connectedScenes = UIApplication.shared.connectedScenes
-        print("🍎 AuthService: Found \(connectedScenes.count) connected scenes")
+        AppLogger.debug("AuthService: Found \(connectedScenes.count) connected scenes", category: .auth)
         
         // 1. フォアグラウンドでアクティブなシーンから探す
         for scene in connectedScenes {
             if let windowScene = scene as? UIWindowScene,
                scene.activationState == .foregroundActive {
-                print("🍎 AuthService: Found foreground active scene")
+                AppLogger.debug("AuthService: Found foreground active scene", category: .auth)
                 // キーウィンドウを探す
                 if let keyWindow = windowScene.windows.first(where: { $0.isKeyWindow }) {
-                    print("🍎 AuthService: Found key window in foreground active scene")
+                    AppLogger.debug("AuthService: Found key window in foreground active scene", category: .auth)
                     return keyWindow
                 }
                 // キーウィンドウがない場合は最初のウィンドウを使用
                 if let firstWindow = windowScene.windows.first {
-                    print("🍎 AuthService: Using first window in foreground active scene")
+                    AppLogger.debug("AuthService: Using first window in foreground active scene", category: .auth)
                     return firstWindow
                 }
             }
@@ -1403,13 +1392,13 @@ extension AuthService: ASAuthorizationControllerPresentationContextProviding {
         for scene in connectedScenes {
             if let windowScene = scene as? UIWindowScene,
                scene.activationState == .foregroundInactive {
-                print("🍎 AuthService: Found foreground inactive scene")
+                AppLogger.debug("AuthService: Found foreground inactive scene", category: .auth)
                 if let keyWindow = windowScene.windows.first(where: { $0.isKeyWindow }) {
-                    print("🍎 AuthService: Found key window in foreground inactive scene")
+                    AppLogger.debug("AuthService: Found key window in foreground inactive scene", category: .auth)
                     return keyWindow
                 }
                 if let firstWindow = windowScene.windows.first {
-                    print("🍎 AuthService: Using first window in foreground inactive scene")
+                    AppLogger.debug("AuthService: Using first window in foreground inactive scene", category: .auth)
                     return firstWindow
                 }
             }
@@ -1418,13 +1407,13 @@ extension AuthService: ASAuthorizationControllerPresentationContextProviding {
         // 3. 任意のウィンドウシーンから探す（最終手段）
         for scene in connectedScenes {
             if let windowScene = scene as? UIWindowScene {
-                print("🍎 AuthService: Trying any window scene, state: \(scene.activationState.rawValue)")
+                AppLogger.debug("AuthService: Trying any window scene, state: \(scene.activationState.rawValue)", category: .auth)
                 if let keyWindow = windowScene.windows.first(where: { $0.isKeyWindow }) {
-                    print("🍎 AuthService: Found key window in scene")
+                    AppLogger.debug("AuthService: Found key window in scene", category: .auth)
                     return keyWindow
                 }
                 if let firstWindow = windowScene.windows.first {
-                    print("🍎 AuthService: Using first window in scene")
+                    AppLogger.debug("AuthService: Using first window in scene", category: .auth)
                     return firstWindow
                 }
             }
@@ -1432,27 +1421,27 @@ extension AuthService: ASAuthorizationControllerPresentationContextProviding {
         
         // 4. 従来のAPIを使用（非推奨だが互換性のため）
         if let window = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) {
-            print("🍎 AuthService: Found key window using deprecated API")
+            AppLogger.debug("AuthService: Found key window using deprecated API", category: .auth)
             return window
         }
         
         if let window = UIApplication.shared.windows.first {
-            print("🍎 AuthService: Using first window from deprecated API")
+            AppLogger.debug("AuthService: Using first window from deprecated API", category: .auth)
             return window
         }
         
         // 5. 絶対にウィンドウが必要なので、新しいウィンドウを作成（これは最後の手段）
-        print("⚠️ AuthService: No window found, creating fallback window - this may cause issues")
+        AppLogger.warning("AuthService: No window found, creating fallback window - this may cause issues", category: .auth)
         // 最初のシーンを使って新しいウィンドウを作成
         if let windowScene = connectedScenes.first as? UIWindowScene {
             let fallbackWindow = UIWindow(windowScene: windowScene)
             fallbackWindow.makeKeyAndVisible()
-            print("🍎 AuthService: Created fallback window with scene")
+            AppLogger.debug("AuthService: Created fallback window with scene", category: .auth)
             return fallbackWindow
         }
         
         // 本当の最終手段（これは動作しない可能性がある）
-        print("❌ AuthService: Critical - no scene available for fallback window")
+        AppLogger.error("AuthService: Critical - no scene available for fallback window", category: .auth)
         return UIWindow()
     }
 }
@@ -1460,7 +1449,7 @@ extension AuthService: ASAuthorizationControllerPresentationContextProviding {
 // MARK: - ASWebAuthenticationPresentationContextProviding
 extension AuthService: ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        print("🌐 AuthService: Getting presentation anchor for Web Auth Session")
+        AppLogger.debug("AuthService: Getting presentation anchor for Web Auth Session", category: .auth)
         
         // iPadマルチウィンドウ対応: フォアグラウンドのシーンを優先的に探す
         let connectedScenes = UIApplication.shared.connectedScenes
@@ -1470,11 +1459,11 @@ extension AuthService: ASWebAuthenticationPresentationContextProviding {
             if let windowScene = scene as? UIWindowScene,
                scene.activationState == .foregroundActive {
                 if let keyWindow = windowScene.windows.first(where: { $0.isKeyWindow }) {
-                    print("🌐 AuthService: Found key window in foreground active scene")
+                    AppLogger.debug("AuthService: Found key window in foreground active scene (Web Auth)", category: .auth)
                     return keyWindow
                 }
                 if let firstWindow = windowScene.windows.first {
-                    print("🌐 AuthService: Using first window in foreground active scene")
+                    AppLogger.debug("AuthService: Using first window in foreground active scene (Web Auth)", category: .auth)
                     return firstWindow
                 }
             }
@@ -1515,7 +1504,7 @@ extension AuthService: ASWebAuthenticationPresentationContextProviding {
         }
         
         // 5. フォールバック
-        print("⚠️ AuthService: No window found for Web Auth Session")
+        AppLogger.warning("AuthService: No window found for Web Auth Session", category: .auth)
         if let windowScene = connectedScenes.first as? UIWindowScene {
             let fallbackWindow = UIWindow(windowScene: windowScene)
             fallbackWindow.makeKeyAndVisible()
