@@ -1,11 +1,11 @@
 import { createClient } from '@/utils/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import ReportList from './ReportList'
 
 export const dynamic = 'force-dynamic'
 
-// 管理者メールリスト
 function getAdminEmails(): string[] {
   const whitelist = process.env.WHITELIST_EMAILS || ''
   return whitelist.split(',').map(e => e.trim()).filter(Boolean)
@@ -27,14 +27,40 @@ export default async function ReportsPage() {
     redirect('/app')
   }
 
-  // 管理者RLSポリシーにより全レポートが取得可能
-  const { data: reports, error: reportsError } = await supabase
-    .from('reports')
-    .select('*')
-    .order('created_at', { ascending: false })
+  // service_role クライアントで全レポート取得（サーバーサイドのみ・RLSバイパス）
+  const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  if (reportsError) {
-    console.error('Failed to fetch reports:', reportsError)
+  let reports: any[] = []
+  let reportsError: string | null = null
+
+  if (serviceUrl && serviceKey) {
+    const adminClient = createServiceClient(serviceUrl, serviceKey)
+    const { data, error: fetchError } = await adminClient
+      .from('reports')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (fetchError) {
+      console.error('Failed to fetch reports:', fetchError)
+      reportsError = fetchError.message
+    } else {
+      reports = data || []
+    }
+  } else {
+    // フォールバック: ユーザーのクライアントで取得（RLS適用）
+    console.warn('SUPABASE_SERVICE_ROLE_KEY not set, falling back to user client')
+    const { data, error: fetchError } = await supabase
+      .from('reports')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (fetchError) {
+      console.error('Failed to fetch reports:', fetchError)
+      reportsError = fetchError.message
+    } else {
+      reports = data || []
+    }
   }
 
   return (
@@ -60,7 +86,15 @@ export default async function ReportsPage() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <ReportList initialReports={reports || []} />
+        {reportsError ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
+            <p className="text-red-700 text-sm">Error: {reportsError}</p>
+            <p className="text-red-500 text-xs mt-1">
+              {!serviceKey ? 'SUPABASE_SERVICE_ROLE_KEY is not configured in Vercel.' : 'Database query failed.'}
+            </p>
+          </div>
+        ) : null}
+        <ReportList initialReports={reports} />
       </div>
     </main>
   )
