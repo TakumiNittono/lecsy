@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState } from 'react'
 
 interface Report {
   id: string
@@ -43,35 +43,18 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 const STATUSES = ['open', 'in_progress', 'resolved', 'closed']
 
-export default function ReportList({ adminEmail }: { adminEmail: string }) {
-  const [reports, setReports] = useState<Report[]>([])
-  const [loading, setLoading] = useState(true)
+export default function ReportList({ initialReports }: { initialReports: Report[] }) {
+  const [reports, setReports] = useState<Report[]>(initialReports)
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
 
-  const fetchReports = useCallback(async () => {
-    try {
-      const params = new URLSearchParams()
-      if (filterStatus !== 'all') params.set('status', filterStatus)
-      if (filterCategory !== 'all') params.set('category', filterCategory)
-
-      const res = await fetch(`/api/reports?${params.toString()}`)
-      if (res.ok) {
-        const data = await res.json()
-        setReports(data.reports || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch reports:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [filterStatus, filterCategory])
-
-  useEffect(() => {
-    fetchReports()
-  }, [fetchReports])
+  const filteredReports = reports.filter(r => {
+    if (filterStatus !== 'all' && r.status !== filterStatus) return false
+    if (filterCategory !== 'all' && r.category !== filterCategory) return false
+    return true
+  })
 
   const updateStatus = async (reportId: string, newStatus: string) => {
     setUpdatingId(reportId)
@@ -104,14 +87,6 @@ export default function ReportList({ adminEmail }: { adminEmail: string }) {
     })
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
-    )
-  }
-
   return (
     <div>
       {/* Filters */}
@@ -139,19 +114,19 @@ export default function ReportList({ adminEmail }: { adminEmail: string }) {
         </select>
 
         <div className="ml-auto text-sm text-gray-500 self-center">
-          {reports.length} report{reports.length !== 1 ? 's' : ''}
+          {filteredReports.length} report{filteredReports.length !== 1 ? 's' : ''}
         </div>
       </div>
 
       {/* Report Cards */}
-      {reports.length === 0 ? (
+      {filteredReports.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <p className="text-gray-500 text-lg">No reports found</p>
           <p className="text-gray-400 text-sm mt-1">Reports from users will appear here</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {reports.map((report) => (
+          {filteredReports.map((report) => (
             <div
               key={report.id}
               className="bg-white rounded-xl border border-gray-200 overflow-hidden transition-shadow hover:shadow-sm"

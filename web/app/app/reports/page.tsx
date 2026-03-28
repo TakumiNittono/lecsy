@@ -5,7 +5,7 @@ import ReportList from './ReportList'
 
 export const dynamic = 'force-dynamic'
 
-// 管理者メールリスト（環境変数から取得）
+// 管理者メールリスト
 function getAdminEmails(): string[] {
   const whitelist = process.env.WHITELIST_EMAILS || ''
   return whitelist.split(',').map(e => e.trim()).filter(Boolean)
@@ -27,12 +27,16 @@ export default async function ReportsPage() {
     redirect('/app')
   }
 
-  // 全レポートを取得（管理者はservice_roleではなくRLSバイパスではないので、
-  // 直接Supabaseから取得するにはadmin APIが必要。
-  // ここではREST APIでservice_roleを使わず、全ユーザーのレポートを表示するため
-  // supabase adminクライアントの代わりにRPCまたは特別なポリシーを使う）
-  // → 管理者用のRLSポリシーを追加するか、API routeを使う
-  // ここではAPI route経由で取得する
+  // 管理者RLSポリシーにより全レポートが取得可能
+  const { data: reports, error: reportsError } = await supabase
+    .from('reports')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (reportsError) {
+    console.error('Failed to fetch reports:', reportsError)
+  }
+
   return (
     <main className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -56,7 +60,7 @@ export default async function ReportsPage() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <ReportList adminEmail={user.email || ''} />
+        <ReportList initialReports={reports || []} />
       </div>
     </main>
   )
