@@ -109,6 +109,11 @@ export default async function AppPage() {
             lecsy
           </Link>
           <div className="flex items-center gap-4">
+            {isWhitelisted && (
+              <Link href="/app/reports" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                Reports
+              </Link>
+            )}
             <span className="text-gray-700 text-sm">{user.email}</span>
             <form action={handleSignOut}>
               <button

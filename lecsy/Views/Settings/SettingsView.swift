@@ -16,68 +16,87 @@ struct SettingsView: View {
     @State private var showDeleteAccountErrorAlert = false
     @State private var deleteAccountErrorMessage = ""
     @State private var isDeletingAccount = false
-    @State private var isDownloadingModel = false
-    @State private var showClearCacheAlert = false
+    @State private var showReportSheet = false
 
     var body: some View {
         NavigationView {
             List {
-                // AI Model section
-                Section("AI Model") {
-                    HStack {
-                        if transcriptionService.isModelLoaded {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("Ready")
-                        } else if transcriptionService.state == .downloading || isDownloadingModel {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                            Text("Downloading...")
-                                .foregroundColor(.secondary)
-                        } else if transcriptionService.isModelAvailable() {
-                            Image(systemName: "checkmark.circle")
-                                .foregroundColor(.orange)
-                            Text("Cached (not loaded)")
-                                .foregroundColor(.secondary)
-                        } else {
-                            Image(systemName: "arrow.down.circle")
-                                .foregroundColor(.secondary)
-                            Text("Not Downloaded")
-                                .foregroundColor(.secondary)
+                // Transcription Language
+                Section {
+                    // Show all available languages (base + unlocked extended)
+                    ForEach(availableLanguages, id: \.self) { language in
+                        Button {
+                            transcriptionService.setLanguage(language)
+                        } label: {
+                            HStack {
+                                Text(language.displayName)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                if transcriptionService.transcriptionLanguage == language {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.blue)
+                                }
+                            }
                         }
-                        Spacer()
                     }
 
-                    if transcriptionService.state == .downloading || isDownloadingModel {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ProgressView(value: transcriptionService.progress)
-                                .tint(.blue)
-                            Text(transcriptionService.downloadStatusText)
+                    // Multilingual kit download / status
+                    if transcriptionService.isDownloadingMultilingualKit {
+                        // Downloading — show progress
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(transcriptionService.downloadStatusText)
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    Text(formatDownloadElapsed(transcriptionService.downloadElapsedSeconds))
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                            }
+                            Text("Do not close the app during download")
                                 .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.secondary.opacity(0.7))
                         }
-                    }
-
-                    if !transcriptionService.isModelLoaded && !isDownloadingModel {
+                        .padding(.vertical, 4)
+                    } else if !transcriptionService.isMultilingualKitInstalled {
+                        // Not installed — show download button
                         Button {
                             Task {
-                                isDownloadingModel = true
-                                try? await transcriptionService.loadModel()
-                                isDownloadingModel = false
+                                await transcriptionService.downloadMultilingualKit()
                             }
                         } label: {
-                            Label("Download Model (~150 MB)", systemImage: "arrow.down.circle")
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: transcriptionService.multilingualKitDownloadFailed ? "exclamationmark.triangle.fill" : "globe")
+                                        .font(.title3)
+                                        .foregroundColor(transcriptionService.multilingualKitDownloadFailed ? .orange : .blue)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(transcriptionService.multilingualKitDownloadFailed ? "Retry Download" : "Add More Languages")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundColor(transcriptionService.multilingualKitDownloadFailed ? .orange : .blue)
+                                        Text("日本語, 한국어, 中文, Español and more")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "arrow.down.circle")
+                                        .foregroundColor(transcriptionService.multilingualKitDownloadFailed ? .orange.opacity(0.6) : .blue.opacity(0.6))
+                                }
+                                Text(transcriptionService.multilingualKitDownloadFailed ? "Download failed — tap to retry (~460 MB)" : "~460 MB download")
+                                    .font(.caption2)
+                                    .foregroundColor(transcriptionService.multilingualKitDownloadFailed ? .orange.opacity(0.7) : .secondary.opacity(0.7))
+                            }
                         }
+                        .padding(.vertical, 4)
                     }
-
-                    if transcriptionService.isModelAvailable() || transcriptionService.isModelLoaded {
-                        Button(role: .destructive) {
-                            showClearCacheAlert = true
-                        } label: {
-                            Label("Clear Cache", systemImage: "trash")
-                        }
-                    }
+                } header: {
+                    Text("Transcription Language")
                 }
+
 
                 // Account section
                 Section("Account") {
@@ -93,7 +112,12 @@ struct SettingsView: View {
 
                         Button("Sign Out", role: .destructive) {
                             Task {
-                                try? await authService.signOut()
+                                do {
+                                    try await authService.signOut()
+                                } catch {
+                                    deleteAccountErrorMessage = error.localizedDescription
+                                    showDeleteAccountErrorAlert = true
+                                }
                             }
                         }
 
@@ -117,27 +141,49 @@ struct SettingsView: View {
                     }
                 }
 
-                // Privacy section
-                Section("Privacy") {
-                    Link(destination: URL(string: "https://lecsy.app/privacy")!) {
+                // Support section
+                Section("Support") {
+                    Button {
+                        showReportSheet = true
+                    } label: {
                         HStack {
-                            Text("Privacy Policy")
+                            Image(systemName: "exclamationmark.bubble")
+                                .foregroundColor(.orange)
+                            Text("Report a Problem")
                                 .foregroundColor(.primary)
                             Spacer()
-                            Image(systemName: "arrow.up.right.square")
+                            Image(systemName: "chevron.right")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                     }
+                }
 
-                    Link(destination: URL(string: "https://lecsy.app/terms")!) {
-                        HStack {
-                            Text("Terms of Service")
-                                .foregroundColor(.primary)
-                            Spacer()
-                            Image(systemName: "arrow.up.right.square")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                // Privacy section
+                Section("Privacy") {
+                    if let url = URL(string: "https://lecsy.app/privacy") {
+                        Link(destination: url) {
+                            HStack {
+                                Text("Privacy Policy")
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                    if let url = URL(string: "https://lecsy.app/terms") {
+                        Link(destination: url) {
+                            HStack {
+                                Text("Terms of Service")
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
                 }
@@ -155,6 +201,9 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .sheet(isPresented: $showSignInSheet) {
                 SignInSheet()
+            }
+            .sheet(isPresented: $showReportSheet) {
+                ReportSheet()
             }
             .alert("Delete Account", isPresented: $showDeleteAccountAlert) {
                 Button("Cancel", role: .cancel) { }
@@ -178,16 +227,16 @@ struct SettingsView: View {
             } message: {
                 Text(deleteAccountErrorMessage)
             }
-            .alert("Clear Model Cache", isPresented: $showClearCacheAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Clear", role: .destructive) {
-                    try? transcriptionService.clearModelCache()
-                }
-            } message: {
-                Text("The AI model will need to be downloaded again before transcription.")
-            }
         }
         .navigationViewStyle(.stack)
+    }
+
+    /// Languages available for selection (base always, extended only with kit)
+    private var availableLanguages: [TranscriptionLanguage] {
+        if transcriptionService.isMultilingualKitInstalled {
+            return TranscriptionLanguage.allCases
+        }
+        return TranscriptionLanguage.baseLanguages
     }
 }
 
@@ -262,6 +311,7 @@ struct SignInSheet: View {
                     }
                     .disabled(isLoading)
                 }
+                .frame(maxWidth: 400)
                 .padding()
 
                 Spacer()
@@ -284,6 +334,12 @@ struct SignInSheet: View {
         }
         .navigationViewStyle(.stack)
     }
+}
+
+private func formatDownloadElapsed(_ seconds: Int) -> String {
+    let m = seconds / 60
+    let s = seconds % 60
+    return String(format: "%d:%02d", m, s)
 }
 
 #Preview {
