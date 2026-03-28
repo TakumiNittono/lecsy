@@ -2,6 +2,8 @@ import { createClient } from '@/utils/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 
+export const dynamic = 'force-dynamic'
+
 function getAdminEmails(): string[] {
   const whitelist = process.env.WHITELIST_EMAILS || ''
   return whitelist.split(',').map(e => e.trim()).filter(Boolean)
@@ -57,8 +59,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ reports: data })
   } catch (err) {
-    console.error('Reports API error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Reports API error:', err instanceof Error ? err.message : err, err instanceof Error ? err.stack : '')
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal server error' }, { status: 500 })
   }
 }
 
