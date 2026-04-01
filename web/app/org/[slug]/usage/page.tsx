@@ -1,5 +1,4 @@
 import { getOrgMembership } from '@/utils/api/org-auth'
-import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import UsageStats from '@/components/UsageStats'
 

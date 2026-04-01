@@ -1,6 +1,6 @@
 import { validateOrigin } from '@/utils/api/auth'
 import { requireOrgRole } from '@/utils/api/org-auth'
-import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
 export async function DELETE(
@@ -17,7 +17,7 @@ export async function DELETE(
 
   const inviteId = params.id
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   const { data: invite, error: fetchError } = await supabase
     .from('organization_invites')

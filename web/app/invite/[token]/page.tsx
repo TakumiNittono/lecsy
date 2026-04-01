@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import AcceptInvite from '@/components/AcceptInvite'
 
@@ -17,8 +18,10 @@ export default async function InvitePage({
     redirect(`/login?next=/invite/${params.token}`)
   }
 
+  const adminSupabase = createAdminClient()
+
   // Query the invite by token
-  const { data: invite, error } = await supabase
+  const { data: invite, error } = await adminSupabase
     .from('organization_invites')
     .select('id, token, role, expires_at, accepted_at, org_id, organizations(name, slug)')
     .eq('token', params.token)

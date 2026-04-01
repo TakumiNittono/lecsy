@@ -1,5 +1,5 @@
 import { requireOrgRole } from '@/utils/api/org-auth'
-import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
 export async function GET(
@@ -33,7 +33,7 @@ export async function GET(
     return NextResponse.json({ error: 'start must be before end' }, { status: 400 })
   }
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   // Get all members with user info
   const { data: members, error: membersError } = await supabase

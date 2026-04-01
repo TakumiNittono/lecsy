@@ -1,6 +1,6 @@
 import { validateOrigin } from '@/utils/api/auth'
 import { requireOrgRole } from '@/utils/api/org-auth'
-import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
 const VALID_INVITE_ROLES = ['teacher', 'student'] as const
@@ -15,7 +15,7 @@ export async function GET(
   if (result instanceof NextResponse) return result
   const { orgId } = result
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   const { data: invites, error } = await supabase
     .from('organization_invites')
@@ -78,7 +78,7 @@ export async function POST(
     }
   }
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   // Check for existing members with these emails
   const { data: existingMembers } = await supabase

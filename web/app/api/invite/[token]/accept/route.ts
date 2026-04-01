@@ -1,5 +1,5 @@
 import { authenticateRequest, validateOrigin } from '@/utils/api/auth'
-import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
 export async function POST(
@@ -19,7 +19,7 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
   }
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   // Find invite by token
   const { data: invite, error: inviteError } = await supabase

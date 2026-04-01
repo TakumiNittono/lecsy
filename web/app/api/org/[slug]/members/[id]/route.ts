@@ -1,6 +1,6 @@
 import { validateOrigin } from '@/utils/api/auth'
 import { requireOrgRole } from '@/utils/api/org-auth'
-import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
 const VALID_ROLES = ['admin', 'teacher', 'student'] as const
@@ -29,7 +29,7 @@ export async function PATCH(
     )
   }
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   // Fetch the target member
   const { data: targetMember, error: fetchError } = await supabase
@@ -81,7 +81,7 @@ export async function DELETE(
 
   const memberId = params.id
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   // Fetch the target member
   const { data: targetMember, error: fetchError } = await supabase

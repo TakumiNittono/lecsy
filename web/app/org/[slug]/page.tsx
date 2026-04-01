@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { getOrgMembership } from '@/utils/api/org-auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -16,7 +16,7 @@ export default async function OrgDashboardPage({
     redirect('/app')
   }
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
   const { orgId, org, role } = membership
 
   // ---------- Queries ----------
@@ -103,31 +103,16 @@ export default async function OrgDashboardPage({
       .limit(10)
 
     if (recentTranscripts && recentTranscripts.length > 0) {
-      // Get user emails for these transcripts
+      // admin clientでauth.usersからメールを取得
       const userIds = [...new Set(recentTranscripts.map((t) => t.user_id))]
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, email')
-        .in('id', userIds)
-
       const emailMap = new Map<string, string>()
-      // Try profiles table first
-      if (profiles) {
-        profiles.forEach((p: any) => emailMap.set(p.id, p.email || ''))
-      }
-      // Fallback: use auth admin or just show user_id
-      // For members that don't have profiles, get email from organization_members join
-      const { data: memberEmails } = await supabase
-        .from('organization_members')
-        .select('user_id, users:user_id(email)')
-        .in('user_id', userIds)
 
-      if (memberEmails) {
-        memberEmails.forEach((m: any) => {
-          if (!emailMap.has(m.user_id) && m.users?.email) {
-            emailMap.set(m.user_id, m.users.email)
-          }
-        })
+      // service_roleならauth.admin.listUsersが使える
+      for (const uid of userIds) {
+        const { data } = await supabase.auth.admin.getUserById(uid)
+        if (data?.user?.email) {
+          emailMap.set(uid, data.user.email)
+        }
       }
 
       recentActivity = recentTranscripts.map((t) => ({

@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
 export type OrgRole = 'owner' | 'admin' | 'teacher' | 'student'
@@ -27,37 +28,38 @@ export interface OrgAuthResult {
 
 /**
  * 現在のユーザーが指定組織で指定ロール以上かチェック
- * 失敗時はNextResponseを返す（APIルートでそのまま return できる）
+ * データ取得はadmin client（RLSバイパス）、認証は通常クライアント
  */
 export async function requireOrgRole(
   slug: string,
   minimumRole: OrgRole
 ): Promise<OrgAuthResult | NextResponse> {
   const supabase = createClient()
+  const admin = createAdminClient()
 
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { data: org, error: orgError } = await supabase
+  const { data: org } = await admin
     .from('organizations')
     .select('id, name, slug, type, plan, max_seats')
     .eq('slug', slug)
     .single()
 
-  if (orgError || !org) {
+  if (!org) {
     return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
   }
 
-  const { data: member, error: memberError } = await supabase
+  const { data: member } = await admin
     .from('organization_members')
     .select('role')
     .eq('org_id', org.id)
     .eq('user_id', user.id)
     .single()
 
-  if (memberError || !member) {
+  if (!member) {
     return NextResponse.json({ error: 'Not a member of this organization' }, { status: 403 })
   }
 
@@ -77,15 +79,15 @@ export async function requireOrgRole(
 
 /**
  * サーバーコンポーネント用: ユーザーの組織メンバーシップを取得
- * リダイレクトや条件分岐に使う
  */
 export async function getOrgMembership(slug: string) {
   const supabase = createClient()
+  const admin = createAdminClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: org } = await supabase
+  const { data: org } = await admin
     .from('organizations')
     .select('id, name, slug, type, plan, max_seats')
     .eq('slug', slug)
@@ -93,7 +95,7 @@ export async function getOrgMembership(slug: string) {
 
   if (!org) return null
 
-  const { data: member } = await supabase
+  const { data: member } = await admin
     .from('organization_members')
     .select('role')
     .eq('org_id', org.id)
@@ -116,11 +118,12 @@ export async function getOrgMembership(slug: string) {
  */
 export async function getUserOrganizations() {
   const supabase = createClient()
+  const admin = createAdminClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return []
 
-  const { data: memberships } = await supabase
+  const { data: memberships } = await admin
     .from('organization_members')
     .select('role, org_id, organizations(id, name, slug, type, plan)')
     .eq('user_id', user.id)

@@ -1,6 +1,6 @@
 import { validateOrigin } from '@/utils/api/auth'
 import { requireOrgRole } from '@/utils/api/org-auth'
-import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
 export async function PATCH(
@@ -34,7 +34,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
   }
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   const { error: updateError } = await supabase
     .from('organizations')
@@ -61,7 +61,7 @@ export async function DELETE(
   if (result instanceof NextResponse) return result
   const { orgId } = result
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   const { error: deleteError } = await supabase
     .from('organizations')

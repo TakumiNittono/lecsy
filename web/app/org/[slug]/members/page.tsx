@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { getOrgMembership } from '@/utils/api/org-auth'
 import { redirect } from 'next/navigation'
 import MembersList from '@/components/MembersList'
@@ -20,38 +20,26 @@ export default async function MembersPage({
     redirect(`/org/${params.slug}`)
   }
 
-  const supabase = createClient()
+  const admin = createAdminClient()
   const { orgId, userId, org, role } = membership
 
-  // Fetch all members for this organization
-  const { data: members } = await supabase
+  // Fetch all members
+  const { data: members } = await admin
     .from('organization_members')
     .select('id, user_id, role, joined_at')
     .eq('org_id', orgId)
     .order('joined_at', { ascending: true })
 
-  // Try to get user emails from profiles table
   const memberList = members || []
-  const userIds = memberList.map((m) => m.user_id)
 
+  // admin clientでメールアドレスを取得
   const emailMap = new Map<string, string>()
-
-  if (userIds.length > 0) {
-    // Try profiles table
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, email')
-      .in('id', userIds)
-
-    if (profiles) {
-      profiles.forEach((p: any) => {
-        if (p.email) emailMap.set(p.id, p.email)
-      })
+  for (const m of memberList) {
+    const { data } = await admin.auth.admin.getUserById(m.user_id)
+    if (data?.user?.email) {
+      emailMap.set(m.user_id, data.user.email)
     }
   }
-
-  // Current user's email is known from the session
-  emailMap.set(userId, membership.userEmail)
 
   const membersWithEmail = memberList.map((m) => ({
     id: m.id,

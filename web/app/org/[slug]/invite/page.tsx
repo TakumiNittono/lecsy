@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { getOrgMembership } from '@/utils/api/org-auth'
 import { redirect } from 'next/navigation'
 import InviteManager from '@/components/InviteManager'
@@ -16,7 +16,7 @@ export default async function InvitePage({
     redirect(`/org/${params.slug}`)
   }
 
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   // Fetch pending invites
   const { data: invites } = await supabase
