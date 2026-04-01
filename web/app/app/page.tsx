@@ -5,6 +5,7 @@ import TranscriptList from '@/components/TranscriptList'
 import SubscriptionCard from '@/components/SubscriptionCard'
 import ToastProvider from './ToastProvider'
 import { Suspense } from 'react'
+import { getUserOrganizations } from '@/utils/api/org-auth'
 
 // 動的レンダリングを強制（cookiesを使用するため）
 export const dynamic = 'force-dynamic'
@@ -32,6 +33,9 @@ export default async function AppPage() {
 
   // ホワイトリストユーザーは自動的にProとして扱う
   const effectiveStatus = isWhitelisted ? 'active' : (subscription?.status || null)
+
+  // ユーザーの組織を取得
+  const userOrgs = await getUserOrganizations()
 
   // 講義一覧を取得
   const { data: transcriptsRaw, error: transcriptsError } = await supabase
@@ -109,6 +113,11 @@ export default async function AppPage() {
             lecsy
           </Link>
           <div className="flex items-center gap-4">
+            {userOrgs.length > 0 && (
+              <Link href={`/org/${userOrgs[0].org.slug}`} className="text-sm text-blue-600 hover:text-blue-800 transition-colors font-medium">
+                Admin
+              </Link>
+            )}
             {isWhitelisted && (
               <Link href="/app/reports" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
                 Reports
@@ -171,6 +180,52 @@ export default async function AppPage() {
             isWhitelisted={isWhitelisted}
           />
         </div>
+
+        {/* Organizations */}
+        {userOrgs.length > 0 ? (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Organizations</h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {userOrgs.map((membership: any) => (
+                <Link
+                  key={membership.org.id}
+                  href={`/org/${membership.org.slug}`}
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-gray-900">{membership.org.name}</h3>
+                    <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700 capitalize">
+                      {membership.role}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-500 capitalize">{membership.org.type.replace('_', ' ')}</p>
+                  <span className="text-xs text-gray-400 capitalize mt-1 inline-block">{membership.org.plan} plan</span>
+                </Link>
+              ))}
+              <Link
+                href="/org/new"
+                className="bg-white rounded-xl shadow-sm border border-dashed border-gray-300 p-5 hover:shadow-md transition-shadow flex items-center justify-center text-gray-500 hover:text-blue-600"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                New Organization
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-8">
+            <Link
+              href="/org/new"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create Organization
+            </Link>
+          </div>
+        )}
 
         {/* Lectures List */}
         {transcriptsError ? (

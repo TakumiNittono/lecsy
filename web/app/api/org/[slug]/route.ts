@@ -1,0 +1,77 @@
+import { validateOrigin } from '@/utils/api/auth'
+import { requireOrgRole } from '@/utils/api/org-auth'
+import { createClient } from '@/utils/supabase/server'
+import { NextResponse } from 'next/server'
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: { slug: string } }
+) {
+  if (!validateOrigin(request)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const result = await requireOrgRole(params.slug, 'admin')
+  if (result instanceof NextResponse) return result
+  const { orgId } = result
+
+  const body = await request.json()
+  const { name } = body
+
+  if (name !== undefined) {
+    if (typeof name !== 'string' || name.trim().length === 0 || name.length > 100) {
+      return NextResponse.json(
+        { error: 'Name is required (max 100 chars)' },
+        { status: 400 }
+      )
+    }
+  }
+
+  const updates: Record<string, any> = {}
+  if (name !== undefined) updates.name = name.trim()
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+  }
+
+  const supabase = createClient()
+
+  const { error: updateError } = await supabase
+    .from('organizations')
+    .update(updates)
+    .eq('id', orgId)
+
+  if (updateError) {
+    console.error('Failed to update organization:', updateError)
+    return NextResponse.json({ error: 'Failed to update organization' }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: { slug: string } }
+) {
+  if (!validateOrigin(request)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const result = await requireOrgRole(params.slug, 'owner')
+  if (result instanceof NextResponse) return result
+  const { orgId } = result
+
+  const supabase = createClient()
+
+  const { error: deleteError } = await supabase
+    .from('organizations')
+    .delete()
+    .eq('id', orgId)
+
+  if (deleteError) {
+    console.error('Failed to delete organization:', deleteError)
+    return NextResponse.json({ error: 'Failed to delete organization' }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
+}
