@@ -23,7 +23,7 @@ class AppLanguageService: ObservableObject {
         // 英語特化型：常に英語を使用
         currentLanguage = .english
         UserDefaults.standard.set(currentLanguage.rawValue, forKey: "appLanguage")
-        print("🔵 AppLanguage: 英語特化型モード - 常に英語を使用")
+        AppLogger.debug("AppLanguage: English-only mode", category: .general)
     }
     
     /// 言語を設定

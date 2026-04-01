@@ -61,10 +61,10 @@ enum ErrorMessages {
                     title: "AI Model Not Ready",
                     message: "The AI model needs to be downloaded first. Go to Settings to download it."
                 )
-            case .modelLoadFailed:
+            case .modelLoadFailed(let detail):
                 return UserFacingError(
                     title: "Model Download Failed",
-                    message: "Could not download the AI model. Please check your internet connection and try again."
+                    message: "Could not download the AI model: \(detail)"
                 )
             case .audioLoadFailed:
                 return UserFacingError(

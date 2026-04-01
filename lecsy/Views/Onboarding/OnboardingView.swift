@@ -12,125 +12,367 @@ struct OnboardingView: View {
     @AppStorage("lecsy.hasAcceptedAIConsent") private var hasAcceptedAIConsent = false
     @StateObject private var transcriptionService = TranscriptionService.shared
     @State private var currentPage = 0
-    @State private var isDownloading = false
-    @State private var downloadFailed = false
+    @State private var selectedLanguage: TranscriptionLanguage = .english
+    @State private var elapsedSeconds: Int = 0
+    @State private var setupTimer: Timer?
+
+    private let totalPages = 5
+    private let estimatedSeconds: Double = 90
 
     var body: some View {
         VStack(spacing: 0) {
             TabView(selection: $currentPage) {
-                // Privacy consent page
-                privacyConsentPage
-                    .tag(0)
-
-                // AI Setup page (download)
-                aiSetupPage
-                    .tag(1)
+                privacyPage.tag(0)
+                howItWorksPage.tag(1)
+                featuresPage.tag(2)
+                languagePage.tag(3)
+                readyPage.tag(4)
             }
-            .tabViewStyle(.page(indexDisplayMode: .always))
-            .animation(.easeInOut, value: currentPage)
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .animation(.easeInOut(duration: 0.3), value: currentPage)
 
-            // Bottom buttons
-            VStack(spacing: 12) {
-                if currentPage == 1 {
-                    // AI Setup page buttons
-                    if transcriptionService.isModelLoaded {
-                        Button(action: completeOnboarding) {
-                            Text("Get Started")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.blue)
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                        }
-                    } else if isDownloading {
-                        Button(action: {}) {
-                            HStack {
-                                ProgressView()
-                                    .tint(.white)
-                                    .scaleEffect(0.8)
-                                Text("Downloading...")
-                            }
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue.opacity(0.5))
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                        }
-                        .disabled(true)
-                    } else {
-                        Button(action: startModelDownload) {
-                            Text("Download AI Model")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.blue)
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                        }
-                    }
+            bottomSection
+        }
+        .onAppear { startSetupTimer() }
+        .onDisappear { stopSetupTimer() }
+    }
 
-                    if downloadFailed {
-                        Button(action: startModelDownload) {
-                            Text("Retry Download")
-                                .font(.subheadline)
-                                .foregroundStyle(.blue)
-                        }
-                    }
-                } else {
-                    // Privacy consent page
-                    Button(action: {
-                        hasAcceptedAIConsent = true
-                        currentPage = 1
-                    }) {
-                        Text("Agree & Continue")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                    }
+    // MARK: - Bottom Section
 
-                    Link("Privacy Policy", destination: URL(string: "https://lecsy.app/privacy")!)
-                        .font(.subheadline)
+    private var bottomSection: some View {
+        VStack(spacing: 16) {
+            // Page dots
+            HStack(spacing: 8) {
+                ForEach(0..<totalPages, id: \.self) { i in
+                    Circle()
+                        .fill(i == currentPage ? Color.blue : Color.secondary.opacity(0.3))
+                        .frame(width: 8, height: 8)
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 48)
+
+            Button(action: nextAction) {
+                Text(buttonText)
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(canProceed ? Color.blue : Color.secondary.opacity(0.3))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .disabled(!canProceed)
+
+            if currentPage == 0 {
+                if let url = URL(string: "https://lecsy.app/privacy") {
+                    Link("Privacy Policy", destination: url)
+                        .font(.subheadline)
+                }
+            } else if currentPage < totalPages - 1 {
+                Button("Skip") {
+                    withAnimation { currentPage = totalPages - 1 }
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: 500)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 48)
+    }
+
+    private var canProceed: Bool {
+        if currentPage == totalPages - 1 {
+            return transcriptionService.isModelLoaded
+        }
+        return true
+    }
+
+    private var buttonText: String {
+        switch currentPage {
+        case 0: return "Agree & Continue"
+        case 4:
+            return transcriptionService.isModelLoaded ? "Get Started" : "Preparing AI..."
+        default: return "Next"
         }
     }
 
-    // MARK: - Privacy Consent Page
+    private func nextAction() {
+        if currentPage == 0 {
+            hasAcceptedAIConsent = true
+        }
+        if currentPage == 3 {
+            transcriptionService.setLanguage(selectedLanguage)
+        }
+        if currentPage < totalPages - 1 {
+            withAnimation { currentPage += 1 }
+        } else {
+            completeOnboarding()
+        }
+    }
 
-    private var privacyConsentPage: some View {
+    // MARK: - Page 1: Privacy
+
+    private var privacyPage: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                Spacer().frame(height: 40)
+
+                Image(systemName: "hand.raised.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.blue)
+
+                Text("Your Privacy Matters")
+                    .font(.title.bold())
+
+                VStack(alignment: .leading, spacing: 14) {
+                    iconRow(icon: "cpu", text: "All AI transcription runs on-device. No third-party AI service is used.")
+                    iconRow(icon: "iphone", text: "Your audio recordings never leave your device.")
+                    iconRow(icon: "wifi", text: "No internet needed for transcription. Everything works offline.")
+                    iconRow(icon: "icloud", text: "If you sign in, only transcription text syncs for cross-device access.")
+                }
+                .padding(.horizontal, 32)
+
+                Spacer().frame(height: 40)
+            }
+        }
+    }
+
+    // MARK: - Page 2: How It Works
+
+    private var howItWorksPage: some View {
+        ScrollView {
+            VStack(spacing: 28) {
+                Spacer().frame(height: 40)
+
+                Image(systemName: "waveform.circle.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.blue)
+
+                Text("How It Works")
+                    .font(.title.bold())
+
+                VStack(spacing: 24) {
+                    stepCard(step: "1", icon: "mic.fill", color: .red,
+                             title: "Record",
+                             desc: "Tap the mic button to start recording your lecture. Pause and resume anytime.")
+                    stepCard(step: "2", icon: "cpu", color: .blue,
+                             title: "Transcribe",
+                             desc: "AI automatically converts speech to text, entirely on your device.")
+                    stepCard(step: "3", icon: "doc.text.magnifyingglass", color: .green,
+                             title: "Review",
+                             desc: "Read, search, and copy your transcription. Syncs across devices if signed in.")
+                }
+                .padding(.horizontal, 32)
+
+                Spacer().frame(height: 40)
+            }
+        }
+    }
+
+    // MARK: - Page 3: Features
+
+    private var featuresPage: some View {
+        ScrollView {
+            VStack(spacing: 28) {
+                Spacer().frame(height: 40)
+
+                Image(systemName: "sparkles")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.blue)
+
+                Text("Built for Students")
+                    .font(.title.bold())
+
+                VStack(spacing: 20) {
+                    featureCard(icon: "airplane", color: .orange,
+                                title: "Works Offline",
+                                desc: "Record and transcribe without internet. Perfect for lecture halls with bad Wi-Fi.")
+                    featureCard(icon: "bookmark.fill", color: .purple,
+                                title: "Bookmarks",
+                                desc: "Mark important moments during recording. Jump back to key points instantly.")
+                    featureCard(icon: "globe", color: .blue,
+                                title: "12 Languages",
+                                desc: "English, Japanese, Korean, Chinese, Spanish, French, and more.")
+                    featureCard(icon: "arrow.triangle.2.circlepath", color: .green,
+                                title: "Cross-Device Sync",
+                                desc: "Sign in to access your transcriptions from any device.")
+                }
+                .padding(.horizontal, 32)
+
+                Spacer().frame(height: 40)
+            }
+        }
+    }
+
+    // MARK: - Page 4: Language Selection
+
+    private var languagePage: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                Spacer().frame(height: 40)
+
+                Image(systemName: "globe")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.blue)
+
+                Text("Choose Your Language")
+                    .font(.title.bold())
+
+                Text("What language are your lectures in?\nYou can change this anytime in Settings.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    ForEach(TranscriptionLanguage.allCases, id: \.self) { lang in
+                        languageButton(lang)
+                    }
+                }
+                .padding(.horizontal, 32)
+
+                Spacer().frame(height: 40)
+            }
+        }
+    }
+
+    private func languageButton(_ lang: TranscriptionLanguage) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                selectedLanguage = lang
+            }
+        } label: {
+            Text(lang.displayName)
+                .font(.subheadline.weight(selectedLanguage == lang ? .semibold : .regular))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(selectedLanguage == lang ? Color.blue : Color.secondary.opacity(0.08))
+                .foregroundStyle(selectedLanguage == lang ? .white : .primary)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    // MARK: - Page 5: Ready
+
+    private var readyPage: some View {
         VStack(spacing: 24) {
             Spacer()
 
-            Image(systemName: "hand.raised.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(.blue)
-                .frame(height: 100)
+            if transcriptionService.isModelLoaded {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 72))
+                    .foregroundStyle(.green)
+                    .transition(.scale.combined(with: .opacity))
 
-            Text("Your Privacy Matters")
-                .font(.title.bold())
-                .multilineTextAlignment(.center)
+                Text("You're All Set!")
+                    .font(.title.bold())
 
-            VStack(alignment: .leading, spacing: 12) {
-                privacyPoint(icon: "cpu", text: "All AI transcription runs on-device using Apple CoreML. No third-party AI service is used.")
-                privacyPoint(icon: "iphone", text: "Your audio recordings never leave your device and are never sent to any external server.")
-                privacyPoint(icon: "wifi", text: "Internet is only used once to download the AI model (~150 MB). No user data is transmitted.")
-                privacyPoint(icon: "icloud", text: "If you sign in, only transcription text syncs to our server for cross-device access.")
+                Text("Start recording your first lecture.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                Image(systemName: "cpu")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.blue)
+
+                Text("Setting Up AI")
+                    .font(.title.bold())
+
+                Text("Optimizing for your device.\nThis only happens once.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                // Progress bar + time
+                VStack(spacing: 8) {
+                    ProgressView(value: setupProgress)
+                        .tint(.blue)
+                        .scaleEffect(y: 2)
+
+                    HStack {
+                        Text(estimatedTimeRemaining)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(Int(setupProgress * 100))%")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.blue)
+                    }
+                }
+                .padding(.horizontal, 48)
+
+                // Tips while waiting
+                VStack(alignment: .leading, spacing: 14) {
+                    iconRow(icon: "lightbulb.fill",
+                            text: "Place your device near the speaker for the best transcription quality.")
+                    iconRow(icon: "hand.tap.fill",
+                            text: "Tap the bookmark button during recording to mark important moments.")
+                    iconRow(icon: "pause.circle.fill",
+                            text: "You can pause and resume recording anytime.")
+                }
+                .padding(.horizontal, 32)
+                .padding(.top, 8)
             }
-            .padding(.horizontal, 32)
 
             Spacer()
             Spacer()
         }
+        .animation(.easeInOut(duration: 0.5), value: transcriptionService.isModelLoaded)
     }
 
-    private func privacyPoint(icon: String, text: String) -> some View {
+    private var setupProgress: Double {
+        if transcriptionService.isModelLoaded { return 1.0 }
+        let t = Double(elapsedSeconds)
+        let est = estimatedSeconds
+
+        if t < est * 0.7 {
+            // 0-70% of time: steady progress 0→75%
+            return (t / (est * 0.7)) * 0.75
+        } else if t < est {
+            // 70-100% of time: slower progress 75→92%
+            let phase = (t - est * 0.7) / (est * 0.3)
+            return 0.75 + phase * 0.17
+        } else {
+            // Over estimate: keep creeping, never stop
+            // Goes from 92% → approaches 99%, always moving
+            let overtime = t - est
+            return 0.92 + 0.07 * (1 - 1 / (1 + overtime / 30))
+        }
+    }
+
+    private var estimatedTimeRemaining: String {
+        if transcriptionService.isModelLoaded { return "Complete" }
+        let elapsed = Double(elapsedSeconds)
+        let est = estimatedSeconds
+
+        if elapsed < est * 0.8 {
+            let remaining = Int(est - elapsed)
+            if remaining >= 60 {
+                return "About \(remaining / 60) min \(remaining % 60)s remaining"
+            }
+            return "About \(remaining)s remaining"
+        } else {
+            return "Almost done..."
+        }
+    }
+
+    private func startSetupTimer() {
+        stopSetupTimer()
+        setupTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            Task { @MainActor in
+                if !transcriptionService.isModelLoaded {
+                    elapsedSeconds += 1
+                }
+            }
+        }
+    }
+
+    private func stopSetupTimer() {
+        setupTimer?.invalidate()
+        setupTimer = nil
+    }
+
+    // MARK: - Reusable Components
+
+    private func iconRow(icon: String, text: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.body)
@@ -143,121 +385,44 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - AI Setup Page
-
-    private var aiSetupPage: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            if transcriptionService.isModelLoaded {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.green)
-                    .frame(height: 100)
-
-                Text("AI is ready!")
-                    .font(.title.bold())
-                    .multilineTextAlignment(.center)
-
-                Text("Your on-device AI model is set up. You're all set to start recording and transcribing lectures.")
+    private func stepCard(step: String, icon: String, color: Color, title: String, desc: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Image(systemName: icon)
                     .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            } else if isDownloading {
-                VStack(spacing: 16) {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 64))
-                        .foregroundStyle(.blue)
-                        .symbolEffect(.pulse, options: .repeating)
-                        .frame(height: 100)
-
-                    Text("Setting up AI")
-                        .font(.title.bold())
-                        .multilineTextAlignment(.center)
-
-                    Text(transcriptionService.downloadStatusText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    ProgressView(value: transcriptionService.progress)
-                        .tint(.blue)
-                        .padding(.horizontal, 48)
-
-                    Text("\(Int(transcriptionService.progress * 100))%")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-            } else if downloadFailed {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.orange)
-                    .frame(height: 100)
-
-                Text("Download failed")
-                    .font(.title.bold())
-                    .multilineTextAlignment(.center)
-
-                Text("Please check your internet connection and try again. You can also download the model later from Settings.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            } else {
-                Image(systemName: "cpu")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.blue)
-                    .frame(height: 100)
-
-                Text("Set up AI transcription")
-                    .font(.title.bold())
-                    .multilineTextAlignment(.center)
-
-                Text("Download the AI model (~150 MB, one-time) to enable offline transcription. No internet needed after this.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-
-                // Feature badges
-                HStack(spacing: 16) {
-                    featureBadge(icon: "lock.shield.fill", text: "Private")
-                    featureBadge(icon: "wifi.slash", text: "Offline")
-                    featureBadge(icon: "bolt.fill", text: "Fast")
-                }
-                .padding(.top, 8)
+                    .foregroundStyle(color)
             }
-
-            Spacer()
-            Spacer()
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(desc)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
-    private func featureBadge(icon: String, text: String) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(.blue)
-            Text(text)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(width: 72)
-    }
-
-    // MARK: - Actions
-
-    private func startModelDownload() {
-        isDownloading = true
-        downloadFailed = false
-        Task {
-            do {
-                try await transcriptionService.loadModel()
-                isDownloading = false
-            } catch {
-                isDownloading = false
-                downloadFailed = true
+    private func featureCard(icon: String, color: Color, title: String, desc: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(color.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Image(systemName: icon)
+                    .font(.body)
+                    .foregroundStyle(color)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(desc)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

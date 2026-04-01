@@ -22,11 +22,19 @@ struct LibraryView: View {
     @StateObject private var authService = AuthService.shared
     @StateObject private var streakService = StudyStreakService.shared
     @State private var searchText = ""
+    @State private var debouncedSearchText = ""
+    @State private var searchDebounceTask: Task<Void, Never>?
     @State private var isSearchActive = false
     @State private var isSyncingTitles = false
     @State private var showSyncError = false
     @State private var syncErrorMessage = ""
     @State private var selectedCourse: String? = nil
+    @State private var showDeleteConfirmation = false
+    @State private var lectureToDelete: Lecture?
+    @State private var showUndoBanner = false
+    @State private var recentlyDeletedLecture: Lecture?
+    @State private var recentlyDeletedAudioURL: URL?
+    @State private var undoTimer: Task<Void, Never>?
     @AppStorage("lecsy.sortOption") private var sortOption: String = LectureSortOption.dateNewest.rawValue
 
 
@@ -35,7 +43,7 @@ struct LibraryView: View {
     }
 
     var filteredLectures: [Lecture] {
-        let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedQuery = debouncedSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         var lectures: [Lecture]
         if trimmedQuery.isEmpty {
             lectures = store.lectures
@@ -65,8 +73,8 @@ struct LibraryView: View {
         let calendar = Calendar.current
         let now = Date()
         let startOfToday = calendar.startOfDay(for: now)
-        let startOfYesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday)!
-        let startOfWeek = calendar.date(byAdding: .day, value: -7, to: startOfToday)!
+        let startOfYesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday) ?? startOfToday
+        let startOfWeek = calendar.date(byAdding: .day, value: -7, to: startOfToday) ?? startOfToday
 
         var groups: [String: [Lecture]] = [:]
         let order = ["Today", "Yesterday", "This Week", "Earlier"]
@@ -92,7 +100,7 @@ struct LibraryView: View {
     }
 
     var isSearching: Bool {
-        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !debouncedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -117,6 +125,7 @@ struct LibraryView: View {
                             .font(.title3)
                             .foregroundColor(.accentColor)
                     }
+                    .accessibilityLabel("Sort lectures")
 
                     Spacer()
 
@@ -133,6 +142,7 @@ struct LibraryView: View {
                         }
                     }
                     .disabled(isSyncingTitles || !authService.isAuthenticated)
+                    .accessibilityLabel("Sync with web")
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal)
@@ -204,13 +214,13 @@ struct LibraryView: View {
                             Section(sectionTitle) {
                                 ForEach(lectures) { lecture in
                                     NavigationLink(destination: LectureDetailView(lecture: lecture)) {
-                                        LectureRow(lecture: lecture, searchQuery: isSearching ? searchText : "")
+                                        LectureRow(lecture: lecture, searchQuery: isSearching ? debouncedSearchText : "")
                                     }
                                 }
                                 .onDelete { indexSet in
-                                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
-                                    for index in indexSet {
-                                        store.deleteLecture(lectures[index])
+                                    if let index = indexSet.first {
+                                        lectureToDelete = lectures[index]
+                                        showDeleteConfirmation = true
                                     }
                                 }
                             }
@@ -227,12 +237,57 @@ struct LibraryView: View {
                 isPresented: $isSearchActive,
                 prompt: "Search lectures"
             )
-            .alert("Sync Error", isPresented: $showSyncError) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(syncErrorMessage)
+            .onChange(of: searchText) { _, newValue in
+                searchDebounceTask?.cancel()
+                searchDebounceTask = Task {
+                    try? await Task.sleep(nanoseconds: 300_000_000) // 300ms debounce
+                    guard !Task.isCancelled else { return }
+                    debouncedSearchText = newValue
+                }
             }
         }
+        .alert("Delete Lecture?", isPresented: $showDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                if let lecture = lectureToDelete {
+                    deleteLectureWithUndo(lecture)
+                }
+                lectureToDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                lectureToDelete = nil
+            }
+        } message: {
+            if let lecture = lectureToDelete {
+                Text("Delete \"\(lecture.displayTitle)\"? You can undo this for a few seconds.")
+            }
+        }
+        .alert("Sync Error", isPresented: $showSyncError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(syncErrorMessage)
+        }
+        .overlay(alignment: .bottom) {
+            if showUndoBanner {
+                HStack {
+                    Text("Lecture deleted")
+                        .font(.subheadline)
+                        .lineLimit(1)
+                    Spacer()
+                    Button("Undo") {
+                        undoDelete()
+                    }
+                    .font(.subheadline.bold())
+                }
+                .padding()
+                .background(.ultraThinMaterial)
+                .cornerRadius(12)
+                .shadow(radius: 4)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: showUndoBanner)
         .navigationViewStyle(.stack)
     }
 
@@ -338,6 +393,57 @@ struct LibraryView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Delete with Undo
+
+    private func deleteLectureWithUndo(_ lecture: Lecture) {
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+
+        // Save for undo — keep audio file reference but don't delete it yet
+        recentlyDeletedLecture = lecture
+        recentlyDeletedAudioURL = lecture.audioPath
+
+        // Remove from list and save (but don't delete audio file yet)
+        store.lectures.removeAll { $0.id == lecture.id }
+        store.saveLectures()
+
+        // Show undo banner
+        showUndoBanner = true
+
+        // Auto-finalize after 5 seconds
+        undoTimer?.cancel()
+        undoTimer = Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            finalizeDelete()
+        }
+    }
+
+    private func undoDelete() {
+        undoTimer?.cancel()
+        undoTimer = nil
+
+        guard let lecture = recentlyDeletedLecture else { return }
+
+        // Restore the lecture
+        store.addLecture(lecture)
+
+        recentlyDeletedLecture = nil
+        recentlyDeletedAudioURL = nil
+        showUndoBanner = false
+
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    private func finalizeDelete() {
+        // Now actually delete the audio file
+        if let audioURL = recentlyDeletedAudioURL {
+            try? FileManager.default.removeItem(at: audioURL)
+        }
+        recentlyDeletedLecture = nil
+        recentlyDeletedAudioURL = nil
+        showUndoBanner = false
     }
 
     // MARK: - Sync

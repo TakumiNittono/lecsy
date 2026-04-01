@@ -50,8 +50,7 @@ struct LoginView: View {
                             currentNonce = nonce
                             request.requestedScopes = [.fullName, .email]
                             request.nonce = sha256(nonce)
-                            print("🍎 LoginView: Apple Sign In request created with nonce")
-                            print("   - Device type: \(horizontalSizeClass == .regular ? "iPad" : "iPhone")")
+                            AppLogger.info("LoginView: Apple Sign In request created", category: .auth)
                         },
                         onCompletion: { result in
                             handleAppleSignInCompletion(result: result)
@@ -125,39 +124,36 @@ struct LoginView: View {
     private func handleAppleSignInCompletion(result: Result<ASAuthorization, Error>) {
         switch result {
         case .success(let authorization):
-            print("🍎 LoginView: Apple Sign In succeeded, processing authorization")
+            AppLogger.info("LoginView: Apple Sign In succeeded, processing authorization", category: .auth)
             Task {
                 await handleAppleSignInResult(authorization: authorization)
             }
         case .failure(let error):
-            print("❌ LoginView: Apple Sign In failed")
-            print("   - Error: \(error)")
-            print("   - Localized: \(error.localizedDescription)")
-            
+            AppLogger.error("LoginView: Apple Sign In failed - \(error.localizedDescription)", category: .auth)
+
             // ASAuthorizationErrorを詳細に解析
             if let authError = error as? ASAuthorizationError {
-                print("   - ASAuthorizationError code: \(authError.code.rawValue)")
                 switch authError.code {
                 case .canceled:
-                    print("   - User canceled the authorization")
+                    AppLogger.debug("LoginView: User canceled the authorization", category: .auth)
                     errorMessage = nil // ユーザーがキャンセルした場合はエラーを表示しない
                 case .failed:
-                    print("   - Authorization failed")
+                    AppLogger.error("LoginView: Authorization failed", category: .auth)
                     errorMessage = "Sign in failed. Please try again."
                 case .invalidResponse:
-                    print("   - Invalid response from Apple")
+                    AppLogger.error("LoginView: Invalid response from Apple", category: .auth)
                     errorMessage = "Invalid response from Apple. Please try again."
                 case .notHandled:
-                    print("   - Authorization not handled")
+                    AppLogger.error("LoginView: Authorization not handled", category: .auth)
                     errorMessage = "Authorization not handled. Please try again."
                 case .unknown:
-                    print("   - Unknown error")
+                    AppLogger.error("LoginView: Unknown error", category: .auth)
                     errorMessage = "An unknown error occurred. Please try again."
                 case .notInteractive:
-                    print("   - Not interactive")
+                    AppLogger.error("LoginView: Not interactive", category: .auth)
                     errorMessage = "Interactive sign in required."
                 @unknown default:
-                    print("   - Unknown error case")
+                    AppLogger.error("LoginView: Unknown error case", category: .auth)
                     errorMessage = error.localizedDescription
                 }
             } else {
@@ -179,39 +175,39 @@ struct LoginView: View {
     }
     
     private func handleAppleSignInResult(authorization: ASAuthorization) async {
-        print("🍎 LoginView: Apple Sign In authorization received")
+        AppLogger.info("LoginView: Apple Sign In authorization received", category: .auth)
         errorMessage = nil
         
-        print("🔍 LoginView: Checking authorization credential type...")
+        AppLogger.debug("LoginView: Checking authorization credential type", category: .auth)
         guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-            print("❌ LoginView: Failed to cast credential to ASAuthorizationAppleIDCredential")
+            AppLogger.error("LoginView: Failed to cast credential to ASAuthorizationAppleIDCredential", category: .auth)
             errorMessage = "Apple authentication failed"
             currentNonce = nil
             return
         }
-        print("✅ LoginView: Successfully cast to ASAuthorizationAppleIDCredential")
-        
-        print("🔍 LoginView: Extracting identity token...")
+        AppLogger.info("LoginView: Successfully cast to ASAuthorizationAppleIDCredential", category: .auth)
+
+        AppLogger.debug("LoginView: Extracting identity token", category: .auth)
         guard let identityToken = appleIDCredential.identityToken,
               let identityTokenString = String(data: identityToken, encoding: .utf8) else {
-            print("❌ LoginView: Failed to extract identity token")
+            AppLogger.error("LoginView: Failed to extract identity token", category: .auth)
             errorMessage = "Failed to retrieve token"
             currentNonce = nil
             return
         }
-        print("✅ LoginView: Identity token extracted - length: \(identityTokenString.count)")
+        AppLogger.info("LoginView: Identity token extracted", category: .auth)
         
         // リクエスト時に設定したnonceを使用（元のnonce、ハッシュ化前）
-        print("🔍 LoginView: Checking nonce...")
+        AppLogger.debug("LoginView: Checking nonce", category: .auth)
         guard let nonce = currentNonce else {
             errorMessage = "Nonce not found"
-            print("❌ LoginView: Nonce is nil")
+            AppLogger.error("LoginView: Nonce is nil", category: .auth)
             return
         }
-        print("✅ LoginView: Using nonce - \(nonce.prefix(8))...")
-        
+        AppLogger.debug("LoginView: Nonce verified", category: .auth)
+
         do {
-            print("🔐 LoginView: Calling AuthService.handleAppleSignIn...")
+            AppLogger.debug("LoginView: Calling AuthService.handleAppleSignIn", category: .auth)
             // AuthServiceのhandleAppleSignInメソッドを使用
             try await authService.handleAppleSignIn(
                 identityToken: identityTokenString,
@@ -220,18 +216,10 @@ struct LoginView: View {
             )
             
             currentNonce = nil
-            print("✅ LoginView: Apple Sign In completed successfully")
+            AppLogger.info("LoginView: Apple Sign In completed successfully", category: .auth)
         } catch {
             currentNonce = nil
-            print("❌ LoginView: Apple Sign In error - \(error.localizedDescription)")
-            print("   - Error: \(error)")
-            
-            // エラーの詳細を出力
-            if let nsError = error as NSError? {
-                print("   - Domain: \(nsError.domain)")
-                print("   - Code: \(nsError.code)")
-                print("   - UserInfo: \(nsError.userInfo)")
-            }
+            AppLogger.error("LoginView: Apple Sign In error - \(error.localizedDescription)", category: .auth)
             
             errorMessage = error.localizedDescription
         }
@@ -250,7 +238,8 @@ struct LoginView: View {
                 var random: UInt8 = 0
                 let errorCode = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
                 if errorCode != errSecSuccess {
-                    fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
+                    // Fallback to arc4random if SecRandomCopyBytes fails
+                    random = UInt8(arc4random_uniform(UInt32(UInt8.max) + 1))
                 }
                 return random
             }

@@ -43,8 +43,10 @@ struct AIConsentView: View {
                 }
                 .padding(.horizontal, 24)
 
-                Link("Read our Privacy Policy", destination: URL(string: "https://lecsy.app/privacy")!)
-                    .font(.subheadline)
+                if let url = URL(string: "https://lecsy.app/privacy") {
+                    Link("Read our Privacy Policy", destination: url)
+                        .font(.subheadline)
+                }
 
                 Spacer()
 
@@ -81,7 +83,5 @@ struct AIConsentView: View {
 }
 
 #Preview {
-    AIConsentView {
-        print("Accepted")
-    }
+    AIConsentView { }
 }

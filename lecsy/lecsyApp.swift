@@ -16,16 +16,15 @@ struct lecsyApp: App {
     @Environment(\.requestReview) private var requestReview
     private let syncService = SyncService.shared
     private let streakService = StudyStreakService.shared
+    // Touch TranscriptionService immediately so model preloading starts at app launch
+    private let transcriptionService = TranscriptionService.shared
 
     var body: some Scene {
         WindowGroup {
             Group {
                 if !hasSeenOnboarding {
                     OnboardingView()
-                } else if !authService.isInitialized {
-                    // Splash screen while restoring session
-                    splashScreen
-                } else if authService.isAuthenticated || authService.hasSkippedLogin {
+                } else {
                     ContentView()
                         .task {
                             await syncTitlesOnLaunch()
@@ -34,19 +33,11 @@ struct lecsyApp: App {
                             checkAndRequestReview()
                         }
                         .transition(.opacity)
-                } else {
-                    LoginView()
-                        .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.3), value: authService.isInitialized)
-            .animation(.easeInOut(duration: 0.3), value: authService.isAuthenticated)
-            .animation(.easeInOut(duration: 0.3), value: authService.hasSkippedLogin)
+            .animation(.easeInOut(duration: 0.3), value: hasSeenOnboarding)
             .task {
-                // Start AI model download immediately on app launch (if onboarding is done)
-                if hasSeenOnboarding {
-                    await preloadModelIfNeeded()
-                }
+                recoverStuckTranscriptions()
             }
             .onOpenURL { url in
                 handleIncomingURL(url)
@@ -59,19 +50,6 @@ struct lecsyApp: App {
         }
     }
 
-    private var splashScreen: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: "mic.fill")
-                .font(.system(size: 64))
-                .foregroundColor(.blue)
-            Text("Lecsy")
-                .font(.system(size: 36, weight: .bold, design: .rounded))
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .transition(.opacity)
-    }
 
     private func handleIncomingURL(_ url: URL) {
         if url.scheme == "lecsy" {
@@ -84,34 +62,43 @@ struct lecsyApp: App {
     }
 
     @MainActor
-    private func preloadModelIfNeeded() async {
-        let transcriptionService = TranscriptionService.shared
-        guard !transcriptionService.isModelLoaded else { return }
-        try? await transcriptionService.loadModel()
-    }
-
-    @MainActor
     private func syncTitlesOnLaunch() async {
         guard await authService.isSessionValid else { return }
 
         do {
             try await syncService.syncTitlesFromWeb()
         } catch {
-            // Ignore errors (don't block app launch)
+            AppLogger.warning("Sync failed on launch: \(error.localizedDescription)", category: .sync)
         }
     }
 
-    private func checkAndRequestReview() {
-        let key = "lecsy.completedRecordingsCount"
-        let reviewRequestedKey = "lecsy.hasRequestedReview"
-        let count = UserDefaults.standard.integer(forKey: key) + 1
-        UserDefaults.standard.set(count, forKey: key)
+    /// Recover lectures stuck in .processing from a previous crash
+    @MainActor
+    private func recoverStuckTranscriptions() {
+        let store = LectureStore.shared
+        for lecture in store.lectures where lecture.transcriptStatus == .processing {
+            var updated = lecture
+            // If partial transcript exists, mark as failed so user can retry
+            // (partial text is preserved for viewing)
+            updated.transcriptStatus = .failed
+            store.updateLecture(updated)
+            AppLogger.warning("Recovered stuck transcription for lecture: \(lecture.displayTitle)", category: .transcription)
+        }
+    }
 
-        if count >= 5 && !UserDefaults.standard.bool(forKey: reviewRequestedKey) {
-            UserDefaults.standard.set(true, forKey: reviewRequestedKey)
-            // Delay slightly so the UI settles first
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                requestReview()
+    private static let reviewThreshold = 5
+    private static let reviewDelaySeconds: Double = 2.0
+    private static let completedRecordingsKey = "lecsy.completedRecordingsCount"
+    private static let reviewRequestedKey = "lecsy.hasRequestedReview"
+
+    private func checkAndRequestReview() {
+        let count = UserDefaults.standard.integer(forKey: Self.completedRecordingsKey) + 1
+        UserDefaults.standard.set(count, forKey: Self.completedRecordingsKey)
+
+        if count >= Self.reviewThreshold && !UserDefaults.standard.bool(forKey: Self.reviewRequestedKey) {
+            UserDefaults.standard.set(true, forKey: Self.reviewRequestedKey)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.reviewDelaySeconds) {
+                self.requestReview()
             }
         }
     }

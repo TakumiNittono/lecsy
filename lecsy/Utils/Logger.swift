@@ -13,6 +13,9 @@ enum LogCategory: String {
     case auth = "Auth"
     case sync = "Sync"
     case recording = "Recording"
+    case transcription = "Transcription"
+    case audio = "Audio"
+    case storage = "Storage"
     case general = "General"
 }
 

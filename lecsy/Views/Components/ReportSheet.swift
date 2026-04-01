@@ -37,16 +37,8 @@ struct ReportSheet: View {
                     TextField("Brief summary", text: $title)
                         .textInputAutocapitalization(.sentences)
 
-                    ZStack(alignment: .topLeading) {
-                        if description.isEmpty {
-                            Text("Describe the problem in detail...")
-                                .foregroundColor(.secondary.opacity(0.5))
-                                .padding(.top, 8)
-                                .padding(.leading, 4)
-                        }
-                        TextEditor(text: $description)
-                            .frame(minHeight: 120)
-                    }
+                    TextField("Describe the problem in detail...", text: $description, axis: .vertical)
+                        .lineLimit(5...10)
                 } header: {
                     Text("Details")
                 }
@@ -118,8 +110,7 @@ struct ReportSheet: View {
     }
 
     private var isFormValid: Bool {
-        !title.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !description.trimmingCharacters(in: .whitespaces).isEmpty
+        !title.isEmpty && !description.isEmpty
     }
 
     private func submitReport() {

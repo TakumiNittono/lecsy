@@ -15,32 +15,325 @@ import UIKit
 @MainActor
 class RecordingService: NSObject, ObservableObject {
     static let shared = RecordingService()
-    
+
     @Published var isRecording = false
     @Published var isPaused = false
     @Published var recordingDuration: TimeInterval = 0
     @Published var recordingStartTime: Date?
-    @Published var pausedDuration: TimeInterval = 0 // Cumulative paused time
+    @Published var pausedDuration: TimeInterval = 0
     @Published var audioLevel: Float = 0
     @Published var audioLevelHistory: [Float] = Array(repeating: 0, count: 30)
+    @Published var showLowAudioWarning = false
+    @Published var unexpectedlySavedRecording: SavedRecording?
+
+    /// Current duration computed from wall clock (for use outside UI)
+    var currentDuration: TimeInterval {
+        guard let start = recordingStartTime else { return recordingDuration }
+        if isPaused, let ps = pauseStartTime {
+            return Date().timeIntervalSince(start) - pausedDuration - Date().timeIntervalSince(ps)
+        }
+        return Date().timeIntervalSince(start) - pausedDuration
+    }
+
+    struct SavedRecording: Equatable {
+        let url: URL
+        let duration: TimeInterval
+        let title: String
+    }
 
     private var audioRecorder: AVAudioRecorder?
     private var timer: Timer?
     private var meteringTimer: Timer?
     private var backgroundTaskTimer: Timer?
+    private var lowAudioSeconds = 0
     private var recordingURL: URL?
     private var liveActivity: Activity<LecsyWidgetAttributes>?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var currentLectureTitle: String = "New Recording"
     private var pauseStartTime: Date? // Pause start time
-    
+
     // Support up to 100 minutes (6000 seconds) of recording
     private let maxRecordingDuration: TimeInterval = 6000 // 100 minutes
-    
+
     private var isAudioSessionPrepared = false
+    private var recorderRestartCount = 0
+    private let maxRecorderRestarts = 3
+
+    /// Flag to distinguish intentional stop from unexpected termination
+    private var isStoppingIntentionally = false
+
+    // Persistence keys for crash recovery
+    private let activeRecordingURLKey = "lecsy.activeRecordingURL"
+    private let activeRecordingStartKey = "lecsy.activeRecordingStart"
+    private let activeRecordingPausedKey = "lecsy.activeRecordingPaused"
+    private let activeRecordingTitleKey = "lecsy.activeRecordingTitle"
 
     private override init() {
         super.init()
+        setupNotifications()
+        // Clean up zombie Live Activities from previous launches on startup
+        cleanUpStaleLiveActivities()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    /// Listen for app lifecycle and audio interruption notifications
+    private func setupNotifications() {
+        let nc = NotificationCenter.default
+
+        // Restore audio session and metering when app returns to foreground
+        nc.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, self.isRecording else { return }
+            // Only re-activate (don't setCategory — it causes audio glitches)
+            try? AVAudioSession.sharedInstance().setActive(true, options: [])
+            self.ensureRecorderIsRunning()
+            self.restartMeteringTimerIfNeeded()
+        }
+
+        // Handle audio session interruptions (phone calls, Siri, etc.)
+        nc.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] notification in
+            guard let self = self, self.isRecording else { return }
+            guard let info = notification.userInfo,
+                  let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+
+            if type == .began {
+                AppLogger.debug("Audio interruption began (phone call, Siri, etc.)", category: .recording)
+                // Persist state in case we get killed during interruption
+                self.persistRecordingState()
+            } else if type == .ended {
+                AppLogger.debug("Audio interruption ended, attempting resume", category: .recording)
+                // Re-activate session after interruption (category is still correct)
+                try? AVAudioSession.sharedInstance().setActive(true, options: [])
+                if !self.isPaused {
+                    self.audioRecorder?.record()
+                }
+            }
+        }
+
+        // NOTE: routeChangeNotification is intentionally NOT handled here.
+        // Calling setCategory/setActive during an active recording causes audio glitches.
+        // AVAudioRecorder handles route changes internally (e.g. switches to built-in mic
+        // when Bluetooth disconnects). We don't need to intervene.
+
+        // Handle memory warnings — reduce non-essential work but keep recording
+        nc.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, self.isRecording else { return }
+            AppLogger.warning("Memory warning during recording — reducing overhead", category: .recording)
+            // Stop metering to free CPU/memory, recording continues
+            self.meteringTimer?.invalidate()
+            self.meteringTimer = nil
+            self.audioLevelHistory = []
+            self.audioLevel = 0
+        }
+
+        // Reduce resource usage when entering background to avoid iOS killing us
+        nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, self.isRecording else { return }
+            self.persistRecordingState()
+
+            // Stop the 12Hz metering timer — it wastes CPU in background and can
+            // cause iOS to deprioritize/kill our process. Recording continues fine
+            // without it. We'll restart metering when we return to foreground.
+            self.meteringTimer?.invalidate()
+            self.meteringTimer = nil
+            AppLogger.debug("Suspended metering timer for background efficiency", category: .recording)
+        }
+
+        // Persist state when app might be terminated
+        nc.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, self.isRecording else { return }
+            // AVAudioRecorder auto-flushes to disk, so the file is safe
+            self.isStoppingIntentionally = true
+            self.audioRecorder?.stop()
+            self.persistRecordingState()
+            AppLogger.warning("App terminating during recording — file preserved for recovery", category: .recording)
+        }
+    }
+
+    // MARK: - Recording State Persistence (crash recovery)
+
+    /// Save current recording state to UserDefaults so we can recover after crash/kill
+    private func persistRecordingState() {
+        guard let url = recordingURL else { return }
+        let defaults = UserDefaults.standard
+        defaults.set(url.path, forKey: activeRecordingURLKey)
+        defaults.set(recordingStartTime?.timeIntervalSince1970, forKey: activeRecordingStartKey)
+        defaults.set(pausedDuration, forKey: activeRecordingPausedKey)
+        defaults.set(currentLectureTitle, forKey: activeRecordingTitleKey)
+    }
+
+    /// Clear persisted recording state (called on successful stop)
+    private func clearPersistedRecordingState() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: activeRecordingURLKey)
+        defaults.removeObject(forKey: activeRecordingStartKey)
+        defaults.removeObject(forKey: activeRecordingPausedKey)
+        defaults.removeObject(forKey: activeRecordingTitleKey)
+    }
+
+    /// Check for orphaned recording files from a previous crash and recover them
+    func recoverOrphanedRecording() async -> (url: URL, duration: TimeInterval, title: String)? {
+        let defaults = UserDefaults.standard
+        guard let path = defaults.string(forKey: activeRecordingURLKey) else { return nil }
+
+        let url = URL(fileURLWithPath: path)
+
+        // Don't recover if we're currently recording (shouldn't happen)
+        guard !isRecording else { return nil }
+
+        // Validate file exists and is non-empty
+        guard FileManager.default.fileExists(atPath: path),
+              let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let size = attrs[.size] as? Int64, size > 0 else {
+            AppLogger.warning("Orphaned recording file missing or empty, skipping recovery", category: .recording)
+            // Only clear after validation — don't lose the pointer prematurely
+            clearPersistedRecordingState()
+            return nil
+        }
+
+        // Calculate approximate duration from persisted start time
+        var duration: TimeInterval = 0
+        if let startTimestamp = defaults.object(forKey: activeRecordingStartKey) as? TimeInterval {
+            let pausedDur = defaults.double(forKey: activeRecordingPausedKey)
+            let startDate = Date(timeIntervalSince1970: startTimestamp)
+            duration = Date().timeIntervalSince(startDate) - pausedDur
+        }
+
+        // Get actual duration from file if possible
+        let asset = AVURLAsset(url: url)
+        if let track = try? await asset.loadTracks(withMediaType: .audio).first {
+            let timeRange = try? await track.load(.timeRange)
+            if let timeRange, CMTimeGetSeconds(timeRange.duration) > 0 {
+                duration = CMTimeGetSeconds(timeRange.duration)
+            }
+        }
+
+        // Ensure duration is non-negative (wall-clock drift can cause negative values)
+        duration = max(0, duration)
+
+        let title = defaults.string(forKey: activeRecordingTitleKey) ?? "Recovered Recording"
+        AppLogger.info("Recovered orphaned recording: \(size) bytes, ~\(Int(duration))s", category: .recording)
+
+        // Clear persisted state only after successful recovery
+        clearPersistedRecordingState()
+
+        return (url: url, duration: duration, title: title)
+    }
+
+    // MARK: - Auto-save (unexpected termination fallback)
+
+    /// Automatically save the current recording when the recorder dies unexpectedly.
+    /// This creates a Lecture entry directly and notifies the UI via `unexpectedlySavedRecording`.
+    private func autoSaveAndNotify() {
+        guard isRecording, let url = recordingURL else { return }
+
+        // Stop cleanly
+        isStoppingIntentionally = true
+        audioRecorder?.stop()
+        timer?.invalidate()
+        timer = nil
+        meteringTimer?.invalidate()
+        meteringTimer = nil
+        backgroundTaskTimer?.invalidate()
+        backgroundTaskTimer = nil
+
+        isRecording = false
+        isPaused = false
+
+        let finalDuration = max(0, currentDuration)
+
+        pauseStartTime = nil
+        clearPersistedRecordingState()
+        endLiveActivity()
+        endBackgroundTask()
+
+        // Validate file
+        guard FileManager.default.fileExists(atPath: url.path),
+              let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attrs[.size] as? Int64, size > 0 else {
+            AppLogger.error("Auto-save failed: file missing or empty", category: .recording)
+            return
+        }
+
+        let title = currentLectureTitle
+        recordingURL = nil
+        recordingStartTime = nil
+        pausedDuration = 0
+        audioLevel = 0
+        audioLevelHistory = Array(repeating: 0, count: 30)
+
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        isAudioSessionPrepared = false
+
+        AppLogger.info("Auto-saved recording after unexpected stop: \(size) bytes, \(Int(finalDuration))s", category: .recording)
+
+        // Notify UI so it can present the save sheet
+        unexpectedlySavedRecording = SavedRecording(url: url, duration: finalDuration, title: title)
+    }
+
+    // MARK: - Recorder Health
+
+    /// Restart metering timer (after returning from background)
+    private func restartMeteringTimerIfNeeded() {
+        guard isRecording, meteringTimer == nil else { return }
+        meteringTimer = Timer.scheduledTimer(withTimeInterval: 0.125, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self, self.isRecording, !self.isPaused else { return }
+                self.audioRecorder?.updateMeters()
+                let db = self.audioRecorder?.averagePower(forChannel: 0) ?? -160
+                let normalized = max(0, min(1, (db + 60) / 55))
+                self.audioLevel = normalized
+                if self.audioLevelHistory.count >= 60 {
+                    self.audioLevelHistory.removeFirst(self.audioLevelHistory.count - 30)
+                }
+                self.audioLevelHistory.append(normalized)
+            }
+        }
+        if let meteringTimer = meteringTimer {
+            RunLoop.current.add(meteringTimer, forMode: .common)
+        }
+    }
+
+    /// Ensure the recorder is actively recording; restart if needed
+    private func ensureRecorderIsRunning() {
+        guard isRecording, !isPaused else { return }
+        guard let recorder = audioRecorder else { return }
+
+        if !recorder.isRecording {
+            if recorderRestartCount < maxRecorderRestarts {
+                AppLogger.warning("Recorder stopped unexpectedly, attempting restart (\(recorderRestartCount + 1)/\(maxRecorderRestarts))", category: .recording)
+                recorder.record()
+                recorderRestartCount += 1
+            }
+        }
+    }
+
+    /// Re-activate audio session after background / interruption.
+    ///
+    /// Key design decisions for background resilience:
+    /// - `.mixWithOthers` is NOT used: we need exclusive audio so iOS keeps us alive
+    /// - `.setActive(true, options: [])` without `.notifyOthersOnDeactivation`: we
+    ///   don't want to deactivate other sessions — we just reclaim ours
+    /// - Category is re-set every time: after a phone call, iOS may have changed it
+    private func restoreAudioSessionIfNeeded() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            // Only set category if it's not already correct.
+            // Calling setCategory during active recording causes audio glitches.
+            if session.category != .playAndRecord {
+                try session.setCategory(
+                    .playAndRecord,
+                    mode: .default,
+                    options: [.defaultToSpeaker, .allowBluetooth]
+                )
+            }
+            try session.setActive(true, options: [])
+        } catch {
+            AppLogger.warning("Failed to re-activate audio session: \(error)", category: .recording)
+        }
     }
 
     /// Pre-configure audio session so recording starts instantly
@@ -107,12 +400,16 @@ class RecordingService: NSObject, ObservableObject {
             prepareAudioSession()
         }
 
-        // Re-activate if needed (e.g., after previous deactivation on stop)
+        // Always re-activate audio session before recording
+        // (previous stop may have deactivated it, or another app may hold it)
         let audioSession = AVAudioSession.sharedInstance()
         do {
-            if !audioSession.isOtherAudioPlaying {
-                try audioSession.setActive(true, options: [])
-            }
+            try audioSession.setCategory(
+                .playAndRecord,
+                mode: .default,
+                options: [.defaultToSpeaker, .allowBluetooth]
+            )
+            try audioSession.setActive(true, options: [])
         } catch {
             AppLogger.error("Audio session activation error: \(error)", category: .recording)
             throw RecordingError.recordingFailed
@@ -163,107 +460,110 @@ class RecordingService: NSObject, ObservableObject {
         
         isRecording = true
         isPaused = false
+        isStoppingIntentionally = false
         recordingStartTime = Date()
         recordingDuration = 0
         pausedDuration = 0
         pauseStartTime = nil
         currentLectureTitle = lectureTitle
-        
-        AppLogger.debug("Updated recording state: isRecording = \(isRecording), isPaused = \(isPaused)", category: .recording)
-        
-        // Start Live Activity
+        lowAudioSeconds = 0
+        showLowAudioWarning = false
+
+        persistRecordingState()
         startLiveActivity()
-        
-        // Start timer (update duration every 1 second)
-        var liveActivityCounter = 0
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+        recorderRestartCount = 0
+
+        // Duration timer (1Hz)
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] t in
             guard let self = self, let startTime = self.recordingStartTime else {
-                timer.invalidate()
+                t.invalidate()
                 return
             }
-
-            // Update time only if not paused
             if !self.isPaused {
-                let totalElapsed = Date().timeIntervalSince(startTime)
-                self.recordingDuration = totalElapsed - self.pausedDuration
+                self.recordingDuration = Date().timeIntervalSince(startTime) - self.pausedDuration
             }
-
-            // Check max recording time
+            // Persist state every 10 seconds
+            if Int(self.recordingDuration) % 10 == 0 {
+                self.persistRecordingState()
+            }
             if self.recordingDuration >= self.maxRecordingDuration {
-                _ = self.stopRecording()
+                AppLogger.info("Max recording duration reached (\(Int(self.maxRecordingDuration))s), auto-saving", category: .recording)
+                self.autoSaveAndNotify()
                 return
             }
-
-            // Check if recording is continuing (e.g., on lock screen)
-            if !self.isPaused, let recorder = self.audioRecorder, !recorder.isRecording {
-                recorder.record()
+            // Health check every 10 seconds
+            if Int(self.recordingDuration) % 10 == 0 {
+                self.ensureRecorderIsRunning()
             }
-
-            // Update Live Activity every 5 seconds (battery optimization)
-            liveActivityCounter += 1
-            if liveActivityCounter >= 5 {
-                liveActivityCounter = 0
-                self.updateLiveActivity()
+            // Disk space check every 30 seconds
+            if Int(self.recordingDuration) % 30 == 0 {
+                let minSpace: Int64 = 10 * 1024 * 1024
+                if let available = self.getAvailableDiskSpace(), available < minSpace {
+                    _ = self.stopRecording()
+                }
             }
         }
-        
-        // Add timer to RunLoop so it works in background too
         if let timer = timer {
             RunLoop.current.add(timer, forMode: .common)
         }
-        
-        // Start metering timer (12Hz for smooth waveform)
-        meteringTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 12.0, repeats: true) { [weak self] _ in
-            guard let self = self, self.isRecording, !self.isPaused else { return }
-            self.audioRecorder?.updateMeters()
-            let db = self.audioRecorder?.averagePower(forChannel: 0) ?? -160
-            let normalized = max(0, min(1, (db + 50) / 50))
-            self.audioLevel = normalized
-            // Ring buffer: cap at 60 entries for memory efficiency
-            if self.audioLevelHistory.count >= 60 {
-                self.audioLevelHistory.removeFirst(self.audioLevelHistory.count - 29)
+
+        // Metering timer (8Hz — smooth waveform animation)
+        meteringTimer = Timer.scheduledTimer(withTimeInterval: 0.125, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self, self.isRecording, !self.isPaused else { return }
+                self.audioRecorder?.updateMeters()
+                let db = self.audioRecorder?.averagePower(forChannel: 0) ?? -160
+                // Wider normalization range: -60dB...-5dB → 0...1
+                // This captures quiet lecture rooms (-50dB) through loud speech (-10dB)
+                let normalized = max(0, min(1, (db + 60) / 55))
+                self.audioLevel = normalized
+                if self.audioLevelHistory.count >= 60 {
+                    self.audioLevelHistory.removeFirst(self.audioLevelHistory.count - 30)
+                }
+                self.audioLevelHistory.append(normalized)
             }
-            self.audioLevelHistory.append(normalized)
         }
         if let meteringTimer = meteringTimer {
             RunLoop.current.add(meteringTimer, forMode: .common)
         }
 
-        // Periodic background task renewal (every 30 seconds)
         setupBackgroundTaskRenewal()
-
-        AppLogger.debug("Timer started", category: .recording)
+        AppLogger.debug("Recording started", category: .recording)
     }
     
     /// Pause recording
     func pauseRecording() {
         guard isRecording, !isPaused else { return }
-        
+
         AppLogger.debug("Pausing recording", category: .recording)
         audioRecorder?.pause()
         isPaused = true
         pauseStartTime = Date()
-        
+
+        // Persist state immediately (safety net if app is killed while paused)
+        persistRecordingState()
         // Update Live Activity (reflect pause state)
         updateLiveActivity()
     }
-    
+
     /// Resume recording
     func resumeRecording() {
         guard isRecording, isPaused else { return }
-        
+
         AppLogger.debug("Resuming recording", category: .recording)
-        
+
         // Accumulate pause time
         if let pauseStart = pauseStartTime {
             let pauseDuration = Date().timeIntervalSince(pauseStart)
             pausedDuration += pauseDuration
             pauseStartTime = nil
         }
-        
+
         audioRecorder?.record()
         isPaused = false
-        
+
+        // Persist state immediately
+        persistRecordingState()
         // Update Live Activity (reflect resume state)
         updateLiveActivity()
     }
@@ -271,7 +571,8 @@ class RecordingService: NSObject, ObservableObject {
     /// Stop recording
     func stopRecording() -> URL? {
         guard isRecording else { return nil }
-        
+
+        isStoppingIntentionally = true
         audioRecorder?.stop()
         timer?.invalidate()
         timer = nil
@@ -285,23 +586,28 @@ class RecordingService: NSObject, ObservableObject {
         pauseStartTime = nil
         audioLevel = 0
         audioLevelHistory = Array(repeating: 0, count: 30)
-        
+
+        // Clear crash-recovery state (recording completed normally)
+        clearPersistedRecordingState()
+
         // End Live Activity
         endLiveActivity()
-        
+
         // End background task
         endBackgroundTask()
-        
+
         let url = recordingURL
         recordingURL = nil
         recordingStartTime = nil
         pausedDuration = 0
+        audioRecorder = nil // Release old recorder so stale delegates are ignored
 
         // Deactivate audio session
-        try? AVAudioSession.sharedInstance().setActive(false)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         isAudioSessionPrepared = false
 
-        // Validate recording file
+        // Validate recording file — but be lenient: return the URL even if
+        // we can't verify, since partial data is better than losing everything
         if let url = url {
             if !FileManager.default.fileExists(atPath: url.path) {
                 AppLogger.error("Recording file does not exist after stop: \(url.path)", category: .recording)
@@ -341,25 +647,19 @@ class RecordingService: NSObject, ObservableObject {
     }
     
     // MARK: - Background Task Management
-    
-    /// Periodic background task renewal (for long recording)
+
+    /// Background task renewal.
+    ///
+    /// IMPORTANT: `beginBackgroundTask` gives ~30 seconds of grace time.
+    /// You CANNOT extend it by creating new tasks in a loop — iOS ignores this.
+    /// The REAL background protection comes from `UIBackgroundModes: audio` +
+    /// an active AVAudioRecorder. The background task is only a safety net
+    /// for the brief window between entering background and the audio system
+    /// confirming our recording is still active.
     private func setupBackgroundTaskRenewal() {
-        // Renew background task every 30 seconds
-        backgroundTaskTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
-            guard let self = self, self.isRecording else {
-                return
-            }
-            
-            // End existing task
-            if self.backgroundTask != .invalid {
-                UIApplication.shared.endBackgroundTask(self.backgroundTask)
-            }
-            
-            // Start new task
-            self.setupBackgroundTask()
-            
-            AppLogger.debug("Background task renewed", category: .recording)
-        }
+        // No timer-based renewal — it doesn't work and wastes resources.
+        // The single background task from setupBackgroundTask() is sufficient.
+        // iOS audio background mode keeps us alive as long as we're recording.
     }
     
     // MARK: - Live Activities
@@ -371,70 +671,112 @@ class RecordingService: NSObject, ObservableObject {
             AppLogger.warning("Live Activities are not enabled", category: .recording)
             return
         }
-        
+
+        // Clean up any stale activities from previous sessions before starting a new one
+        cleanUpStaleLiveActivities()
+
         let attributes = LecsyWidgetAttributes(lectureTitle: currentLectureTitle)
         let contentState = LecsyWidgetAttributes.ContentState(
             recordingDuration: 0,
-            isRecording: true
+            isRecording: true,
+            recordingStartDate: recordingStartTime,
+            isPaused: false
         )
-        
+
         do {
             liveActivity = try Activity<LecsyWidgetAttributes>.request(
                 attributes: attributes,
                 contentState: contentState,
                 pushType: nil
             )
+            AppLogger.debug("Live Activity started (id: \(liveActivity?.id ?? "nil"))", category: .recording)
         } catch {
             AppLogger.error("Failed to start Live Activity: \(error)", category: .recording)
+        }
+    }
+
+    /// End all stale Live Activities left over from previous sessions (crash, force-quit, etc.)
+    private func cleanUpStaleLiveActivities() {
+        let staleActivities = Activity<LecsyWidgetAttributes>.activities
+        for activity in staleActivities {
+            // Don't end our current activity if we somehow still have a reference
+            if activity.id == liveActivity?.id { continue }
+            let finalState = LecsyWidgetAttributes.ContentState(
+                recordingDuration: 0,
+                isRecording: false,
+                recordingStartDate: nil,
+                isPaused: false
+            )
+            Task {
+                await activity.end(using: finalState, dismissalPolicy: .immediate)
+            }
+            AppLogger.debug("Cleaned up stale Live Activity: \(activity.id)", category: .recording)
         }
     }
     
     /// Update Live Activity
     private func updateLiveActivity() {
         guard let liveActivity = liveActivity else { return }
-        
+
+        // When recording (not paused), pass the effective start date so the
+        // system-driven Text(timerInterval:) can tick every second on its own.
+        let effectiveStartDate: Date? = if isRecording && !isPaused, let start = recordingStartTime {
+            start.addingTimeInterval(pausedDuration)
+        } else {
+            nil
+        }
+
         let contentState = LecsyWidgetAttributes.ContentState(
-            recordingDuration: recordingDuration,
-            isRecording: isRecording && !isPaused
+            recordingDuration: currentDuration,
+            isRecording: isRecording,
+            recordingStartDate: effectiveStartDate,
+            isPaused: isPaused
         )
-        
-        // Update asynchronously (execute on main thread)
-        // Update every 1 second to smoothly move lock screen stopwatch
+
         Task { @MainActor in
-            do {
-                await liveActivity.update(
-                    using: contentState,
-                    alertConfiguration: nil
-                )
-            } catch {
-                // If errors occur frequently, reduce update frequency
-                AppLogger.warning("Live Activity update error: \(error)", category: .recording)
-            }
+            await liveActivity.update(
+                using: contentState,
+                alertConfiguration: nil
+            )
         }
     }
     
     /// End Live Activity
     private func endLiveActivity() {
         guard let liveActivity = liveActivity else { return }
-        
+
         let contentState = LecsyWidgetAttributes.ContentState(
-            recordingDuration: recordingDuration,
-            isRecording: false
+            recordingDuration: currentDuration,
+            isRecording: false,
+            recordingStartDate: nil,
+            isPaused: false
         )
-        
+
         Task {
-            await liveActivity.end(using: contentState, dismissalPolicy: .immediate)
+            // Show final state briefly before dismissing so the user sees it ended
+            await liveActivity.end(
+                using: contentState,
+                dismissalPolicy: .after(Date().addingTimeInterval(4))
+            )
         }
-        
+
         self.liveActivity = nil
     }
     
     // MARK: - Background Task
-    
-    /// Start background task
+
+    /// Start background task.
+    /// The expiry handler is our LAST CHANCE before iOS suspends us.
+    /// Persist state so we can recover if we get killed.
     private func setupBackgroundTask() {
         backgroundTask = UIApplication.shared.beginBackgroundTask { [weak self] in
-            self?.endBackgroundTask()
+            guard let self = self else { return }
+            // Last chance — persist everything
+            if self.isRecording {
+                self.persistRecordingState()
+                AppLogger.warning("Background task expiring — state persisted for recovery", category: .recording)
+            }
+            self.endBackgroundTask()
         }
     }
     
@@ -472,41 +814,39 @@ class RecordingService: NSObject, ObservableObject {
 extension RecordingService: AVAudioRecorderDelegate {
     nonisolated func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
         Task { @MainActor in
-            if !flag {
-                isRecording = false
-                timer?.invalidate()
-                timer = nil
+            // Ignore callbacks from old recorders or intentional stops
+            if isStoppingIntentionally {
+                isStoppingIntentionally = false
+                return
+            }
+            guard recorder === audioRecorder else { return }
+
+            if !flag && isRecording {
+                // Recording failed unexpectedly — persist state for recovery
+                AppLogger.warning("Recorder finished unexpectedly (success=false)", category: .recording)
+                persistRecordingState()
             }
         }
     }
-    
+
     nonisolated func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
         Task { @MainActor in
             AppLogger.error("Recording encode error: \(error?.localizedDescription ?? "Unknown error")", category: .recording)
-            isRecording = false
-            timer?.invalidate()
-            timer = nil
-            meteringTimer?.invalidate()
-            meteringTimer = nil
-            backgroundTaskTimer?.invalidate()
-            backgroundTaskTimer = nil
-            endLiveActivity()
-            endBackgroundTask()
+            persistRecordingState()
         }
     }
-    
+
     nonisolated func audioRecorderBeginInterruption(_ recorder: AVAudioRecorder) {
         Task { @MainActor in
             AppLogger.debug("Recording interrupted (e.g., phone call)", category: .recording)
-            // Continue recording on interruption (iOS handles automatically)
+            persistRecordingState()
         }
     }
-    
+
     nonisolated func audioRecorderEndInterruption(_ recorder: AVAudioRecorder, withOptions flags: Int) {
         Task { @MainActor in
             AppLogger.debug("Recording interruption ended", category: .recording)
-            // Resume recording if needed
-            if isRecording {
+            if isRecording && !isPaused {
                 audioRecorder?.record()
             }
         }

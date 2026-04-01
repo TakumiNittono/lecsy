@@ -34,15 +34,15 @@ class SyncService: ObservableObject {
     
     /// Save to Web
     func saveToWeb(lecture: Lecture) async throws -> UUID {
-        print("🌐 SyncService: Starting saveToWeb - Lecture ID: \(lecture.id)")
+        AppLogger.debug("SyncService: Starting saveToWeb - Lecture ID: \(lecture.id)", category: .sync)
         
         guard await authService.isSessionValid else {
-            print("❌ SyncService: Not authenticated")
+            AppLogger.error("SyncService: Not authenticated", category: .sync)
             throw SyncError.notAuthenticated
         }
-        
+
         guard let transcriptText = lecture.transcriptText, !transcriptText.isEmpty else {
-            print("❌ SyncService: No transcript text available")
+            AppLogger.error("SyncService: No transcript text available", category: .sync)
             throw SyncError.noTranscript
         }
         
@@ -70,15 +70,14 @@ class SyncService: ObservableObject {
                 app_version: Bundle.main.appVersion ?? "1.0.0"
             )
             
-            print("🌐 SyncService: Calling Edge Function...")
-            print("   - Title: \(request.title)")
-            print("   - Content length: \(request.content.count) characters")
-            print("   - Language: \(request.language ?? "nil")")
+            AppLogger.debug("SyncService: Calling Edge Function...", category: .sync)
+            AppLogger.debug("SyncService: Title: \(request.title), Content length: \(request.content.count) characters, Language: \(request.language ?? "nil")", category: .sync)
             let config = SupabaseConfig.shared
-            print("   - URL: \(config.supabaseURL.absoluteString)/functions/v1/save-transcript")
+            AppLogger.debug("SyncService: URL: \(config.supabaseURL.absoluteString)/functions/v1/save-transcript", category: .sync)
             
             // Retry logic (max 3 times)
             var lastError: Error?
+            var lastHTTPStatusCode: Int?
             let maxRetries = 3
             let retryDelay: TimeInterval = 2.0 // 2 seconds
             
@@ -86,26 +85,23 @@ class SyncService: ObservableObject {
                 do {
                     // Check if session is valid
                     guard await authService.isSessionValid else {
-                        print("⚠️ SyncService: Session is invalid")
+                        AppLogger.warning("SyncService: Session is invalid", category: .sync)
                         throw SyncError.notAuthenticated
                     }
-                    
+
                     // Refresh session to get latest token
-                    print("🌐 SyncService: Refreshing session...")
+                    AppLogger.debug("SyncService: Refreshing session...", category: .sync)
                     let refreshSuccess = await authService.refreshSession()
                     if !refreshSuccess {
-                        print("⚠️ SyncService: Session refresh failed")
+                        AppLogger.warning("SyncService: Session refresh failed", category: .sync)
                         // リフレッシュ失敗でもアクセストークンが有効かもしれないので続行
                     }
                     
                     // Get access token (refreshSession()でキャッシュされた最新トークンを取得)
                     guard let accessToken = await authService.accessToken else {
-                        print("⚠️ SyncService: Cannot get access token")
+                        AppLogger.warning("SyncService: Cannot get access token", category: .sync)
                         throw SyncError.notAuthenticated
                     }
-                    
-                    // トークンのデバッグ情報を出力
-                    AppLogger.logToken("Access Token", token: accessToken, category: .sync)
                     
                     // Call Edge Function using URLRequest directly
                     // Explicitly set Authorization header
@@ -124,19 +120,18 @@ class SyncService: ObservableObject {
                     urlRequest.setValue(config.supabaseAnonKey, forHTTPHeaderField: "apikey")
                     
                     AppLogger.debug("Authorization header configured", category: .sync)
-                    print("🌐 SyncService: Headers configured - Authorization: \(authHeader.prefix(30))..., apikey: \(config.supabaseAnonKey.prefix(20))...")
                     
                     let encoder = JSONEncoder()
                     urlRequest.httpBody = try encoder.encode(request)
                     
-                    print("🌐 SyncService: Sending HTTP request...")
+                    AppLogger.debug("SyncService: Sending HTTP request...", category: .sync)
                     let (data, response) = try await URLSession.shared.data(for: urlRequest)
                     
                     guard let httpResponse = response as? HTTPURLResponse else {
                         throw SyncError.uploadFailed("Invalid response type")
                     }
                     
-                    print("🌐 SyncService: HTTP response received - Status: \(httpResponse.statusCode)")
+                    AppLogger.debug("SyncService: HTTP response received - Status: \(httpResponse.statusCode)", category: .sync)
                     
                     guard (200...299).contains(httpResponse.statusCode) else {
                         // Parse error response to get detailed error message
@@ -147,14 +142,15 @@ class SyncService: ObservableObject {
                         } else if let errorString = String(data: data, encoding: .utf8) {
                             errorMessage = errorString
                         }
-                        print("❌ SyncService: HTTP error - Status: \(httpResponse.statusCode), Message: \(errorMessage)")
+                        AppLogger.error("SyncService: HTTP error - Status: \(httpResponse.statusCode), Message: \(errorMessage)", category: .sync)
+                        lastHTTPStatusCode = httpResponse.statusCode
                         throw SyncError.uploadFailed("Edge Function returned a non-2xx status code: \(httpResponse.statusCode)")
                     }
                     
                     let decoder = JSONDecoder()
                     let responseData: SaveTranscriptResponse = try decoder.decode(SaveTranscriptResponse.self, from: data)
                     
-                    print("✅ SyncService: Web save successful - Web ID: \(responseData.id)")
+                    AppLogger.info("SyncService: Web save successful - Web ID: \(responseData.id)", category: .sync)
                     
                     // Mark as saved
                     lectureStore.markAsSavedToWeb(lecture, webId: responseData.id)
@@ -163,42 +159,43 @@ class SyncService: ObservableObject {
                 } catch {
                     lastError = error
                     let errorMessage = error.localizedDescription
-                    print("❌ SyncService: Web保存エラー (試行 \(attempt)/\(maxRetries)) - \(errorMessage)")
+                    AppLogger.error("SyncService: Web save error (attempt \(attempt)/\(maxRetries)) - \(errorMessage)", category: .sync)
                     
                     // 401エラー（認証エラー）の場合、セッションをリフレッシュして再試行
-                    if (errorMessage.contains("401") || errorMessage.contains("Unauthorized") || errorMessage.contains("Invalid JWT")) && attempt < maxRetries {
-                        print("⚠️ SyncService: 認証エラーが発生しました。セッションをリフレッシュして再試行します...")
+                    let isAuthError = lastHTTPStatusCode == 401 || lastHTTPStatusCode == 403
+                    if isAuthError && attempt < maxRetries {
+                        AppLogger.warning("SyncService: Authentication error occurred (HTTP \(lastHTTPStatusCode ?? 0)). Refreshing session and retrying...", category: .sync)
+                        lastHTTPStatusCode = nil
                         await authService.refreshSession()
                         try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
                         continue
                     }
-                    
-                    // If 401 error and max retries reached
-                    if errorMessage.contains("401") || errorMessage.contains("Unauthorized") || errorMessage.contains("Invalid JWT") {
-                        print("⚠️ SyncService: Stopping retry due to authentication error")
+
+                    // If auth error and max retries reached
+                    if isAuthError {
+                        AppLogger.warning("SyncService: Stopping retry due to authentication error (HTTP \(lastHTTPStatusCode ?? 0))", category: .sync)
                         break
                     }
                     
                     if let urlError = error as? URLError {
-                        print("   - URL Error Code: \(urlError.code.rawValue)")
-                        print("   - URL Error Description: \(urlError.localizedDescription)")
-                        
+                        AppLogger.debug("SyncService: URL Error Code: \(urlError.code.rawValue), Description: \(urlError.localizedDescription)", category: .sync)
+
                         // ネットワークエラーの場合のみリトライ
                         if urlError.code == .networkConnectionLost || 
                            urlError.code == .timedOut ||
                            urlError.code == .notConnectedToInternet {
                             
                             if attempt < maxRetries {
-                                print("🌐 SyncService: \(retryDelay)秒後にリトライします...")
+                                AppLogger.debug("SyncService: Retrying in \(retryDelay) seconds...", category: .sync)
                                 try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
                                 continue
                             }
                         }
                     }
-                    
+
                     // その他のエラーもリトライを試みる（サーバーエラーなど）
                     if attempt < maxRetries {
-                        print("🌐 SyncService: \(retryDelay)秒後にリトライします...")
+                        AppLogger.debug("SyncService: Retrying in \(retryDelay) seconds...", category: .sync)
                         try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
                         continue
                     }
@@ -210,15 +207,14 @@ class SyncService: ObservableObject {
             
             // すべてのリトライが失敗した場合
             let errorMessage = lastError?.localizedDescription ?? "Unknown error"
-            print("❌ SyncService: Web保存失敗（全\(maxRetries)回の試行が失敗）")
+            AppLogger.error("SyncService: Web save failed (all \(maxRetries) attempts failed)", category: .sync)
             lastSyncError = errorMessage
             throw SyncError.uploadFailed(errorMessage)
         } catch {
             let errorMessage = error.localizedDescription
-            print("❌ SyncService: Web保存エラー - \(errorMessage)")
+            AppLogger.error("SyncService: Web save error - \(errorMessage)", category: .sync)
             if let urlError = error as? URLError {
-                print("   - URL Error Code: \(urlError.code.rawValue)")
-                print("   - URL Error Description: \(urlError.localizedDescription)")
+                AppLogger.debug("SyncService: URL Error Code: \(urlError.code.rawValue), Description: \(urlError.localizedDescription)", category: .sync)
             }
             lastSyncError = errorMessage
             throw SyncError.uploadFailed(errorMessage)
@@ -230,23 +226,23 @@ class SyncService: ObservableObject {
         let pendingLectures = lectureStore.getPendingUploads()
         
         guard !pendingLectures.isEmpty else {
-            print("🌐 SyncService: No pending uploads")
+            AppLogger.debug("SyncService: No pending uploads", category: .sync)
             return
         }
         
-        print("🌐 SyncService: Retrying pending uploads - \(pendingLectures.count) items")
+        AppLogger.debug("SyncService: Retrying pending uploads - \(pendingLectures.count) items", category: .sync)
         isSyncing = true
         
         var successCount = 0
         var failureCount = 0
         
         for (index, lecture) in pendingLectures.enumerated() {
-            print("🌐 SyncService: [\(index + 1)/\(pendingLectures.count)] Uploading...")
+            AppLogger.debug("SyncService: [\(index + 1)/\(pendingLectures.count)] Uploading...", category: .sync)
             do {
                 _ = try await saveToWeb(lecture: lecture)
                 successCount += 1
             } catch {
-                print("❌ SyncService: Upload failed for lecture \(lecture.id): \(error)")
+                AppLogger.error("SyncService: Upload failed for lecture \(lecture.id): \(error)", category: .sync)
                 failureCount += 1
                 // Continue with next lecture even if error occurs
             }
@@ -254,7 +250,7 @@ class SyncService: ObservableObject {
         
         isSyncing = false
         updatePendingCount()
-        print("🌐 SyncService: Retry completed - Success: \(successCount), Failed: \(failureCount)")
+        AppLogger.info("SyncService: Retry completed - Success: \(successCount), Failed: \(failureCount)", category: .sync)
     }
     
     /// 保留中の数を更新
@@ -265,32 +261,27 @@ class SyncService: ObservableObject {
     /// Web側のタイトルを更新
     func updateTitleOnWeb(lecture: Lecture, newTitle: String) async throws {
         guard let webId = lecture.webTranscriptId else {
-            print("⚠️ SyncService: No Web ID - Skipping title update")
+            AppLogger.warning("SyncService: No Web ID - Skipping title update", category: .sync)
             return
         }
         
         guard await authService.isSessionValid else {
-            print("❌ SyncService: Not authenticated")
+            AppLogger.error("SyncService: Not authenticated", category: .sync)
             throw SyncError.notAuthenticated
         }
-        
-        print("🌐 SyncService: Starting Web title update - Web ID: \(webId)")
+
+        AppLogger.debug("SyncService: Starting Web title update - Web ID: \(webId)", category: .sync)
         
         // Refresh session to get latest token
         await authService.refreshSession()
         
         guard let accessToken = await authService.accessToken else {
-            print("⚠️ SyncService: Cannot get access token")
+            AppLogger.warning("SyncService: Cannot get access token", category: .sync)
             throw SyncError.notAuthenticated
         }
-        
+
         // Call Web API to update title
-        let config = SupabaseConfig.shared
-        // Use Web app API endpoint
-        guard let webBaseURL = URL(string: "https://lecsy.vercel.app") else {
-            throw SyncError.uploadFailed("Invalid web URL")
-        }
-        let updateURL = webBaseURL.appendingPathComponent("api/transcripts/\(webId.uuidString)/title")
+        let updateURL = SupabaseConfig.webBaseURL.appendingPathComponent("api/transcripts/\(webId.uuidString)/title")
         
         var urlRequest = URLRequest(url: updateURL)
         urlRequest.httpMethod = "PATCH"
@@ -307,10 +298,10 @@ class SyncService: ObservableObject {
         }
         
         if httpResponse.statusCode == 200 {
-            print("✅ SyncService: Web title update successful")
+            AppLogger.info("SyncService: Web title update successful", category: .sync)
         } else {
             let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-            print("❌ SyncService: Web title update failed - Status: \(httpResponse.statusCode), Message: \(errorMessage)")
+            AppLogger.error("SyncService: Web title update failed - Status: \(httpResponse.statusCode), Message: \(errorMessage)", category: .sync)
             throw SyncError.uploadFailed("Failed to update title: \(errorMessage)")
         }
     }
@@ -318,17 +309,17 @@ class SyncService: ObservableObject {
     /// Get latest titles from Web and update iOS app lectures
     func syncTitlesFromWeb() async throws {
         guard await authService.isSessionValid else {
-            print("⚠️ SyncService: 認証されていません - タイトル同期をスキップ")
+            AppLogger.warning("SyncService: Not authenticated - Skipping title sync", category: .sync)
             return
         }
         
-        print("🌐 SyncService: Webからタイトル同期開始")
+        AppLogger.debug("SyncService: Starting title sync from Web", category: .sync)
         
         // セッションをリフレッシュして最新のトークンを取得
         await authService.refreshSession()
         
         guard let accessToken = await authService.accessToken else {
-            print("⚠️ SyncService: アクセストークンが取得できません")
+            AppLogger.warning("SyncService: Cannot get access token", category: .sync)
             throw SyncError.notAuthenticated
         }
         
@@ -364,7 +355,7 @@ class SyncService: ObservableObject {
         if httpResponse.statusCode == 200 {
             // レスポンスデータを確認
             if let responseString = String(data: data, encoding: .utf8) {
-                print("🔍 SyncService: レスポンスデータ - \(responseString.prefix(200))...")
+                AppLogger.debug("SyncService: Response data - \(responseString.prefix(200))...", category: .sync)
             }
             
             let decoder = JSONDecoder()
@@ -373,25 +364,25 @@ class SyncService: ObservableObject {
             let transcripts: [WebTranscript]
             do {
                 transcripts = try decoder.decode([WebTranscript].self, from: data)
-                print("✅ SyncService: Webから \(transcripts.count) 件のtranscriptsを取得")
+                AppLogger.info("SyncService: Fetched \(transcripts.count) transcripts from Web", category: .sync)
             } catch {
-                print("❌ SyncService: JSONデコードエラー - \(error.localizedDescription)")
+                AppLogger.error("SyncService: JSON decode error - \(error.localizedDescription)", category: .sync)
                 if let decodingError = error as? DecodingError {
                     switch decodingError {
                     case .typeMismatch(let type, let context):
-                        print("   - Type mismatch: \(type), Context: \(context)")
+                        AppLogger.debug("SyncService: Type mismatch: \(type), Context: \(context)", category: .sync)
                     case .valueNotFound(let type, let context):
-                        print("   - Value not found: \(type), Context: \(context)")
+                        AppLogger.debug("SyncService: Value not found: \(type), Context: \(context)", category: .sync)
                     case .keyNotFound(let key, let context):
-                        print("   - Key not found: \(key), Context: \(context)")
+                        AppLogger.debug("SyncService: Key not found: \(key), Context: \(context)", category: .sync)
                     case .dataCorrupted(let context):
-                        print("   - Data corrupted: \(context)")
+                        AppLogger.debug("SyncService: Data corrupted: \(context)", category: .sync)
                     @unknown default:
-                        print("   - Unknown decoding error")
+                        AppLogger.debug("SyncService: Unknown decoding error", category: .sync)
                     }
                 }
                 // 空の配列を返してエラーを無視（タイトル同期はオプショナルな機能）
-                print("⚠️ SyncService: タイトル同期をスキップします")
+                AppLogger.warning("SyncService: Skipping title sync", category: .sync)
                 return
             }
             
@@ -407,15 +398,15 @@ class SyncService: ObservableObject {
                         updatedLecture.title = webTitle
                         lectureStore.updateLecture(updatedLecture)
                         updatedCount += 1
-                        print("✅ SyncService: タイトル更新 - ID: \(transcript.id), Title: \(webTitle)")
+                        AppLogger.info("SyncService: Title updated - ID: \(transcript.id), Title: \(webTitle)", category: .sync)
                     }
                 }
             }
             
-            print("✅ SyncService: タイトル同期完了 - \(updatedCount) 件更新")
+            AppLogger.info("SyncService: Title sync completed - \(updatedCount) items updated", category: .sync)
         } else {
             let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-            print("❌ SyncService: Webタイトル取得失敗 - Status: \(httpResponse.statusCode), Message: \(errorMessage)")
+            AppLogger.error("SyncService: Web title fetch failed - Status: \(httpResponse.statusCode), Message: \(errorMessage)", category: .sync)
             throw SyncError.uploadFailed("Failed to fetch titles: \(errorMessage)")
         }
     }

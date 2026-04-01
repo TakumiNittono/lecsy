@@ -30,9 +30,27 @@ class AuthService: NSObject, ObservableObject {
     private var currentNonce: String?
     private var oauthSession: ASWebAuthenticationSession?
     
-    // Save tokens so they can be used even if setSession returns an error
-    private var cachedAccessToken: String?
-    private var cachedRefreshToken: String?
+    // Cached tokens — read from Keychain on demand, written through persistSession()
+    private var cachedAccessToken: String? {
+        get { KeychainService.read(key: accessTokenKey) }
+        set {
+            if let value = newValue {
+                KeychainService.save(key: accessTokenKey, value: value)
+            } else {
+                KeychainService.delete(key: accessTokenKey)
+            }
+        }
+    }
+    private var cachedRefreshToken: String? {
+        get { KeychainService.read(key: refreshTokenKey) }
+        set {
+            if let value = newValue {
+                KeychainService.save(key: refreshTokenKey, value: value)
+            } else {
+                KeychainService.delete(key: refreshTokenKey)
+            }
+        }
+    }
     
     // Keys for session persistence
     private let accessTokenKey = "lecsy.cachedAccessToken"
@@ -210,28 +228,27 @@ class AuthService: NSObject, ObservableObject {
         let migrationKey = "lecsy.keychainMigrationDone"
         guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
 
-        if let token = UserDefaults.standard.string(forKey: accessTokenKey) {
-            KeychainService.save(key: accessTokenKey, value: token)
-            UserDefaults.standard.removeObject(forKey: accessTokenKey)
-        }
-        if let token = UserDefaults.standard.string(forKey: refreshTokenKey) {
-            KeychainService.save(key: refreshTokenKey, value: token)
-            UserDefaults.standard.removeObject(forKey: refreshTokenKey)
-        }
-        if let value = UserDefaults.standard.string(forKey: userIdKey) {
-            KeychainService.save(key: userIdKey, value: value)
-            UserDefaults.standard.removeObject(forKey: userIdKey)
-        }
-        if let value = UserDefaults.standard.string(forKey: userEmailKey) {
-            KeychainService.save(key: userEmailKey, value: value)
-            UserDefaults.standard.removeObject(forKey: userEmailKey)
-        }
-        if let value = UserDefaults.standard.string(forKey: userNameKey) {
-            KeychainService.save(key: userNameKey, value: value)
-            UserDefaults.standard.removeObject(forKey: userNameKey)
+        // Migrate each key: only delete from UserDefaults after confirming Keychain write succeeded
+        let keysToMigrate = [accessTokenKey, refreshTokenKey, userIdKey, userEmailKey, userNameKey]
+        var allSucceeded = true
+
+        for key in keysToMigrate {
+            if let value = UserDefaults.standard.string(forKey: key) {
+                KeychainService.save(key: key, value: value)
+                // Verify the write succeeded by reading back
+                if KeychainService.read(key: key) != nil {
+                    UserDefaults.standard.removeObject(forKey: key)
+                } else {
+                    AppLogger.error("AuthService: Keychain migration failed for key \(key) - keeping UserDefaults copy", category: .auth)
+                    allSucceeded = false
+                }
+            }
         }
 
-        UserDefaults.standard.set(true, forKey: migrationKey)
+        // Only mark migration as done if all keys migrated successfully
+        if allSucceeded {
+            UserDefaults.standard.set(true, forKey: migrationKey)
+        }
     }
     
     /// セッションを永続化
@@ -289,9 +306,9 @@ class AuthService: NSObject, ObservableObject {
             )
         } catch {
             AppLogger.warning("AuthService: セッション確認失敗 - \(error.localizedDescription)", category: .auth)
-            // セッション確認に失敗した場合でも、キャッシュされたトークンがある場合は認証状態を維持
-            if cachedAccessToken != nil {
-                AppLogger.info("AuthService: キャッシュされたトークンを使用して認証状態を維持", category: .auth)
+            // セッション確認に失敗した場合でも、キャッシュされたトークンが有効なら認証状態を維持
+            if let cachedToken = cachedAccessToken, isTokenValid(cachedToken) {
+                AppLogger.info("AuthService: キャッシュされたトークンを使用して認証状態を維持（有効期限内）", category: .auth)
                 isAuthenticated = true
             } else {
                 isAuthenticated = false
@@ -336,6 +353,7 @@ class AuthService: NSObject, ObservableObject {
                     
                     if let error = error {
                         AppLogger.error("AuthService: OAuthエラー - \(error.localizedDescription)", category: .auth)
+                        self.oauthSession = nil
                         self.isLoading = false
                         self.errorMessage = error.localizedDescription
                         return
@@ -343,22 +361,26 @@ class AuthService: NSObject, ObservableObject {
                     
                     guard let callbackURL = callbackURL else {
                         AppLogger.error("AuthService: Callback URL is nil", category: .auth)
+                        self.oauthSession = nil
                         self.isLoading = false
                         self.errorMessage = "Callback URL is nil"
                         return
                     }
                     
                     AppLogger.info("AuthService: コールバックURL受信", category: .auth)
-                    
+
+                    // Clear OAuth session reference to prevent memory leak
+                    self.oauthSession = nil
+
                     // URLからアクセストークンを抽出してセッションを設定
                     await self.handleOAuthCallback(callbackURL: callbackURL)
                 }
             }
-            
+
             session.presentationContextProvider = self
             session.prefersEphemeralWebBrowserSession = false
-            
-            // Keep session (prevent deallocation)
+
+            // Keep session alive during auth flow (cleared in callback above)
             self.oauthSession = session
             
             let started = session.start()
@@ -818,7 +840,8 @@ class AuthService: NSObject, ObservableObject {
                 var random: UInt8 = 0
                 let errorCode = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
                 if errorCode != errSecSuccess {
-                    fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
+                    // Fall back to arc4random if secure random fails
+                    random = UInt8(arc4random_uniform(256))
                 }
                 return random
             }
@@ -1419,18 +1442,7 @@ extension AuthService: ASAuthorizationControllerPresentationContextProviding {
             }
         }
         
-        // 4. 従来のAPIを使用（非推奨だが互換性のため）
-        if let window = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) {
-            AppLogger.debug("AuthService: Found key window using deprecated API", category: .auth)
-            return window
-        }
-        
-        if let window = UIApplication.shared.windows.first {
-            AppLogger.debug("AuthService: Using first window from deprecated API", category: .auth)
-            return window
-        }
-        
-        // 5. 絶対にウィンドウが必要なので、新しいウィンドウを作成（これは最後の手段）
+        // 4. 絶対にウィンドウが必要なので、新しいウィンドウを作成（これは最後の手段）
         AppLogger.warning("AuthService: No window found, creating fallback window - this may cause issues", category: .auth)
         // 最初のシーンを使って新しいウィンドウを作成
         if let windowScene = connectedScenes.first as? UIWindowScene {
@@ -1494,16 +1506,7 @@ extension AuthService: ASWebAuthenticationPresentationContextProviding {
             }
         }
         
-        // 4. 従来のAPIを使用
-        if let window = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) {
-            return window
-        }
-        
-        if let window = UIApplication.shared.windows.first {
-            return window
-        }
-        
-        // 5. フォールバック
+        // 4. フォールバック
         AppLogger.warning("AuthService: No window found for Web Auth Session", category: .auth)
         if let windowScene = connectedScenes.first as? UIWindowScene {
             let fallbackWindow = UIWindow(windowScene: windowScene)

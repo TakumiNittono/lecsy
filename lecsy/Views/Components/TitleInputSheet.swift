@@ -36,9 +36,11 @@ struct TitleInputSheet: View {
                 VStack(spacing: 12) {
                     TextField("Lecture title", text: $title)
                         .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 500)
 
                     TextField("Course (optional)", text: $courseName)
                         .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 500)
                         .onChange(of: courseName) { _, newValue in
                             showCourseSuggestions = !newValue.isEmpty && !filteredCourses.isEmpty
                         }
@@ -93,6 +95,7 @@ struct TitleInputSheet: View {
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
+                .frame(maxWidth: 500)
                 .padding(.horizontal, 24)
 
                 Button("Skip") {
