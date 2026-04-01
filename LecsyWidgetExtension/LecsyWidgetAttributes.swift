@@ -1,8 +1,8 @@
 //
 //  LecsyWidgetAttributes.swift
-//  lecsy
+//  LecsyWidget
 //
-//  Shared with widget extension target — this file is the SINGLE source of truth.
+//  Shared with main app target — this file is the SINGLE source of truth.
 //  Both the app target and widget extension target must include this file
 //  in their respective "Compile Sources" build phases.
 //

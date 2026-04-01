@@ -17,8 +17,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "CDF43BC92F2939B2003A1A08"
-               BuildableName = "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension.appex"
-               BlueprintName = "LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidget LecsyWidgetExtension"
+               BuildableName = "LecsyWidgetExtension.appex"
+               BlueprintName = "LecsyWidgetExtension"
                ReferencedContainer = "container:lecsy.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
