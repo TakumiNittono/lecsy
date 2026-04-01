@@ -36,6 +36,14 @@ lecsy/WhisperKitModels/
 supabase/.temp/
 supabase/.branches/
 
+# Claude Code agents
+.agents/
+
+# Promo / assets (large files)
+gaozou/
+promo-video/node_modules/
+promo-video/out/
+
 # IDE
 .idea/
 .vscode/
@@ -48,3 +56,6 @@ supabase/.branches/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Skills
+skills-lock.json
