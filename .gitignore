@@ -2,6 +2,9 @@
 .env
 .env.local
 .env.*.local
+.env.local.*
+*/.env.local
+*/.env.local.*
 supabase/.env
 
 # macOS
@@ -25,6 +28,9 @@ lecsy/Config/Release.xcconfig
 
 # Keep example file
 !lecsy/Config/*.xcconfig.example
+
+# WhisperKit bundled model (downloaded via scripts/download_model.sh)
+lecsy/WhisperKitModels/
 
 # Supabase
 supabase/.temp/
