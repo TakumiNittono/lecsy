@@ -1,5 +1,5 @@
-import { createClient } from '@/utils/supabase/server'
 import { authenticateRequest, validateOrigin } from '@/utils/api/auth'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/
@@ -44,21 +44,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Slug must contain only lowercase letters, numbers, and hyphens' }, { status: 400 })
   }
 
-  const supabase = createClient()
+  // service_roleでRLSバイパス（管理者認証済みなので安全）
+  const admin = createAdminClient()
 
-  // DB関数で組織作成 + owner登録をアトミックに実行（RLSの鶏卵問題を回避）
-  const { error: rpcError } = await supabase.rpc('create_organization', {
-    p_name: name.trim(),
-    p_slug: finalSlug,
-    p_type: type,
-  })
+  // 組織作成
+  const { data: org, error: orgError } = await admin
+    .from('organizations')
+    .insert({ name: name.trim(), slug: finalSlug, type })
+    .select('id')
+    .single()
 
-  if (rpcError) {
-    console.error('Failed to create organization:', rpcError)
-    if (rpcError.message?.includes('duplicate') || rpcError.message?.includes('unique')) {
+  if (orgError) {
+    console.error('Failed to create organization:', orgError)
+    if (orgError.message?.includes('duplicate') || orgError.message?.includes('unique')) {
       return NextResponse.json({ error: 'This slug is already taken' }, { status: 409 })
     }
     return NextResponse.json({ error: 'Failed to create organization' }, { status: 500 })
+  }
+
+  // 作成者をownerとして登録
+  const { error: memberError } = await admin
+    .from('organization_members')
+    .insert({ org_id: org.id, user_id: user!.id, role: 'owner' })
+
+  if (memberError) {
+    console.error('Failed to add owner:', memberError)
+    await admin.from('organizations').delete().eq('id', org.id)
+    return NextResponse.json({ error: 'Failed to set up organization' }, { status: 500 })
   }
 
   return NextResponse.json({ slug: finalSlug }, { status: 201 })

@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 
@@ -14,14 +15,17 @@ export default async function AdminPage() {
     redirect('/app')
   }
 
+  // service_roleクライアント（RLSバイパス）で全データ取得
+  const admin = createAdminClient()
+
   // 全組織を取得
-  const { data: orgs } = await supabase
+  const { data: orgs } = await admin
     .from('organizations')
     .select('*')
     .order('created_at', { ascending: false })
 
   // 全メンバー数を組織ごとにカウント
-  const { data: memberCounts } = await supabase
+  const { data: memberCounts } = await admin
     .from('organization_members')
     .select('org_id')
 
@@ -30,13 +34,13 @@ export default async function AdminPage() {
     countByOrg[m.org_id] = (countByOrg[m.org_id] || 0) + 1
   })
 
-  // 全ユーザー数
-  const { data: allTranscripts } = await supabase
+  // 全文字起こし数
+  const { count: transcriptCount } = await admin
     .from('transcripts')
-    .select('id', { count: 'exact', head: true })
+    .select('*', { count: 'exact', head: true })
 
   // 全サブスクリプション
-  const { data: subs } = await supabase
+  const { data: subs } = await admin
     .from('subscriptions')
     .select('status')
 
@@ -126,7 +130,7 @@ export default async function AdminPage() {
                 </svg>
               </div>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{allTranscripts?.length ?? 0}</p>
+            <p className="text-3xl font-bold text-gray-900">{transcriptCount ?? 0}</p>
           </div>
         </div>
 
