@@ -100,8 +100,8 @@ export async function GET(
     }
   }
 
-  // Build response
-  const usage = members.map((m: any) => {
+  // Build response matching UsageStats component expectations
+  const membersList = members.map((m: any) => {
     const stats = userStatsMap.get(m.user_id)
     const userInfo = userInfoMap.get(m.user_id)
     return {
@@ -109,12 +109,26 @@ export async function GET(
       email: userInfo?.email || '',
       name: userInfo?.name || '',
       role: m.role,
-      transcript_count: stats?.transcript_count || 0,
+      recordings: stats?.transcript_count || 0,
       total_duration: stats?.total_duration || 0,
       last_used: stats?.last_used || null,
       languages: stats ? Array.from(stats.languages) : [],
     }
   })
 
-  return NextResponse.json({ usage })
+  const totalRecordings = membersList.reduce((s, m) => s + m.recordings, 0)
+  const totalDuration = membersList.reduce((s, m) => s + m.total_duration, 0)
+  const activeUsers = membersList.filter((m) => m.recordings > 0).length
+  const totalUsers = membersList.length
+
+  return NextResponse.json({
+    summary: {
+      total_recordings: totalRecordings,
+      total_duration: totalDuration,
+      active_users: activeUsers,
+      total_users: totalUsers,
+      avg_duration_per_user: totalUsers > 0 ? Math.round(totalDuration / totalUsers) : 0,
+    },
+    members: membersList,
+  })
 }
