@@ -3,6 +3,7 @@ import { authenticateRequest, validateOrigin } from '@/utils/api/auth'
 import { NextResponse } from 'next/server'
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/
+const ADMIN_EMAIL = 'nittonotakumi@gmail.com'
 
 export async function POST(request: Request) {
   if (!validateOrigin(request)) {
@@ -11,6 +12,11 @@ export async function POST(request: Request) {
 
   const { user, error: authError } = await authenticateRequest()
   if (authError) return authError
+
+  // スーパー管理者のみ組織作成可能
+  if (user!.email !== ADMIN_EMAIL) {
+    return NextResponse.json({ error: 'Only platform administrators can create organizations' }, { status: 403 })
+  }
 
   const body = await request.json()
   const { name, type, slug } = body

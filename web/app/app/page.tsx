@@ -186,8 +186,8 @@ export default async function AppPage() {
           />
         </div>
 
-        {/* Organizations */}
-        {userOrgs.length > 0 ? (
+        {/* Organizations — 所属している場合のみ表示 */}
+        {userOrgs.length > 0 && (
           <div className="mb-8">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Organizations</h2>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -207,28 +207,7 @@ export default async function AppPage() {
                   <span className="text-xs text-gray-400 capitalize mt-1 inline-block">{membership.org.plan} plan</span>
                 </Link>
               ))}
-              <Link
-                href="/org/new"
-                className="bg-white rounded-xl shadow-sm border border-dashed border-gray-300 p-5 hover:shadow-md transition-shadow flex items-center justify-center text-gray-500 hover:text-blue-600"
-              >
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                New Organization
-              </Link>
             </div>
-          </div>
-        ) : (
-          <div className="mb-8">
-            <Link
-              href="/org/new"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Create Organization
-            </Link>
           </div>
         )}
 
