@@ -115,13 +115,18 @@ export default async function AppPage() {
           <div className="flex items-center gap-4">
             {userOrgs.length > 0 && (
               <Link href={`/org/${userOrgs[0].org.slug}`} className="text-sm text-blue-600 hover:text-blue-800 transition-colors font-medium">
-                Admin
+                Org Admin
               </Link>
             )}
             {isWhitelisted && (
-              <Link href="/app/reports" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
-                Reports
-              </Link>
+              <>
+                <Link href="/admin" className="text-sm text-red-600 hover:text-red-800 transition-colors font-medium">
+                  Super Admin
+                </Link>
+                <Link href="/app/reports" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                  Reports
+                </Link>
+              </>
             )}
             <span className="text-gray-700 text-sm">{user.email}</span>
             <form action={handleSignOut}>

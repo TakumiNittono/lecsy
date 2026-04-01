@@ -40,48 +40,20 @@ export async function POST(request: Request) {
 
   const supabase = createClient()
 
-  // slug重複チェック
-  const { data: existing } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('slug', finalSlug)
-    .single()
+  // DB関数で組織作成 + owner登録をアトミックに実行（RLSの鶏卵問題を回避）
+  const { error: rpcError } = await supabase.rpc('create_organization', {
+    p_name: name.trim(),
+    p_slug: finalSlug,
+    p_type: type,
+  })
 
-  if (existing) {
-    return NextResponse.json({ error: 'This slug is already taken' }, { status: 409 })
-  }
-
-  // 組織作成
-  const { data: org, error: orgError } = await supabase
-    .from('organizations')
-    .insert({
-      name: name.trim(),
-      slug: finalSlug,
-      type,
-    })
-    .select('id, slug')
-    .single()
-
-  if (orgError) {
-    console.error('Failed to create organization:', orgError)
+  if (rpcError) {
+    console.error('Failed to create organization:', rpcError)
+    if (rpcError.message?.includes('duplicate') || rpcError.message?.includes('unique')) {
+      return NextResponse.json({ error: 'This slug is already taken' }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Failed to create organization' }, { status: 500 })
   }
 
-  // 作成者をownerとして登録
-  const { error: memberError } = await supabase
-    .from('organization_members')
-    .insert({
-      org_id: org.id,
-      user_id: user!.id,
-      role: 'owner',
-    })
-
-  if (memberError) {
-    console.error('Failed to add owner:', memberError)
-    // ロールバック: 組織を削除
-    await supabase.from('organizations').delete().eq('id', org.id)
-    return NextResponse.json({ error: 'Failed to set up organization' }, { status: 500 })
-  }
-
-  return NextResponse.json({ slug: org.slug }, { status: 201 })
+  return NextResponse.json({ slug: finalSlug }, { status: 201 })
 }
