@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
+import BulkInviteUpload from './BulkInviteUpload'
 
 interface Invite {
   id: string
@@ -26,8 +27,19 @@ export default function InviteManager({ slug, initialInvites, appUrl, orgName }:
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [generatedLink, setGeneratedLink] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const qrRef = useRef<HTMLDivElement>(null)
+
+  const refreshInvites = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/org/${slug}/invites`)
+      const data = await res.json()
+      if (res.ok && data.invites) {
+        setInvites(data.invites)
+      }
+    } catch { /* ignore */ }
+  }, [slug])
 
   const qrApiUrl = (text: string, size = 200) =>
     `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}&margin=8`
@@ -90,6 +102,19 @@ export default function InviteManager({ slug, initialInvites, appUrl, orgName }:
       }
     } catch { /* ignore */ } finally {
       setCancellingId(null)
+    }
+  }
+
+  async function handleRefreshInvite(id: string) {
+    setRefreshingId(id)
+    try {
+      const res = await fetch(`/api/org/${slug}/invites/${id}`, { method: 'PATCH' })
+      const data = await res.json()
+      if (res.ok && data.invite) {
+        setInvites((prev) => [data.invite, ...prev.filter((inv) => inv.id !== id)])
+      }
+    } catch { /* ignore */ } finally {
+      setRefreshingId(null)
     }
   }
 
@@ -260,6 +285,11 @@ export default function InviteManager({ slug, initialInvites, appUrl, orgName }:
         </div>
       </div>
 
+      {/* Bulk CSV Invite */}
+      <div className="mb-8">
+        <BulkInviteUpload slug={slug} onInvitesCreated={refreshInvites} />
+      </div>
+
       {error && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 mb-8">
           {error}
@@ -314,7 +344,16 @@ export default function InviteManager({ slug, initialInvites, appUrl, orgName }:
                           <span className="text-xs text-amber-600 font-medium">Active</span>
                         )}
                       </td>
-                      <td className="px-6 py-3 text-right">
+                      <td className="px-6 py-3 text-right space-x-3">
+                        {expired && (
+                          <button
+                            onClick={() => handleRefreshInvite(invite.id)}
+                            disabled={refreshingId === invite.id}
+                            className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 font-medium"
+                          >
+                            {refreshingId === invite.id ? 'Refreshing...' : 'Refresh'}
+                          </button>
+                        )}
                         <button
                           onClick={() => handleCancelInvite(invite.id)}
                           disabled={cancellingId === invite.id}

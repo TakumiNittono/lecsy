@@ -31,6 +31,7 @@ export default async function MembersPage({
     .order('joined_at', { ascending: true })
 
   const memberList = members || []
+  const memberIds = memberList.map((m) => m.user_id)
 
   // admin clientでメールアドレスを取得
   const emailMap = new Map<string, string>()
@@ -41,12 +42,31 @@ export default async function MembersPage({
     }
   }
 
+  // 各メンバーの最終アクティビティを取得
+  const lastActiveMap = new Map<string, string>()
+  if (memberIds.length > 0) {
+    const { data: transcripts } = await admin
+      .from('transcripts')
+      .select('user_id, created_at')
+      .in('user_id', memberIds)
+      .order('created_at', { ascending: false })
+
+    if (transcripts) {
+      for (const t of transcripts) {
+        if (!lastActiveMap.has(t.user_id)) {
+          lastActiveMap.set(t.user_id, t.created_at)
+        }
+      }
+    }
+  }
+
   const membersWithEmail = memberList.map((m) => ({
     id: m.id,
     user_id: m.user_id,
     role: m.role,
     joined_at: m.joined_at,
     email: emailMap.get(m.user_id) || null,
+    lastActive: lastActiveMap.get(m.user_id) || null,
   }))
 
   return (

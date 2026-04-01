@@ -39,13 +39,21 @@ export default async function OrgDashboardPage({
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
+  // Previous month boundaries
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
+  const prevMonthEnd = monthStart
 
   // Monthly recordings count
   let monthlyRecordings = 0
+  let prevMonthlyRecordings = 0
   // Monthly total duration (seconds)
   let monthlyDuration = 0
+  let prevMonthlyDuration = 0
   // Active users (last 7 days)
   let activeUsers = 0
+  let prevActiveUsers = 0
+  // New members this month
+  let newMembersThisMonth = 0
   // Recent activity
   let recentActivity: Array<{
     id: string
@@ -94,6 +102,41 @@ export default async function OrgDashboardPage({
       activeUsers = uniqueUsers.size
     }
 
+    // --- Previous month data for trends ---
+    const { count: prevRecCount } = await supabase
+      .from('transcripts')
+      .select('*', { count: 'exact', head: true })
+      .in('user_id', memberIds)
+      .gte('created_at', prevMonthStart)
+      .lt('created_at', prevMonthEnd)
+    prevMonthlyRecordings = prevRecCount || 0
+
+    const { data: prevDurationData } = await supabase
+      .from('transcripts')
+      .select('duration')
+      .in('user_id', memberIds)
+      .gte('created_at', prevMonthStart)
+      .lt('created_at', prevMonthEnd)
+
+    if (prevDurationData) {
+      prevMonthlyDuration = prevDurationData.reduce((sum, t) => {
+        const d = t.duration != null ? (typeof t.duration === 'string' ? parseFloat(t.duration) : t.duration) : 0
+        return sum + (isNaN(d) ? 0 : d)
+      }, 0)
+    }
+
+    // Previous month active users (unique users who recorded)
+    const { data: prevActiveData } = await supabase
+      .from('transcripts')
+      .select('user_id')
+      .in('user_id', memberIds)
+      .gte('created_at', prevMonthStart)
+      .lt('created_at', prevMonthEnd)
+
+    if (prevActiveData) {
+      prevActiveUsers = new Set(prevActiveData.map((t) => t.user_id)).size
+    }
+
     // Recent activity (last 10 transcripts with user emails)
     const { data: recentTranscripts } = await supabase
       .from('transcripts')
@@ -132,6 +175,18 @@ export default async function OrgDashboardPage({
   const monthlyDurationDisplay = durationHours > 0
     ? `${durationHours}h ${durationMinutes}m`
     : `${durationMinutes}m`
+
+  // Trend helpers
+  function calcTrend(current: number, previous: number): { delta: number; label: string } | null {
+    if (previous === 0 && current === 0) return null
+    if (previous === 0) return { delta: 100, label: '+100%' }
+    const delta = ((current - previous) / previous) * 100
+    return { delta, label: `${delta >= 0 ? '↑' : '↓'} ${Math.abs(delta).toFixed(0)}%` }
+  }
+
+  const recordingsTrend = calcTrend(monthlyRecordings, prevMonthlyRecordings)
+  const durationTrend = calcTrend(monthlyDuration, prevMonthlyDuration)
+  const activeUsersTrend = calcTrend(activeUsers, prevActiveUsers)
 
   // Plan badge color
   const planColors: Record<string, string> = {
@@ -183,7 +238,12 @@ export default async function OrgDashboardPage({
             </div>
           </div>
           <p className="text-3xl font-bold text-gray-900">{monthlyRecordings}</p>
-          <p className="text-sm text-gray-500 mt-2">Recordings this month</p>
+          <p className="text-sm text-gray-500 mt-1">Recordings this month</p>
+          {recordingsTrend && (
+            <p className={`text-xs mt-1 font-medium ${recordingsTrend.delta >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+              {recordingsTrend.label} vs last month
+            </p>
+          )}
         </div>
 
         {/* Monthly Duration */}
@@ -197,7 +257,12 @@ export default async function OrgDashboardPage({
             </div>
           </div>
           <p className="text-3xl font-bold text-gray-900">{monthlyDurationDisplay}</p>
-          <p className="text-sm text-gray-500 mt-2">Recorded this month</p>
+          <p className="text-sm text-gray-500 mt-1">Recorded this month</p>
+          {durationTrend && (
+            <p className={`text-xs mt-1 font-medium ${durationTrend.delta >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+              {durationTrend.label} vs last month
+            </p>
+          )}
         </div>
 
         {/* Active Users */}
@@ -211,7 +276,12 @@ export default async function OrgDashboardPage({
             </div>
           </div>
           <p className="text-3xl font-bold text-gray-900">{activeUsers}</p>
-          <p className="text-sm text-gray-500 mt-2">Active in last 7 days</p>
+          <p className="text-sm text-gray-500 mt-1">Active in last 7 days</p>
+          {activeUsersTrend && (
+            <p className={`text-xs mt-1 font-medium ${activeUsersTrend.delta >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+              {activeUsersTrend.label} vs last month
+            </p>
+          )}
         </div>
       </div>
 

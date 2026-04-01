@@ -1,8 +1,9 @@
 import { createClient } from '@/utils/supabase/server'
-import { getOrgMembership } from '@/utils/api/org-auth'
+import { getOrgMembership, getUserOrganizations } from '@/utils/api/org-auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import OrgSidebar from '@/components/OrgSidebar'
+import OrgSwitcher from '@/components/OrgSwitcher'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,8 @@ export default async function OrgLayout({
   if (!membership || membership.role === 'student') {
     redirect('/app')
   }
+
+  const userOrgs = await getUserOrganizations()
 
   const handleSignOut = async () => {
     'use server'
@@ -36,7 +39,7 @@ export default async function OrgLayout({
               lecsy
             </Link>
             <span className="text-gray-300">|</span>
-            <span className="text-lg font-semibold text-gray-800">{membership.org.name}</span>
+            <OrgSwitcher currentSlug={params.slug} currentOrgName={membership.org.name} orgs={userOrgs} />
           </div>
           <div className="flex items-center gap-4">
             <span className="text-gray-700 text-sm">{membership.userEmail}</span>

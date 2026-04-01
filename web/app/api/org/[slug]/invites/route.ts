@@ -4,7 +4,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
 const VALID_INVITE_ROLES = ['teacher', 'student'] as const
-const MAX_EMAILS_PER_REQUEST = 20
+const MAX_EMAILS_PER_REQUEST = 100
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export async function GET(

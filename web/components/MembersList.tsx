@@ -10,6 +10,7 @@ interface Member {
   role: string
   joined_at: string
   email: string | null
+  lastActive: string | null
 }
 
 interface MembersListProps {
@@ -200,6 +201,7 @@ export default function MembersList({
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="text-left px-6 py-3 font-medium text-gray-500">Member</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">Role</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">Last Active</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">Joined</th>
                 {canManage && (
                   <th className="text-right px-6 py-3 font-medium text-gray-500">Actions</th>
@@ -209,7 +211,7 @@ export default function MembersList({
             <tbody>
               {filteredMembers.length === 0 ? (
                 <tr>
-                  <td colSpan={canManage ? 4 : 3} className="px-6 py-12 text-center text-gray-400">
+                  <td colSpan={canManage ? 5 : 4} className="px-6 py-12 text-center text-gray-400">
                     {search ? 'No members match your search.' : 'No members found.'}
                   </td>
                 </tr>
@@ -248,6 +250,23 @@ export default function MembersList({
                         >
                           {member.role}
                         </span>
+                      </td>
+
+                      {/* Last Active */}
+                      <td className="px-6 py-3">
+                        {member.lastActive ? (
+                          <span className={
+                            Date.now() - new Date(member.lastActive).getTime() > 30 * 24 * 60 * 60 * 1000
+                              ? 'text-red-500 font-medium'
+                              : Date.now() - new Date(member.lastActive).getTime() > 7 * 24 * 60 * 60 * 1000
+                                ? 'text-amber-500'
+                                : 'text-green-600'
+                          }>
+                            {formatDate(member.lastActive)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">Never</span>
+                        )}
                       </td>
 
                       {/* Joined */}
