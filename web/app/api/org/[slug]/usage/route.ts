@@ -35,10 +35,10 @@ export async function GET(
 
   const supabase = createAdminClient()
 
-  // Get all members with user info
+  // Get all members
   const { data: members, error: membersError } = await supabase
     .from('organization_members')
-    .select('user_id, role, users:user_id(email, raw_user_meta_data)')
+    .select('user_id, role')
     .eq('org_id', orgId)
 
   if (membersError) {
@@ -51,6 +51,19 @@ export async function GET(
   }
 
   const userIds = members.map(m => m.user_id)
+
+  // Fetch user info via auth.admin
+  const userInfoMap = new Map<string, { email: string; name: string }>()
+  for (const uid of userIds) {
+    const { data } = await supabase.auth.admin.getUserById(uid)
+    if (data?.user) {
+      const meta = data.user.user_metadata || {}
+      userInfoMap.set(uid, {
+        email: data.user.email || '',
+        name: meta.full_name || meta.name || '',
+      })
+    }
+  }
 
   // Get transcripts for these users in the date range
   const { data: transcripts, error: transcriptsError } = await supabase
@@ -90,11 +103,11 @@ export async function GET(
   // Build response
   const usage = members.map((m: any) => {
     const stats = userStatsMap.get(m.user_id)
-    const userMeta = m.users?.raw_user_meta_data || {}
+    const userInfo = userInfoMap.get(m.user_id)
     return {
       user_id: m.user_id,
-      email: m.users?.email || '',
-      name: userMeta.full_name || userMeta.name || '',
+      email: userInfo?.email || '',
+      name: userInfo?.name || '',
       role: m.role,
       transcript_count: stats?.transcript_count || 0,
       total_duration: stats?.total_duration || 0,
