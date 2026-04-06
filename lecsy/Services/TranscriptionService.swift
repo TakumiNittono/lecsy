@@ -29,6 +29,8 @@ class TranscriptionService: ObservableObject {
     @Published var multilingualKitDownloadFailed: Bool = false
 
     private var whisperKit: WhisperKit?
+    private var whisperKit2: WhisperKit? // Second instance for parallel chunk processing on >=6GB RAM devices
+    private var warmupTask: Task<Void, Never>?
     private var transcriptionTask: Task<Void, Never>?
     private var progressTimer: Timer?
     private var modelDownloadTask: Task<Void, Error>?
@@ -39,6 +41,7 @@ class TranscriptionService: ObservableObject {
     private let perChunkTimeout: TimeInterval = 90 // 90s per chunk (aggressive — kills stuck decoding)
 
     // Chunking settings
+    private let firstChunkDuration: TimeInterval = 15 // First chunk is short → first text appears fast
     private let chunkDuration: TimeInterval = 45 // 45s per chunk — first text appears ~3x faster than 2min
     private let chunkOverlap: TimeInterval = 2 // 2 seconds overlap to avoid cutting words
     private let shortAudioThreshold: TimeInterval = 60 // Under 1 min → process whole file
@@ -237,6 +240,7 @@ class TranscriptionService: ObservableObject {
 
         // Unload current model
         whisperKit = nil
+        whisperKit2 = nil
         isModelLoaded = false
 
         state = .downloading
@@ -299,6 +303,7 @@ class TranscriptionService: ObservableObject {
 
         // Unload current model
         whisperKit = nil
+        whisperKit2 = nil
         isModelLoaded = false
 
         state = .downloading
@@ -487,6 +492,66 @@ class TranscriptionService: ObservableObject {
         UserDefaults.standard.set(true, forKey: "lecsy.hasCompletedFirstModelLoad")
         updateMultilingualKitStatus()
         AppLogger.info("WhisperKit model loading completed (\(preferredModel))", category: .transcription)
+
+        // Load second instance for parallel chunk processing on capable devices (>=6GB RAM).
+        // ~244MB extra footprint for the small model — safe on A16+/iPhone 14 Pro and newer.
+        if Self.shouldUseDualInstance && whisperKit2 == nil {
+            Task { [weak self] in
+                await self?.loadSecondInstance()
+            }
+        }
+    }
+
+    /// Capable-device check: skip second instance on iPhone 12 and below.
+    private static var shouldUseDualInstance: Bool {
+        ProcessInfo.processInfo.physicalMemory >= 6_000_000_000
+    }
+
+    /// Load the second WhisperKit instance (best-effort; failure is non-fatal).
+    private func loadSecondInstance() async {
+        guard whisperKit2 == nil else { return }
+        let compute = ModelComputeOptions(
+            audioEncoderCompute: .cpuAndNeuralEngine,
+            textDecoderCompute: .cpuAndGPU
+        )
+        do {
+            if let bundledPath = bundledModelPath {
+                whisperKit2 = try await WhisperKit(WhisperKitConfig(
+                    modelFolder: bundledPath,
+                    computeOptions: compute
+                ))
+            } else {
+                whisperKit2 = try await WhisperKit(WhisperKitConfig(
+                    model: preferredModel,
+                    computeOptions: compute
+                ))
+            }
+            AppLogger.info("Second WhisperKit instance loaded for parallel chunks", category: .transcription)
+        } catch {
+            AppLogger.warning("Second WhisperKit instance failed to load: \(error)", category: .transcription)
+            whisperKit2 = nil
+        }
+    }
+
+    /// Eagerly preload the model into memory. Safe to call multiple times concurrently;
+    /// returns immediately if already loaded or in-progress.
+    func warmupModel() async {
+        if isModelLoaded && whisperKit != nil { return }
+        if let existing = warmupTask {
+            await existing.value
+            return
+        }
+        let task = Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                try await self.loadModel()
+            } catch {
+                AppLogger.warning("warmupModel failed: \(error)", category: .transcription)
+            }
+        }
+        warmupTask = task
+        await task.value
+        warmupTask = nil
     }
 
     /// Track elapsed time during download (no fake progress)
@@ -703,11 +768,45 @@ class TranscriptionService: ObservableObject {
     private func runChunkedTranscription(whisperKit initialWhisperKit: WhisperKit, audioURL: URL, decodeOptions: DecodingOptions, totalDuration: TimeInterval) async throws -> TranscriptionResult {
         var whisperKit = initialWhisperKit
 
-        // Calculate chunk boundaries
-        let chunkStarts = stride(from: 0.0, to: totalDuration, by: chunkDuration - chunkOverlap)
-        let chunks: [(start: TimeInterval, end: TimeInterval)] = chunkStarts.map { start in
-            (start: start, end: min(start + chunkDuration, totalDuration))
+        // Build progressive chunk boundaries: first chunk is short (15s) so users see
+        // text fast, subsequent chunks are full-size (45s).
+        var rawBoundaries: [(start: TimeInterval, end: TimeInterval)] = []
+        var cursor: TimeInterval = 0
+        var isFirst = true
+        while cursor < totalDuration {
+            let dur = isFirst ? firstChunkDuration : chunkDuration
+            let end = min(cursor + dur, totalDuration)
+            rawBoundaries.append((start: cursor, end: end))
+            if end >= totalDuration { break }
+            cursor = end - chunkOverlap
+            isFirst = false
         }
+
+        // Snap chunk boundaries (except the very first start at 0) to the nearest silence
+        // so we don't cut mid-word. Costs ~50-100ms per boundary but improves accuracy.
+        var audioFileCache: AVAudioFile?
+        if rawBoundaries.count > 1 {
+            audioFileCache = try? AVAudioFile(forReading: audioURL)
+        }
+        var refined: [(start: TimeInterval, end: TimeInterval)] = []
+        for (i, b) in rawBoundaries.enumerated() {
+            var start = b.start
+            var end = b.end
+            // Refine end (which becomes the next chunk's pre-overlap start)
+            if i < rawBoundaries.count - 1 {
+                end = await findNearestSilence(in: audioURL, near: end, cachedFile: audioFileCache)
+            }
+            // Refine start to match prior chunk's refined end (minus overlap)
+            if i > 0 {
+                let prior = refined[i - 1].end
+                start = max(0, prior - chunkOverlap)
+            }
+            if end - start > 0.5 {
+                refined.append((start: start, end: end))
+            }
+        }
+        let chunks = refined.isEmpty ? rawBoundaries : refined
+        audioFileCache = nil
 
         let totalChunks = chunks.count
         AppLogger.info("Chunked transcription: \(totalChunks) chunks for \(String(format: "%.0f", totalDuration))s audio", category: .transcription)
@@ -717,14 +816,84 @@ class TranscriptionService: ObservableObject {
         var consecutiveFailures = 0
         let maxConsecutiveFailures = 3
 
-        for (index, chunk) in chunks.enumerated() {
-            // Update progress
+        // Process chunks. If a second WhisperKit instance is available, process pairs concurrently.
+        var index = 0
+        while index < totalChunks {
+            let useDual = (whisperKit2 != nil) && (index + 1 < totalChunks)
+
+            if useDual, let kit2 = whisperKit2 {
+                let i1 = index
+                let i2 = index + 1
+                let c1 = chunks[i1]
+                let c2 = chunks[i2]
+
+                progress = Double(i1) / Double(totalChunks)
+                downloadStatusText = "Transcribing parts \(i1 + 1)–\(i2 + 1) of \(totalChunks)..."
+
+                AppLogger.debug("Processing chunks \(i1 + 1)&\(i2 + 1)/\(totalChunks) in parallel", category: .transcription)
+
+                async let r1 = transcribeTimeRangeNonInOut(
+                    whisperKit: whisperKit,
+                    audioURL: audioURL,
+                    decodeOptions: decodeOptions,
+                    start: c1.start,
+                    end: c1.end,
+                    isOverlap: i1 > 0,
+                    label: "Chunk \(i1 + 1)/\(totalChunks)"
+                )
+                async let r2 = transcribeTimeRangeNonInOut(
+                    whisperKit: kit2,
+                    audioURL: audioURL,
+                    decodeOptions: decodeOptions,
+                    start: c2.start,
+                    end: c2.end,
+                    isOverlap: true,
+                    label: "Chunk \(i2 + 1)/\(totalChunks)"
+                )
+                let result1 = await r1
+                let result2 = await r2
+
+                // Merge in chronological order (kit1 first, then kit2)
+                for result in [result1, result2] {
+                    if let lang = result.language, detectedLanguage == nil {
+                        detectedLanguage = lang
+                    }
+                    for seg in result.segments {
+                        if let lastSeg = allSegments.last, seg.text == lastSeg.text { continue }
+                        allSegments.append(seg)
+                    }
+                    if result.didTimeout { consecutiveFailures += 1 } else { consecutiveFailures = 0 }
+                    let partialText = allSegments.map(\.text).joined(separator: " ")
+                    onChunkCompleted?(partialText, allSegments)
+                }
+
+                if consecutiveFailures >= maxConsecutiveFailures {
+                    AppLogger.warning("Too many consecutive timeouts — reloading WhisperKit model", category: .transcription)
+                    self.whisperKit = nil
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    do {
+                        try await loadModelInternal()
+                        if let reloaded = self.whisperKit { whisperKit = reloaded }
+                    } catch {
+                        AppLogger.error("Failed to reload model: \(error)", category: .transcription)
+                    }
+                    consecutiveFailures = 0
+                }
+
+                index += 2
+                if index < totalChunks {
+                    try await Task.sleep(nanoseconds: 500_000_000)
+                }
+                continue
+            }
+
+            // Single-instance fallback path
+            let chunk = chunks[index]
             progress = Double(index) / Double(totalChunks)
             downloadStatusText = "Transcribing part \(index + 1) of \(totalChunks)..."
 
             AppLogger.debug("Processing chunk \(index + 1)/\(totalChunks): \(String(format: "%.0f", chunk.start))s - \(String(format: "%.0f", chunk.end))s", category: .transcription)
 
-            // Transcribe this time range, with automatic sub-chunking on failure
             let result = await transcribeTimeRange(
                 whisperKit: &whisperKit,
                 audioURL: audioURL,
@@ -739,7 +908,6 @@ class TranscriptionService: ObservableObject {
                 detectedLanguage = lang
             }
 
-            // Append new segments, filtering duplicates
             for seg in result.segments {
                 if let lastSeg = allSegments.last, seg.text == lastSeg.text { continue }
                 allSegments.append(seg)
@@ -763,14 +931,13 @@ class TranscriptionService: ObservableObject {
                 consecutiveFailures = 0
             }
 
-            // Notify partial results
             let partialText = allSegments.map(\.text).joined(separator: " ")
             onChunkCompleted?(partialText, allSegments)
 
-            // Brief pause between chunks to let the system cool down
             if index < totalChunks - 1 {
-                try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+                try await Task.sleep(nanoseconds: 500_000_000)
             }
+            index += 1
         }
 
         // Build final result
@@ -925,6 +1092,152 @@ class TranscriptionService: ObservableObject {
         return (segments: allSegments, language: detectedLanguage, didTimeout: anyTimeout)
     }
 
+    /// Non-inout variant of transcribeTimeRange for async-let parallel calls.
+    /// Skips the model-reload-on-failure handling (caller does it after both branches return).
+    private func transcribeTimeRangeNonInOut(
+        whisperKit: WhisperKit,
+        audioURL: URL,
+        decodeOptions: DecodingOptions,
+        start: TimeInterval,
+        end: TimeInterval,
+        isOverlap: Bool,
+        label: String
+    ) async -> (segments: [TranscriptionResult.TranscriptionSegment], language: String?, didTimeout: Bool) {
+        let result = await transcribeSingleRange(
+            whisperKit: whisperKit,
+            audioURL: audioURL,
+            decodeOptions: decodeOptions,
+            start: start,
+            end: end,
+            timeout: perChunkTimeout,
+            label: label
+        )
+        if let result = result {
+            let segments = offsetAndFilter(segments: result.segments, offset: start, trimOverlap: isOverlap ? chunkOverlap : 0)
+            return (segments: segments, language: result.language, didTimeout: false)
+        }
+
+        // Sub-chunk fallback
+        let subChunkDuration: TimeInterval = 30
+        let subChunkOverlap: TimeInterval = 2
+        let subChunkTimeout: TimeInterval = 60
+        var subStarts = Array(stride(from: start, to: end, by: subChunkDuration - subChunkOverlap))
+        if subStarts.isEmpty { subStarts = [start] }
+
+        var allSegments: [TranscriptionResult.TranscriptionSegment] = []
+        var detectedLanguage: String?
+        var anyTimeout = false
+
+        for (subIdx, subStart) in subStarts.enumerated() {
+            let subEnd = min(subStart + subChunkDuration, end)
+            guard subEnd - subStart > 0.5 else { continue }
+            let subLabel = "\(label) sub-\(subIdx + 1)/\(subStarts.count)"
+            let subResult = await transcribeSingleRange(
+                whisperKit: whisperKit,
+                audioURL: audioURL,
+                decodeOptions: decodeOptions,
+                start: subStart,
+                end: subEnd,
+                timeout: subChunkTimeout,
+                label: subLabel
+            )
+            if let subResult = subResult {
+                let trimOverlap: TimeInterval = (subIdx > 0 || isOverlap) ? subChunkOverlap : 0
+                let segments = offsetAndFilter(segments: subResult.segments, offset: subStart, trimOverlap: trimOverlap)
+                for seg in segments {
+                    if let last = allSegments.last, seg.text == last.text { continue }
+                    allSegments.append(seg)
+                }
+                if let lang = subResult.language, detectedLanguage == nil {
+                    detectedLanguage = lang
+                }
+            } else {
+                anyTimeout = true
+            }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+        }
+
+        return (segments: allSegments, language: detectedLanguage, didTimeout: anyTimeout)
+    }
+
+    /// Find the nearest silence (lowest-RMS 200ms window) within ±searchWindow of `targetSeconds`.
+    /// Returns the center time of that silence in absolute file seconds.
+    /// On any read failure, returns `targetSeconds` unchanged (graceful degradation).
+    private func findNearestSilence(
+        in audioURL: URL,
+        near targetSeconds: TimeInterval,
+        searchWindow: TimeInterval = 5.0,
+        cachedFile: AVAudioFile? = nil
+    ) async -> TimeInterval {
+        let file: AVAudioFile
+        if let cachedFile = cachedFile {
+            file = cachedFile
+        } else {
+            guard let f = try? AVAudioFile(forReading: audioURL) else { return targetSeconds }
+            file = f
+        }
+        let format = file.processingFormat
+        let sampleRate = format.sampleRate
+        guard sampleRate > 0 else { return targetSeconds }
+
+        let totalFrames = file.length
+        let windowStartSec = max(0, targetSeconds - searchWindow)
+        let windowEndSec = min(Double(totalFrames) / sampleRate, targetSeconds + searchWindow)
+        guard windowEndSec > windowStartSec else { return targetSeconds }
+
+        let startFrame = AVAudioFramePosition(windowStartSec * sampleRate)
+        let endFrame = AVAudioFramePosition(windowEndSec * sampleRate)
+        let frameCount = AVAudioFrameCount(endFrame - startFrame)
+        guard frameCount > 0 else { return targetSeconds }
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            return targetSeconds
+        }
+        do {
+            file.framePosition = startFrame
+            try file.read(into: buffer, frameCount: frameCount)
+        } catch {
+            return targetSeconds
+        }
+        guard let channelData = buffer.floatChannelData else { return targetSeconds }
+        let frames = Int(buffer.frameLength)
+        guard frames > 0 else { return targetSeconds }
+        let channels = Int(format.channelCount)
+
+        // Compute RMS over 100ms windows
+        let rmsWindowFrames = max(1, Int(0.1 * sampleRate))
+        let strideFrames = rmsWindowFrames
+        var rms: [Float] = []
+        var i = 0
+        while i + rmsWindowFrames <= frames {
+            var sum: Float = 0
+            for c in 0..<channels {
+                let ptr = channelData[c]
+                for j in 0..<rmsWindowFrames {
+                    let s = ptr[i + j]
+                    sum += s * s
+                }
+            }
+            let mean = sum / Float(rmsWindowFrames * channels)
+            rms.append(mean.squareRoot())
+            i += strideFrames
+        }
+        guard rms.count >= 2 else { return targetSeconds }
+
+        // Find lowest 200ms (= 2 windows) average
+        var bestIdx = 0
+        var bestVal: Float = .infinity
+        for k in 0..<(rms.count - 1) {
+            let v = (rms[k] + rms[k + 1]) * 0.5
+            if v < bestVal {
+                bestVal = v
+                bestIdx = k
+            }
+        }
+        // Center of the 200ms window in absolute seconds
+        let windowCenterOffset = (Double(bestIdx) + 1.0) * 0.1
+        return windowStartSec + windowCenterOffset
+    }
+
     /// Transcribe a single audio range (export + WhisperKit). Returns nil on failure.
     private func transcribeSingleRange(
         whisperKit: WhisperKit,
@@ -1051,6 +1364,7 @@ class TranscriptionService: ObservableObject {
             }
         }
         whisperKit = nil
+        whisperKit2 = nil
         isModelLoaded = false
     }
 }

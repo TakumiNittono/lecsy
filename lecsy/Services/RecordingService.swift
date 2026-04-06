@@ -574,6 +574,9 @@ class RecordingService: NSObject, ObservableObject {
     func stopRecording() -> URL? {
         guard isRecording else { return nil }
 
+        // Eagerly preload WhisperKit so it's hot by the time the AAC file finalizes.
+        Task { await TranscriptionService.shared.warmupModel() }
+
         isStoppingIntentionally = true
         audioRecorder?.stop()
         timer?.invalidate()
