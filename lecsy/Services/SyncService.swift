@@ -328,12 +328,14 @@ class SyncService: ObservableObject {
         let baseURL = config.supabaseURL.appendingPathComponent("rest/v1/transcripts")
         
         // URLにクエリパラメータを追加（apikeyはヘッダーに設定するため、クエリパラメータには含めない）
-        var urlComponents = URLComponents(string: baseURL.absoluteString)!
+        guard var urlComponents = URLComponents(string: baseURL.absoluteString) else {
+            throw SyncError.uploadFailed("Failed to create REST API URL")
+        }
         urlComponents.queryItems = [
             URLQueryItem(name: "select", value: "id,title,updated_at"),
             URLQueryItem(name: "order", value: "updated_at.desc")
         ]
-        
+
         guard let restURL = urlComponents.url else {
             throw SyncError.uploadFailed("Failed to create REST API URL")
         }

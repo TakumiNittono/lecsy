@@ -10,15 +10,15 @@ interface ParsedRow {
 
 interface Props {
   slug: string
-  onInvitesCreated: () => void
+  onMembersAdded: () => void
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export default function BulkInviteUpload({ slug, onInvitesCreated }: Props) {
+export default function BulkInviteUpload({ slug, onMembersAdded }: Props) {
   const [rows, setRows] = useState<ParsedRow[]>([])
   const [sending, setSending] = useState(false)
-  const [result, setResult] = useState<{ success: number; errors: string[] } | null>(null)
+  const [result, setResult] = useState<{ success: number; skipped: string[]; errors: string[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   function parseCSV(text: string): ParsedRow[] {
@@ -33,7 +33,7 @@ export default function BulkInviteUpload({ slug, onInvitesCreated }: Props) {
       const parts = line.split(/[,\t]/).map((p) => p.trim().replace(/^["']|["']$/g, ''))
       const email = parts[0]?.toLowerCase() || ''
       const role = parts[1]?.toLowerCase() || 'student'
-      const validRole = ['student', 'teacher'].includes(role) ? role : 'student'
+      const validRole = ['student', 'teacher', 'admin'].includes(role) ? role : 'student'
 
       parsed.push({
         email,
@@ -73,6 +73,7 @@ export default function BulkInviteUpload({ slug, onInvitesCreated }: Props) {
     }
 
     let totalSuccess = 0
+    const allSkipped: string[] = []
     const errors: string[] = []
 
     for (const [role, emails] of byRole) {
@@ -84,7 +85,10 @@ export default function BulkInviteUpload({ slug, onInvitesCreated }: Props) {
         })
         const data = await res.json()
         if (res.ok) {
-          totalSuccess += data.invites?.length || 0
+          totalSuccess += data.added?.length || 0
+          if (data.skipped?.length > 0) {
+            allSkipped.push(...data.skipped)
+          }
         } else {
           errors.push(data.error || `Failed for ${role}s`)
         }
@@ -93,9 +97,9 @@ export default function BulkInviteUpload({ slug, onInvitesCreated }: Props) {
       }
     }
 
-    setResult({ success: totalSuccess, errors })
+    setResult({ success: totalSuccess, skipped: allSkipped, errors })
     if (totalSuccess > 0) {
-      onInvitesCreated()
+      onMembersAdded()
     }
     setSending(false)
   }
@@ -111,7 +115,7 @@ export default function BulkInviteUpload({ slug, onInvitesCreated }: Props) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h3 className="font-semibold text-gray-900 mb-1">Bulk Invite via CSV</h3>
+      <h3 className="font-semibold text-gray-900 mb-1">Bulk Add via CSV</h3>
       <p className="text-xs text-gray-500 mb-4">
         Upload a CSV file with columns: <code className="bg-gray-100 px-1 rounded">email,role</code> (role is optional, defaults to student)
       </p>
@@ -187,7 +191,8 @@ export default function BulkInviteUpload({ slug, onInvitesCreated }: Props) {
                 ? 'bg-amber-50 border border-amber-200 text-amber-700'
                 : 'bg-green-50 border border-green-200 text-green-700'
             }`}>
-              {result.success > 0 && <p>{result.success} invites created successfully.</p>}
+              {result.success > 0 && <p>{result.success} members added successfully.</p>}
+              {result.skipped.length > 0 && <p>Skipped (already members): {result.skipped.join(', ')}</p>}
               {result.errors.map((err, i) => <p key={i}>{err}</p>)}
             </div>
           )}
@@ -198,7 +203,7 @@ export default function BulkInviteUpload({ slug, onInvitesCreated }: Props) {
             disabled={sending || validCount === 0}
             className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
-            {sending ? 'Sending invites...' : `Invite ${validCount} members`}
+            {sending ? 'Adding members...' : `Add ${validCount} members`}
           </button>
         </div>
       )}

@@ -57,6 +57,7 @@ export async function requireOrgRole(
     .select('role')
     .eq('org_id', org.id)
     .eq('user_id', user.id)
+    .eq('status', 'active')
     .single()
 
   if (!member) {
@@ -100,6 +101,7 @@ export async function getOrgMembership(slug: string) {
     .select('role')
     .eq('org_id', org.id)
     .eq('user_id', user.id)
+    .eq('status', 'active')
     .single()
 
   if (!member) return null
@@ -127,6 +129,7 @@ export async function getUserOrganizations() {
     .from('organization_members')
     .select('role, org_id, organizations(id, name, slug, type, plan)')
     .eq('user_id', user.id)
+    .eq('status', 'active')
 
   if (!memberships) return []
 

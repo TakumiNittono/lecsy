@@ -13,6 +13,7 @@ struct LectureDetailView: View {
     @StateObject private var syncService = SyncService.shared
     @StateObject private var authService = AuthService.shared
     @StateObject private var audioPlayer = AudioPlayerService.shared
+    @StateObject private var orgService = OrganizationService.shared
     @ObservedObject private var transcriptionStatus = TranscriptionService.shared
     @State private var title: String
     @State private var lecture: Lecture
@@ -218,6 +219,42 @@ struct LectureDetailView: View {
                     Text("No transcript data")
                         .font(.body)
                         .foregroundColor(.secondary)
+                }
+
+                // MARK: - B2B AI Assist Section (org members only)
+                if orgService.isMember, lecture.savedToWeb, lecture.webTranscriptId != nil {
+                    Divider()
+                        .padding(.vertical, 8)
+
+                    CrossSummaryView(transcriptId: lecture.webTranscriptId!)
+
+                    // Glossary link
+                    NavigationLink {
+                        OrgGlossaryView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "book")
+                                .foregroundColor(.green)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Organization Glossary")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundColor(.primary)
+                                if let org = orgService.organization {
+                                    Text(org.name)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .cornerRadius(16)
+                        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+                    }
                 }
             }
             .padding()

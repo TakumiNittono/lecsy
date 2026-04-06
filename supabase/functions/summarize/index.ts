@@ -91,6 +91,25 @@ serve(async (req) => {
       return createErrorResponse(req, "Daily limit reached. Try again tomorrow.", 429);
     }
 
+    // 月間リミットチェック
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const { count: monthlyCount, error: monthlyCountError } = await serviceClient
+      .from("usage_logs")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("created_at", startOfMonth.toISOString());
+
+    if (monthlyCountError) {
+      console.error("Monthly usage count error:", monthlyCountError.message);
+    }
+
+    if ((monthlyCount || 0) >= MONTHLY_LIMIT) {
+      return createErrorResponse(req, "Monthly limit reached. Please wait until next month.", 429);
+    }
+
     // transcript取得（所有権チェック付き）
     const { data: transcript, error: transcriptError } = await serviceClient
       .from("transcripts")

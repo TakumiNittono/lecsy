@@ -86,6 +86,10 @@ class AuthService: NSObject, ObservableObject {
         Task {
             await restoreSessionIfNeeded()
             await checkSession()
+            // B2B: セッション復元後に組織メンバーシップを確認
+            if isAuthenticated {
+                await OrganizationService.shared.checkMembership()
+            }
             isInitialized = true
 
             // Start monitoring auth state changes AFTER session is restored
@@ -131,6 +135,8 @@ class AuthService: NSObject, ObservableObject {
                 resetSkipLogin()
             }
             await checkSession()
+            // B2B: 組織メンバーシップを確認
+            await OrganizationService.shared.checkMembership()
         case .signedOut:
             AppLogger.info("AuthService: Signed out event received", category: .auth)
             isLoading = false
@@ -140,6 +146,7 @@ class AuthService: NSObject, ObservableObject {
                 AppLogger.info("AuthService: No cached tokens, signing out", category: .auth)
                 isAuthenticated = false
                 currentUser = nil
+                OrganizationService.shared.clearMembership()
             } else {
                 AppLogger.info("AuthService: Cached tokens exist, attempting refresh before signing out", category: .auth)
                 let refreshed = await refreshSession()
@@ -150,6 +157,7 @@ class AuthService: NSObject, ObservableObject {
                     cachedAccessToken = nil
                     cachedRefreshToken = nil
                     clearPersistedSession()
+                    OrganizationService.shared.clearMembership()
                 }
             }
         case .tokenRefreshed:
@@ -330,13 +338,15 @@ class AuthService: NSObject, ObservableObject {
             let redirectURL = "lecsy://auth/callback"
             
             // OAuth URLを構築
-            var components = URLComponents(string: "\(config.supabaseURL.absoluteString)/auth/v1/authorize")!
+            guard var components = URLComponents(string: "\(config.supabaseURL.absoluteString)/auth/v1/authorize") else {
+                throw AuthError.signInFailed("Failed to create auth URL")
+            }
             components.queryItems = [
                 URLQueryItem(name: "provider", value: "google"),
                 URLQueryItem(name: "redirect_to", value: redirectURL),
                 URLQueryItem(name: "apikey", value: config.supabaseAnonKey),
             ]
-            
+
             guard let authURL = components.url else {
                 throw AuthError.signInFailed("Failed to create auth URL")
             }
@@ -578,13 +588,15 @@ class AuthService: NSObject, ObservableObject {
             // まず、直接HTTPリクエストでSupabase Auth APIを呼び出す方法を試す
             AppLogger.info("AuthService: 直接HTTPリクエストでSupabase Auth APIを呼び出し", category: .auth)
             let tokenURL = config.supabaseURL.appendingPathComponent("auth/v1/token")
-            var urlComponents = URLComponents(string: tokenURL.absoluteString)!
+            guard var urlComponents = URLComponents(string: tokenURL.absoluteString) else {
+                throw AuthError.signInFailed("Failed to create token URL")
+            }
             // APIキーをクエリパラメータとしても追加（一部のエンドポイントで必要）
             urlComponents.queryItems = [
                 URLQueryItem(name: "grant_type", value: "id_token"),
                 URLQueryItem(name: "apikey", value: config.supabaseAnonKey)
             ]
-            
+
             guard let requestURL = urlComponents.url else {
                 throw AuthError.signInFailed("Failed to create token URL")
             }
@@ -1018,11 +1030,14 @@ class AuthService: NSObject, ObservableObject {
         let config = SupabaseConfig.shared
         let tokenURL = config.supabaseURL.appendingPathComponent("auth/v1/token")
         
-        var urlComponents = URLComponents(string: tokenURL.absoluteString)!
+        guard var urlComponents = URLComponents(string: tokenURL.absoluteString) else {
+            AppLogger.error("AuthService: リフレッシュURL作成失敗", category: .auth)
+            return false
+        }
         urlComponents.queryItems = [
             URLQueryItem(name: "grant_type", value: "refresh_token")
         ]
-        
+
         guard let requestURL = urlComponents.url else {
             AppLogger.error("AuthService: リフレッシュURL作成失敗", category: .auth)
             return false

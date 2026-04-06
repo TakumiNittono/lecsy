@@ -23,32 +23,34 @@ export default async function MembersPage({
   const admin = createAdminClient()
   const { orgId, userId, org, role } = membership
 
-  // Fetch all members
+  // Fetch all members (active + pending)
   const { data: members } = await admin
     .from('organization_members')
-    .select('id, user_id, role, joined_at')
+    .select('id, user_id, email, role, status, joined_at')
     .eq('org_id', orgId)
     .order('joined_at', { ascending: true })
 
   const memberList = members || []
-  const memberIds = memberList.map((m) => m.user_id)
 
-  // admin clientでメールアドレスを取得
+  // active メンバー(user_id あり)のメールアドレスを取得
   const emailMap = new Map<string, string>()
   for (const m of memberList) {
-    const { data } = await admin.auth.admin.getUserById(m.user_id)
-    if (data?.user?.email) {
-      emailMap.set(m.user_id, data.user.email)
+    if (m.user_id) {
+      const { data } = await admin.auth.admin.getUserById(m.user_id)
+      if (data?.user?.email) {
+        emailMap.set(m.user_id, data.user.email)
+      }
     }
   }
 
   // 各メンバーの最終アクティビティを取得
+  const activeUserIds = memberList.filter(m => m.user_id).map(m => m.user_id)
   const lastActiveMap = new Map<string, string>()
-  if (memberIds.length > 0) {
+  if (activeUserIds.length > 0) {
     const { data: transcripts } = await admin
       .from('transcripts')
       .select('user_id, created_at')
-      .in('user_id', memberIds)
+      .in('user_id', activeUserIds)
       .order('created_at', { ascending: false })
 
     if (transcripts) {
@@ -64,9 +66,11 @@ export default async function MembersPage({
     id: m.id,
     user_id: m.user_id,
     role: m.role,
+    status: m.status || 'active',
     joined_at: m.joined_at,
-    email: emailMap.get(m.user_id) || null,
-    lastActive: lastActiveMap.get(m.user_id) || null,
+    // pending メンバーは email カラムから、active は auth.users から
+    email: m.user_id ? (emailMap.get(m.user_id) || m.email) : m.email,
+    lastActive: m.user_id ? (lastActiveMap.get(m.user_id) || null) : null,
   }))
 
   return (
@@ -74,7 +78,7 @@ export default async function MembersPage({
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Members</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Manage your organization members and their roles.
+          Manage your organization members. Add members by email — they&apos;ll be activated automatically when they sign in.
         </p>
       </div>
 

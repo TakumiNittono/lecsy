@@ -3,10 +3,14 @@ import { requireOrgRole } from '@/utils/api/org-auth'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
-const VALID_INVITE_ROLES = ['teacher', 'student'] as const
+const VALID_ROLES = ['admin', 'teacher', 'student'] as const
 const MAX_EMAILS_PER_REQUEST = 100
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+/**
+ * GET /api/org/[slug]/invites
+ * pending メンバー一覧を取得（admin+）
+ */
 export async function GET(
   request: Request,
   { params }: { params: { slug: string } }
@@ -17,21 +21,25 @@ export async function GET(
 
   const supabase = createAdminClient()
 
-  const { data: invites, error } = await supabase
-    .from('organization_invites')
-    .select('id, email, role, accepted, expires_at, created_at, invited_by')
+  const { data: pendingMembers, error } = await supabase
+    .from('organization_members')
+    .select('id, email, role, joined_at')
     .eq('org_id', orgId)
-    .eq('accepted', false)
-    .order('created_at', { ascending: false })
+    .eq('status', 'pending')
+    .order('joined_at', { ascending: false })
 
   if (error) {
-    console.error('Failed to fetch invites:', error)
-    return NextResponse.json({ error: 'Failed to fetch invites' }, { status: 500 })
+    console.error('Failed to fetch pending members:', error)
+    return NextResponse.json({ error: 'Failed to fetch pending members' }, { status: 500 })
   }
 
-  return NextResponse.json({ invites })
+  return NextResponse.json({ pending: pendingMembers })
 }
 
+/**
+ * POST /api/org/[slug]/invites
+ * メールアドレス一括でメンバーを直接追加（pending状態）
+ */
 export async function POST(
   request: Request,
   { params }: { params: { slug: string } }
@@ -42,15 +50,15 @@ export async function POST(
 
   const result = await requireOrgRole(params.slug, 'admin')
   if (result instanceof NextResponse) return result
-  const { orgId, userId, org } = result
+  const { orgId, org } = result
 
   const body = await request.json()
   const { emails, role } = body
 
   // Validate role
-  if (!role || !VALID_INVITE_ROLES.includes(role)) {
+  if (!role || !VALID_ROLES.includes(role)) {
     return NextResponse.json(
-      { error: 'Invalid role. Must be one of: teacher, student' },
+      { error: 'Invalid role. Must be one of: admin, teacher, student' },
       { status: 400 }
     )
   }
@@ -80,78 +88,66 @@ export async function POST(
 
   const supabase = createAdminClient()
 
-  // Check for existing members with these emails
+  // Check for existing members (active or pending) with these emails
   const { data: existingMembers } = await supabase
     .from('organization_members')
-    .select('user_id, users:user_id(email)')
+    .select('id, email, user_id, status')
     .eq('org_id', orgId)
 
-  const memberEmails = new Set(
-    (existingMembers || [])
-      .map((m: any) => m.users?.email?.toLowerCase())
-      .filter(Boolean)
-  )
+  // Build set of existing emails (from email column + auth.users lookup)
+  const existingEmails = new Set<string>()
+  for (const m of existingMembers || []) {
+    if (m.email) existingEmails.add(m.email.toLowerCase())
+    if (m.user_id) {
+      const { data } = await supabase.auth.admin.getUserById(m.user_id)
+      if (data?.user?.email) existingEmails.add(data.user.email.toLowerCase())
+    }
+  }
 
-  const duplicateEmails = normalizedEmails.filter(e => memberEmails.has(e))
-  if (duplicateEmails.length > 0) {
+  const duplicateEmails = normalizedEmails.filter(e => existingEmails.has(e))
+  const newEmails = normalizedEmails.filter(e => !existingEmails.has(e))
+
+  if (newEmails.length === 0) {
     return NextResponse.json(
-      { error: `Already members: ${duplicateEmails.join(', ')}` },
+      { error: `All emails are already members: ${duplicateEmails.join(', ')}` },
       { status: 409 }
     )
   }
 
   // Check seat limit
-  const { count: memberCount } = await supabase
-    .from('organization_members')
-    .select('id', { count: 'exact', head: true })
-    .eq('org_id', orgId)
+  const totalMembers = (existingMembers || []).length
+  const totalAfterAdd = totalMembers + newEmails.length
 
-  const { count: pendingInviteCount } = await supabase
-    .from('organization_invites')
-    .select('id', { count: 'exact', head: true })
-    .eq('org_id', orgId)
-    .eq('accepted', false)
-
-  const totalAfterInvite =
-    (memberCount || 0) + (pendingInviteCount || 0) + normalizedEmails.length
-
-  if (totalAfterInvite > org.max_seats) {
+  if (totalAfterAdd > org.max_seats) {
     return NextResponse.json(
       {
-        error: `Seat limit exceeded. Max: ${org.max_seats}, current members: ${memberCount || 0}, pending invites: ${pendingInviteCount || 0}, requesting: ${normalizedEmails.length}`,
+        error: `Seat limit exceeded. Max: ${org.max_seats}, current: ${totalMembers}, requesting: ${newEmails.length}`,
       },
       { status: 400 }
     )
   }
 
-  // Create invite records
-  const inviteRecords = normalizedEmails.map(email => ({
+  // Create pending member records
+  const memberRecords = newEmails.map(email => ({
     org_id: orgId,
     email,
     role,
-    invited_by: userId,
+    status: 'pending',
+    user_id: null,
   }))
 
-  const { data: createdInvites, error: insertError } = await supabase
-    .from('organization_invites')
-    .insert(inviteRecords)
-    .select('id, email, role, token, expires_at')
+  const { data: createdMembers, error: insertError } = await supabase
+    .from('organization_members')
+    .insert(memberRecords)
+    .select('id, email, role, status, joined_at')
 
   if (insertError) {
-    console.error('Failed to create invites:', insertError)
-    return NextResponse.json({ error: 'Failed to create invites' }, { status: 500 })
+    console.error('Failed to add members:', insertError)
+    return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
   }
 
-  // Build invite links
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://lecsy.app'
-  const invites = (createdInvites || []).map(invite => ({
-    id: invite.id,
-    email: invite.email,
-    role: invite.role,
-    token: invite.token,
-    expires_at: invite.expires_at,
-    link: `${baseUrl}/invite/${invite.token}`,
-  }))
-
-  return NextResponse.json({ invites }, { status: 201 })
+  return NextResponse.json({
+    added: createdMembers,
+    skipped: duplicateEmails,
+  }, { status: 201 })
 }
