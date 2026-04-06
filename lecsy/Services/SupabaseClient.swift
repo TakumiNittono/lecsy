@@ -32,12 +32,21 @@ enum SupabaseError: Error, LocalizedError {
 final class LecsyAPIClient {
     static let shared = LecsyAPIClient()
 
-    /// Current access token (set after sign-in). Read by every authenticated request.
-    var accessToken: String?
-    /// Current authenticated user id (UUID string).
-    var userId: String?
-    /// Current user email.
-    var userEmail: String?
+    /// Auth state is owned by `AuthService`. These are computed accessors so the
+    /// HTTP client always reads the freshest token from the canonical source —
+    /// no risk of PostLoginCoordinator and AuthService getting out of sync.
+    var accessToken: String? {
+        get { AuthService.shared.cachedAccessToken }
+        set { /* no-op: AuthService is the source of truth */ }
+    }
+    var userId: String? {
+        get { AuthService.shared.currentUser?.id.uuidString }
+        set { /* no-op */ }
+    }
+    var userEmail: String? {
+        get { AuthService.shared.currentUser?.email }
+        set { /* no-op */ }
+    }
 
     private let baseURL: URL
     private let anonKey: String

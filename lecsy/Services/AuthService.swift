@@ -37,8 +37,10 @@ class AuthService: NSObject, ObservableObject {
     private var currentNonce: String?
     private var oauthSession: ASWebAuthenticationSession?
     
-    // Cached tokens — read from Keychain on demand, written through persistSession()
-    private var cachedAccessToken: String? {
+    // Cached tokens — read from Keychain on demand, written through persistSession().
+    // `cachedAccessToken` is internal so `LecsyAPIClient` can read the freshest token
+    // directly from the canonical source (avoids drift between PostLoginCoordinator and AuthService).
+    internal var cachedAccessToken: String? {
         get { KeychainService.read(key: accessTokenKey) }
         set {
             if let value = newValue {

@@ -53,10 +53,8 @@ final class PostLoginCoordinator {
     ///   - email: authenticated user email (lowercased)
     ///   - accessToken: Supabase JWT
     func handleSignIn(userId: String, email: String, accessToken: String) async {
-        LecsyAPIClient.shared.userId = userId
-        LecsyAPIClient.shared.userEmail = email.lowercased()
-        LecsyAPIClient.shared.accessToken = accessToken
-
+        // No need to push tokens into LecsyAPIClient — it now reads them
+        // directly from AuthService.shared (single source of truth).
         do {
             let activated = try await OrganizationAPI.shared.activatePendingMemberships()
             if !activated.isEmpty {
@@ -77,10 +75,8 @@ final class PostLoginCoordinator {
     }
 
     /// Call on sign-out to clear cached state.
+    /// LecsyAPIClient automatically reflects sign-out via AuthService.
     func handleSignOut() {
-        LecsyAPIClient.shared.userId = nil
-        LecsyAPIClient.shared.userEmail = nil
-        LecsyAPIClient.shared.accessToken = nil
         OrganizationContext.shared.clear()
     }
 
