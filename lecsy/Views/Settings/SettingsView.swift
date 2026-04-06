@@ -23,22 +23,16 @@ struct SettingsView: View {
             List {
                 // Transcription Language
                 Section {
-                    // Show all available languages (base + unlocked extended)
-                    ForEach(availableLanguages, id: \.self) { language in
-                        Button {
-                            transcriptionService.setLanguage(language)
-                        } label: {
-                            HStack {
-                                Text(language.displayName)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                if transcriptionService.transcriptionLanguage == language {
-                                    Image(systemName: "checkmark")
-                                        .foregroundColor(.blue)
-                                }
-                            }
+                    // Dropdown picker (Menu style) — single row instead of long list
+                    Picker("Language", selection: Binding(
+                        get: { transcriptionService.transcriptionLanguage },
+                        set: { transcriptionService.setLanguage($0) }
+                    )) {
+                        ForEach(availableLanguages, id: \.self) { language in
+                            Text(language.displayName).tag(language)
                         }
                     }
+                    .pickerStyle(.menu)
 
                     // Multilingual kit download / status
                     if transcriptionService.isDownloadingMultilingualKit {
