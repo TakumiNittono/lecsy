@@ -7,14 +7,11 @@
 
 import SwiftUI
 import StoreKit
-import AuthenticationServices
 
 @main
 struct lecsyApp: App {
-    @StateObject private var authService = AuthService.shared
     @AppStorage("lecsy.hasSeenOnboarding") private var hasSeenOnboarding = false
     @Environment(\.requestReview) private var requestReview
-    private let syncService = SyncService.shared
     private let streakService = StudyStreakService.shared
     // Touch TranscriptionService immediately so model preloading starts at app launch
     private let transcriptionService = TranscriptionService.shared
@@ -26,9 +23,6 @@ struct lecsyApp: App {
                     OnboardingView()
                 } else {
                     ContentView()
-                        .task {
-                            await syncTitlesOnLaunch()
-                        }
                         .onReceive(NotificationCenter.default.publisher(for: .lectureRecordingCompleted)) { _ in
                             checkAndRequestReview()
                         }
@@ -39,36 +33,6 @@ struct lecsyApp: App {
             .task {
                 recoverStuckTranscriptions()
             }
-            .onOpenURL { url in
-                handleIncomingURL(url)
-            }
-            .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { userActivity in
-                if let url = userActivity.webpageURL {
-                    handleIncomingURL(url)
-                }
-            }
-        }
-    }
-
-
-    private func handleIncomingURL(_ url: URL) {
-        if url.scheme == "lecsy" {
-            if url.host == "auth" || url.path.contains("callback") {
-                Task { @MainActor in
-                    await AuthService.shared.handleOAuthCallbackURL(url)
-                }
-            }
-        }
-    }
-
-    @MainActor
-    private func syncTitlesOnLaunch() async {
-        guard await authService.isSessionValid else { return }
-
-        do {
-            try await syncService.syncTitlesFromWeb()
-        } catch {
-            AppLogger.warning("Sync failed on launch: \(error.localizedDescription)", category: .sync)
         }
     }
 

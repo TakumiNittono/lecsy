@@ -58,7 +58,7 @@ struct SyncedTranscriptView: View {
                                         .frame(width: 40, alignment: .trailing)
                                 }
 
-                                Text(segment.text)
+                                Text(segment.cleanText)
                                     .font(.system(.callout, design: .default))
                                     .foregroundColor(.primary)
                                     .lineSpacing(3)

@@ -2,421 +2,420 @@
 //  OrganizationService.swift
 //  lecsy
 //
-//  B2B組織機能: メンバーシップ確認、用語集取得、クロス要約取得
-//  ローカルキャッシュでオフライン閲覧対応
+//  Created on 2026/04/05.
 //
 
 import Foundation
 import Combine
-import os.log
 
+/// Manages organization state for B2B features.
+/// Uses mock data for simulator testing; will connect to Supabase in production.
 @MainActor
 class OrganizationService: ObservableObject {
     static let shared = OrganizationService()
 
     // MARK: - Published State
 
-    /// ユーザーの組織メンバーシップ（nil = 未所属 or 未確認）
-    @Published var membership: OrgMembership?
-    /// メンバーシップ確認済みフラグ
-    @Published var isChecked: Bool = false
-    /// 読み込み中
-    @Published var isLoading: Bool = false
+    @Published var currentOrganization: Organization?
+    @Published var currentMembership: OrganizationMember?
+    @Published var members: [OrganizationMember] = []
+    @Published var classes: [OrganizationClass] = []
+    @Published var glossaryEntries: [GlossaryEntry] = []
+    @Published var organizations: [Organization] = []
+    @Published var showJoinedToast = false
+    @Published var joinedOrgName = ""
 
-    // MARK: - Dependencies
+    /// Whether B2B demo mode is active
+    @Published var isDemoMode: Bool {
+        didSet {
+            UserDefaults.standard.set(isDemoMode, forKey: demoModeKey)
+            if isDemoMode {
+                loadDemoData()
+            } else {
+                clearOrgData()
+            }
+        }
+    }
 
-    private let authService = AuthService.shared
-    private let config = SupabaseConfig.shared
+    private let demoModeKey = "lecsy.b2b.demoMode"
 
-    // MARK: - Cache
+    // MARK: - Computed
 
-    private let glossaryCacheKey = "lecsy.orgGlossaryCache"
-    private let crossSummaryCacheKey = "lecsy.orgCrossSummaryCache"
-    private let membershipCacheKey = "lecsy.orgMembershipCache"
+    var isInOrganization: Bool { currentOrganization != nil }
+    var currentRole: OrganizationRole? { currentMembership?.role }
 
-    /// 組織メンバーかどうか
-    var isMember: Bool { membership != nil }
+    var activeMembers: [OrganizationMember] {
+        members.filter { $0.status == .active }
+    }
 
-    /// 現在の組織
-    var organization: Organization? { membership?.organization }
+    var pendingMembers: [OrganizationMember] {
+        members.filter { $0.status == .pending }
+    }
 
-    /// 現在のロール
-    var role: OrgRole? { membership?.role }
+    var teacherCount: Int {
+        activeMembers.filter { $0.role == .teacher || $0.role == .admin || $0.role == .owner }.count
+    }
+
+    var studentCount: Int {
+        activeMembers.filter { $0.role == .student }.count
+    }
+
+    // MARK: - Init
 
     private init() {
-        // キャッシュからメンバーシップを復元
-        restoreMembershipFromCache()
-    }
-
-    // MARK: - Membership Check
-
-    /// ユーザーの組織メンバーシップを確認（ログイン後に呼ぶ）
-    func checkMembership() async {
-        guard authService.isAuthenticated else {
-            membership = nil
-            isChecked = true
-            return
-        }
-
-        isLoading = true
-        defer { isLoading = false; isChecked = true }
-
-        do {
-            guard let accessToken = await authService.accessToken else {
-                AppLogger.warning("OrganizationService: No access token", category: .auth)
-                return
-            }
-
-            // まず pending メンバーシップを自動アクティベーション
-            await activatePendingMemberships()
-
-            // Supabase REST APIで organization_members を取得
-            // select=org_id,user_id,role,status,organizations(id,name,slug,type,plan,max_seats)
-            let url = config.supabaseURL
-                .appendingPathComponent("rest/v1/organization_members")
-
-            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-                AppLogger.warning("OrganizationService: Failed to create URL components", category: .auth)
-                return
-            }
-            components.queryItems = [
-                URLQueryItem(name: "select", value: "org_id,user_id,role,status,organizations(id,name,slug,type,plan,max_seats)"),
-                URLQueryItem(name: "user_id", value: "eq.\(authService.currentUser?.id.uuidString ?? "")"),
-                URLQueryItem(name: "status", value: "eq.active"),
-                URLQueryItem(name: "limit", value: "1"),
-            ]
-
-            guard let requestURL = components.url else {
-                AppLogger.warning("OrganizationService: Failed to create request URL", category: .auth)
-                return
-            }
-
-            var request = URLRequest(url: requestURL)
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-            request.setValue(config.supabaseAnonKey, forHTTPHeaderField: "apikey")
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                AppLogger.warning("OrganizationService: Membership check failed", category: .auth)
-                return
-            }
-
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let memberships = try decoder.decode([OrgMembership].self, from: data)
-
-            if let first = memberships.first {
-                membership = first
-                cacheMembership(first)
-                AppLogger.info("OrganizationService: Member of \(first.organization.name) as \(first.role.rawValue)", category: .auth)
-            } else {
-                membership = nil
-                clearMembershipCache()
-                AppLogger.debug("OrganizationService: Not a member of any organization", category: .auth)
-            }
-        } catch {
-            AppLogger.error("OrganizationService: Membership check error - \(error.localizedDescription)", category: .auth)
-            // キャッシュがあればそのまま使う
+        isDemoMode = UserDefaults.standard.bool(forKey: demoModeKey)
+        if isDemoMode {
+            loadDemoData()
         }
     }
 
-    /// メンバーシップをクリア（ログアウト時）
-    func clearMembership() {
-        membership = nil
-        isChecked = false
-        clearMembershipCache()
-        clearGlossaryCache()
-        clearCrossSummaryCache()
+    // MARK: - Organization Actions
+
+    func joinOrganization(_ org: Organization, as role: OrganizationRole) {
+        currentOrganization = org
+        currentMembership = OrganizationMember(
+            organizationId: org.id,
+            userId: UUID(),
+            email: "demo@lecsy.app",
+            displayName: "Demo User",
+            role: role,
+            status: .active
+        )
+        if !organizations.contains(where: { $0.id == org.id }) {
+            organizations.append(org)
+        }
+        joinedOrgName = org.name
+        showJoinedToast = true
     }
 
-    // MARK: - Auto Activation
+    func leaveOrganization() {
+        currentOrganization = nil
+        currentMembership = nil
+        members = []
+        classes = []
+    }
 
-    /// pending メンバーシップを自動アクティベーション（ログイン時）
-    /// メールが一致する pending レコードに user_id を紐付けて active にする
-    private func activatePendingMemberships() async {
-        guard let accessToken = await authService.accessToken else { return }
-        guard let email = authService.currentUser?.email,
-              let userId = authService.currentUser?.id.uuidString else { return }
+    func switchOrganization(to org: Organization) {
+        guard let membership = mockMembershipFor(org) else { return }
+        currentOrganization = org
+        currentMembership = membership
+        loadMembersForCurrentOrg()
+        loadClassesForCurrentOrg()
+    }
 
-        // RPC呼び出しで pending → active に更新
-        let url = config.supabaseURL.appendingPathComponent("rest/v1/rpc/activate_pending_memberships")
+    // MARK: - Member Management
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(config.supabaseAnonKey, forHTTPHeaderField: "apikey")
+    func addMember(email: String, displayName: String, role: OrganizationRole) {
+        guard let org = currentOrganization else { return }
+        let member = OrganizationMember(
+            organizationId: org.id,
+            email: email,
+            displayName: displayName,
+            role: role,
+            status: .pending
+        )
+        members.append(member)
+    }
 
-        let body: [String: String] = [
-            "p_user_id": userId,
-            "p_email": email.lowercased(),
-        ]
+    func removeMember(_ member: OrganizationMember) {
+        members.removeAll { $0.id == member.id }
+    }
 
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-            let (_, response) = try await URLSession.shared.data(for: request)
+    func updateMemberRole(_ member: OrganizationMember, to newRole: OrganizationRole) {
+        guard let index = members.firstIndex(where: { $0.id == member.id }) else { return }
+        members[index].role = newRole
+    }
 
-            if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
-                AppLogger.debug("OrganizationService: Checked pending memberships", category: .auth)
-            }
-        } catch {
-            AppLogger.debug("OrganizationService: Activate pending failed - \(error.localizedDescription)", category: .auth)
-        }
+    func activateMember(_ member: OrganizationMember) {
+        guard let index = members.firstIndex(where: { $0.id == member.id }) else { return }
+        members[index].status = .active
+        members[index].userId = UUID()
+    }
+
+    // MARK: - Class Management
+
+    func addClass(name: String, language: TranscriptionLanguage, semester: String) {
+        guard let org = currentOrganization else { return }
+        let orgClass = OrganizationClass(
+            organizationId: org.id,
+            name: name,
+            language: language,
+            semester: semester
+        )
+        classes.append(orgClass)
+    }
+
+    func removeClass(_ orgClass: OrganizationClass) {
+        classes.removeAll { $0.id == orgClass.id }
     }
 
     // MARK: - Glossary
 
-    /// 組織の用語集を取得
-    func fetchGlossary(language: String? = nil, search: String? = nil) async -> [GlossaryTerm] {
-        guard let mem = membership else { return loadGlossaryFromCache() }
-
-        do {
-            guard let accessToken = await authService.accessToken else { return loadGlossaryFromCache() }
-
-            let url = config.supabaseURL.appendingPathComponent("rest/v1/org_glossaries")
-
-            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-                return loadGlossaryFromCache()
-            }
-            var queryItems = [
-                URLQueryItem(name: "select", value: "id,org_id,term,definition,language,category,source_transcript_id,created_at"),
-                URLQueryItem(name: "org_id", value: "eq.\(mem.orgId.uuidString)"),
-                URLQueryItem(name: "order", value: "term.asc"),
-                URLQueryItem(name: "limit", value: "200"),
-            ]
-
-            if let lang = language, !lang.isEmpty {
-                queryItems.append(URLQueryItem(name: "language", value: "eq.\(lang)"))
-            }
-            if let q = search, !q.isEmpty {
-                queryItems.append(URLQueryItem(name: "term", value: "ilike.*\(q)*"))
-            }
-
-            components.queryItems = queryItems
-
-            guard let requestURL = components.url else {
-                return loadGlossaryFromCache()
-            }
-
-            var request = URLRequest(url: requestURL)
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-            request.setValue(config.supabaseAnonKey, forHTTPHeaderField: "apikey")
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                return loadGlossaryFromCache()
-            }
-
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let terms = try decoder.decode([GlossaryTerm].self, from: data)
-
-            // キャッシュに保存
-            cacheGlossary(terms)
-            return terms
-        } catch {
-            AppLogger.error("OrganizationService: Glossary fetch error - \(error.localizedDescription)", category: .sync)
-            return loadGlossaryFromCache()
-        }
+    func addGlossaryEntry(_ entry: GlossaryEntry) {
+        glossaryEntries.append(entry)
     }
 
-    // MARK: - Cross Summary
+    func removeGlossaryEntry(_ entry: GlossaryEntry) {
+        glossaryEntries.removeAll { $0.id == entry.id }
+    }
 
-    /// クロス要約を取得（Edge Function経由 — Bearer token認証）
-    func fetchCrossSummary(transcriptId: UUID, targetLanguage: String) async throws -> CrossSummaryResult {
-        guard membership != nil else {
-            throw OrgError.notMember
-        }
+    // MARK: - Demo Data
 
-        // セッションリフレッシュ
-        _ = await authService.refreshSession()
+    func loadDemoData() {
+        let orgId = UUID()
 
-        guard let accessToken = await authService.accessToken else {
-            throw OrgError.notAuthenticated
-        }
+        // Demo organization
+        let demoOrg = Organization(
+            id: orgId,
+            name: "OHLA Orlando",
+            slug: "ohla-orlando",
+            type: .languageSchool,
+            plan: .growth,
+            maxSeats: 50,
+            createdAt: Calendar.current.date(byAdding: .month, value: -3, to: Date()) ?? Date()
+        )
 
-        // Edge Functionを直接呼ぶ（SyncServiceと同じパターン）
-        let functionURL = config.supabaseURL.appendingPathComponent("functions/v1/org-ai-assist")
+        let demoOrg2 = Organization(
+            id: UUID(),
+            name: "Miami Dade College IEP",
+            slug: "mdc-iep",
+            type: .universityIEP,
+            plan: .starter,
+            maxSeats: 30,
+            createdAt: Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+        )
 
-        var request = URLRequest(url: functionURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(config.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        organizations = [demoOrg, demoOrg2]
+        currentOrganization = demoOrg
 
-        let body: [String: Any] = [
-            "mode": "cross_summary",
-            "transcript_id": transcriptId.uuidString,
-            "target_language": targetLanguage,
+        // Current user as admin
+        let currentUserId = UUID()
+        currentMembership = OrganizationMember(
+            organizationId: orgId,
+            userId: currentUserId,
+            email: "takumi@lecsy.app",
+            displayName: "Takumi (You)",
+            role: .owner,
+            status: .active,
+            joinedAt: Calendar.current.date(byAdding: .month, value: -3, to: Date()) ?? Date()
+        )
+
+        // Demo members
+        let teacherId1 = UUID()
+        let teacherId2 = UUID()
+        members = [
+            currentMembership!,
+            OrganizationMember(
+                organizationId: orgId,
+                userId: teacherId1,
+                email: "sarah.j@ohla.edu",
+                displayName: "Sarah Johnson",
+                role: .teacher,
+                status: .active,
+                joinedAt: Calendar.current.date(byAdding: .month, value: -2, to: Date()) ?? Date()
+            ),
+            OrganizationMember(
+                organizationId: orgId,
+                userId: teacherId2,
+                email: "mike.c@ohla.edu",
+                displayName: "Michael Chen",
+                role: .teacher,
+                status: .active,
+                joinedAt: Calendar.current.date(byAdding: .month, value: -2, to: Date()) ?? Date()
+            ),
+            OrganizationMember(
+                organizationId: orgId,
+                userId: UUID(),
+                email: "maria.g@student.ohla.edu",
+                displayName: "Maria Garcia",
+                role: .student,
+                status: .active,
+                joinedAt: Calendar.current.date(byAdding: .day, value: -45, to: Date()) ?? Date()
+            ),
+            OrganizationMember(
+                organizationId: orgId,
+                userId: UUID(),
+                email: "yuki.t@student.ohla.edu",
+                displayName: "Yuki Tanaka",
+                role: .student,
+                status: .active,
+                joinedAt: Calendar.current.date(byAdding: .day, value: -40, to: Date()) ?? Date()
+            ),
+            OrganizationMember(
+                organizationId: orgId,
+                userId: UUID(),
+                email: "ahmed.k@student.ohla.edu",
+                displayName: "Ahmed Khan",
+                role: .student,
+                status: .active,
+                joinedAt: Calendar.current.date(byAdding: .day, value: -38, to: Date()) ?? Date()
+            ),
+            OrganizationMember(
+                organizationId: orgId,
+                userId: UUID(),
+                email: "sofia.r@student.ohla.edu",
+                displayName: "Sofia Rodriguez",
+                role: .student,
+                status: .active,
+                joinedAt: Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+            ),
+            OrganizationMember(
+                organizationId: orgId,
+                userId: UUID(),
+                email: "wei.l@student.ohla.edu",
+                displayName: "Wei Liu",
+                role: .student,
+                status: .active,
+                joinedAt: Calendar.current.date(byAdding: .day, value: -25, to: Date()) ?? Date()
+            ),
+            OrganizationMember(
+                organizationId: orgId,
+                email: "new.student@ohla.edu",
+                displayName: "New Student",
+                role: .student,
+                status: .pending,
+                joinedAt: Date()
+            ),
+            OrganizationMember(
+                organizationId: orgId,
+                email: "pending.teacher@ohla.edu",
+                displayName: "Pending Teacher",
+                role: .teacher,
+                status: .pending,
+                joinedAt: Date()
+            ),
         ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        // Demo classes
+        classes = [
+            OrganizationClass(
+                organizationId: orgId,
+                name: "Advanced English Listening",
+                language: .english,
+                semester: "Spring 2026",
+                teacherId: teacherId1,
+                studentIds: members.filter { $0.role == .student && $0.status == .active }.prefix(3).map { $0.id }
+            ),
+            OrganizationClass(
+                organizationId: orgId,
+                name: "Business English",
+                language: .english,
+                semester: "Spring 2026",
+                teacherId: teacherId2,
+                studentIds: members.filter { $0.role == .student && $0.status == .active }.suffix(2).map { $0.id }
+            ),
+            OrganizationClass(
+                organizationId: orgId,
+                name: "TOEFL Preparation",
+                language: .english,
+                semester: "Spring 2026",
+                teacherId: teacherId1,
+                studentIds: members.filter { $0.role == .student && $0.status == .active }.map { $0.id }
+            ),
+        ]
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OrgError.networkError
-        }
-
-        guard (200...299).contains(httpResponse.statusCode) else {
-            if httpResponse.statusCode == 429 {
-                throw OrgError.dailyLimitReached
-            }
-            if httpResponse.statusCode == 403 {
-                throw OrgError.notMember
-            }
-            if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
-               let message = errorData["error"] {
-                throw OrgError.serverError(message)
-            }
-            throw OrgError.serverError("HTTP \(httpResponse.statusCode)")
-        }
-
-        let decoder = JSONDecoder()
-        let result = try decoder.decode(CrossSummaryResult.self, from: data)
-
-        // キャッシュに保存
-        cacheCrossSummary(transcriptId: transcriptId, targetLanguage: targetLanguage, result: result)
-
-        return result
+        // Demo glossary entries
+        glossaryEntries = [
+            GlossaryEntry(
+                organizationId: orgId,
+                term: "Collocation",
+                definition: "A combination of words that frequently occur together",
+                example: "\"Make a decision\" is a common collocation.",
+                targetLanguage: .spanish,
+                translation: "Colocacion",
+                difficulty: .intermediate,
+                createdAt: Calendar.current.date(byAdding: .day, value: -10, to: Date()) ?? Date()
+            ),
+            GlossaryEntry(
+                organizationId: orgId,
+                term: "Inference",
+                definition: "A conclusion reached on the basis of evidence and reasoning",
+                example: "From the context, we can make an inference about the speaker's opinion.",
+                targetLanguage: .japanese,
+                translation: "推論",
+                difficulty: .advanced,
+                createdAt: Calendar.current.date(byAdding: .day, value: -8, to: Date()) ?? Date()
+            ),
+            GlossaryEntry(
+                organizationId: orgId,
+                term: "Paraphrase",
+                definition: "Express the meaning using different words",
+                example: "Can you paraphrase what the lecturer said?",
+                targetLanguage: .chinese,
+                translation: "释义",
+                difficulty: .intermediate,
+                createdAt: Calendar.current.date(byAdding: .day, value: -5, to: Date()) ?? Date()
+            ),
+            GlossaryEntry(
+                organizationId: orgId,
+                term: "Cognate",
+                definition: "A word that has the same origin as a word in another language",
+                example: "\"Family\" in English and \"familia\" in Spanish are cognates.",
+                targetLanguage: .spanish,
+                translation: "Cognado",
+                difficulty: .beginner,
+                createdAt: Calendar.current.date(byAdding: .day, value: -3, to: Date()) ?? Date()
+            ),
+            GlossaryEntry(
+                organizationId: orgId,
+                term: "Morpheme",
+                definition: "The smallest meaningful unit of a language",
+                example: "The word 'unhappiness' contains three morphemes: un-, happy, -ness.",
+                targetLanguage: .korean,
+                translation: "형태소",
+                difficulty: .advanced,
+                createdAt: Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+            ),
+        ]
     }
 
-    /// キャッシュからクロス要約を取得
-    func getCachedCrossSummary(transcriptId: UUID, targetLanguage: String) -> CrossSummaryResult? {
-        let cached = loadCrossSummariesFromCache()
-        return cached.first(where: {
-            $0.transcriptId == transcriptId && $0.targetLanguage == targetLanguage
-        })?.result
+    private func clearOrgData() {
+        currentOrganization = nil
+        currentMembership = nil
+        members = []
+        classes = []
+        glossaryEntries = []
+        organizations = []
     }
 
-    // MARK: - Cache: Membership
-
-    private func cacheMembership(_ membership: OrgMembership) {
-        do {
-            let data = try JSONEncoder().encode(membership)
-            UserDefaults.standard.set(data, forKey: membershipCacheKey)
-        } catch {
-            AppLogger.debug("OrganizationService: Failed to cache membership", category: .storage)
-        }
+    private func mockMembershipFor(_ org: Organization) -> OrganizationMember? {
+        return OrganizationMember(
+            organizationId: org.id,
+            userId: UUID(),
+            email: "takumi@lecsy.app",
+            displayName: "Takumi (You)",
+            role: .owner,
+            status: .active
+        )
     }
 
-    private func restoreMembershipFromCache() {
-        guard let data = UserDefaults.standard.data(forKey: membershipCacheKey) else { return }
-        do {
-            membership = try JSONDecoder().decode(OrgMembership.self, from: data)
-        } catch {
-            AppLogger.debug("OrganizationService: Failed to restore membership cache", category: .storage)
-        }
+    private func loadMembersForCurrentOrg() {
+        // In production, fetch from Supabase
     }
 
-    private func clearMembershipCache() {
-        UserDefaults.standard.removeObject(forKey: membershipCacheKey)
+    private func loadClassesForCurrentOrg() {
+        // In production, fetch from Supabase
     }
 
-    // MARK: - Cache: Glossary
+    // MARK: - Usage Stats (Mock)
 
-    private var glossaryCacheURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("org_glossary_cache.json")
+    struct UsageStats {
+        let todayRecordings: Int
+        let weekRecordings: Int
+        let monthRecordings: Int
+        let activeUsersToday: Int
+        let aiUsageToday: Int
+        let aiDailyLimit: Int
     }
 
-    private func cacheGlossary(_ terms: [GlossaryTerm]) {
-        do {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(terms)
-            try data.write(to: glossaryCacheURL, options: .atomic)
-        } catch {
-            AppLogger.debug("OrganizationService: Failed to cache glossary", category: .storage)
-        }
-    }
-
-    private func loadGlossaryFromCache() -> [GlossaryTerm] {
-        guard let data = try? Data(contentsOf: glossaryCacheURL) else { return [] }
-        do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode([GlossaryTerm].self, from: data)
-        } catch {
-            return []
-        }
-    }
-
-    private func clearGlossaryCache() {
-        try? FileManager.default.removeItem(at: glossaryCacheURL)
-    }
-
-    // MARK: - Cache: Cross Summary
-
-    private var crossSummaryCacheURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("org_cross_summary_cache.json")
-    }
-
-    private func cacheCrossSummary(transcriptId: UUID, targetLanguage: String, result: CrossSummaryResult) {
-        var cached = loadCrossSummariesFromCache()
-        // 同じキーがあれば上書き
-        cached.removeAll { $0.transcriptId == transcriptId && $0.targetLanguage == targetLanguage }
-        cached.append(CachedCrossSummary(
-            transcriptId: transcriptId,
-            targetLanguage: targetLanguage,
-            result: result,
-            cachedAt: Date()
-        ))
-        // 最新50件に絞る
-        if cached.count > 50 {
-            cached = Array(cached.suffix(50))
-        }
-        do {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(cached)
-            try data.write(to: crossSummaryCacheURL, options: .atomic)
-        } catch {
-            AppLogger.debug("OrganizationService: Failed to cache cross summary", category: .storage)
-        }
-    }
-
-    private func loadCrossSummariesFromCache() -> [CachedCrossSummary] {
-        guard let data = try? Data(contentsOf: crossSummaryCacheURL) else { return [] }
-        do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode([CachedCrossSummary].self, from: data)
-        } catch {
-            return []
-        }
-    }
-
-    private func clearCrossSummaryCache() {
-        try? FileManager.default.removeItem(at: crossSummaryCacheURL)
-    }
-}
-
-// MARK: - Errors
-
-enum OrgError: LocalizedError {
-    case notMember
-    case notAuthenticated
-    case networkError
-    case dailyLimitReached
-    case serverError(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .notMember:
-            return "Organization membership required"
-        case .notAuthenticated:
-            return "Please sign in to use this feature"
-        case .networkError:
-            return "Network error. Please check your connection."
-        case .dailyLimitReached:
-            return "Daily AI limit reached for your organization. Try again tomorrow."
-        case .serverError(let message):
-            return message
-        }
+    var usageStats: UsageStats {
+        UsageStats(
+            todayRecordings: 12,
+            weekRecordings: 67,
+            monthRecordings: 234,
+            activeUsersToday: 8,
+            aiUsageToday: 7,
+            aiDailyLimit: currentOrganization?.plan.dailyAILimit ?? 10
+        )
     }
 }

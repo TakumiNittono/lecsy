@@ -12,9 +12,11 @@ import UIKit
 struct RecordView: View {
     @StateObject private var recordingService = RecordingService.shared
     @StateObject private var transcriptionService = TranscriptionService.shared
+    @StateObject private var orgService = OrganizationService.shared
     @State private var currentLanguageDisplay: String = TranscriptionService.shared.transcriptionLanguage.displayName
     @AppStorage("lecsy.hasAcceptedAIConsent") private var hasAcceptedAIConsent = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showRecordingErrorAlert = false
     @State private var recordingError: UserFacingError?
     @State private var showTranscriptionErrorAlert = false
@@ -35,19 +37,56 @@ struct RecordView: View {
     @State private var recoveredDuration: TimeInterval = 0
     @State private var recoveredTitle: String = ""
     @State private var hasCheckedRecovery = false
+    @State private var ringPulse = false
+    @State private var isMaxDurationStop = false
 
     var body: some View {
         ZStack {
-            VStack(spacing: 24) {
+            // Background gradient
+            backgroundGradient
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Organization banner
+                if orgService.isInOrganization, !recordingService.isRecording {
+                    orgBanner
+                        .padding(.top, 8)
+                }
+
                 Spacer()
+
+                // Timer
                 timerDisplay
+                    .padding(.bottom, 16)
+
+                // Waveform
                 waveformDisplay
+                    .padding(.bottom, 8)
+
+                // Status
                 statusIndicator
+                    .padding(.bottom, 6)
+
+                // Low audio warning
                 lowAudioWarning
+                    .padding(.bottom, 4)
+
+                // Bookmark toast
                 bookmarkToast
+                    .padding(.bottom, 16)
+
+                // Main control buttons
                 controlButtons
+                    .padding(.bottom, 12)
+
+                // Bookmark count
                 bookmarkCount
+                    .padding(.bottom, 8)
+
+                // Idle hint
                 idleHint
+
+                Spacer()
                 Spacer()
             }
             .padding()
@@ -100,6 +139,11 @@ struct RecordView: View {
             if !isRecording {
                 lowAudioSeconds = 0
                 showLowAudioWarning = false
+                withAnimation { ringPulse = false }
+            } else {
+                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                    ringPulse = true
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: TranscriptionService.languageDidChangeNotification)) { _ in
@@ -125,7 +169,8 @@ struct RecordView: View {
         .sheet(isPresented: $showRecoverySheet) {
             RecoverySheet(
                 duration: recoveredDuration,
-                defaultTitle: recoveredTitle
+                defaultTitle: recoveredTitle,
+                isMaxDuration: isMaxDurationStop
             ) { title, courseName in
                 saveRecoveredLecture(title: title, courseName: courseName)
             } onDiscard: {
@@ -133,10 +178,8 @@ struct RecordView: View {
             }
         }
         .onAppear {
-            // Pre-configure audio session so record starts instantly
             recordingService.prepareAudioSession()
 
-            // Check for orphaned recording from a previous crash/kill
             if !hasCheckedRecovery {
                 hasCheckedRecovery = true
                 Task {
@@ -150,24 +193,73 @@ struct RecordView: View {
             }
         }
         .onChange(of: recordingService.unexpectedlySavedRecording) { _, saved in
-            // Handle recording that was auto-saved due to unexpected interruption
             guard let saved = saved else { return }
             recoveredURL = saved.url
             recoveredDuration = saved.duration
             recoveredTitle = saved.title
+            isMaxDurationStop = recordingService.stoppedAtMaxDuration
+            recordingService.stoppedAtMaxDuration = false
             recordingService.unexpectedlySavedRecording = nil
             showRecoverySheet = true
         }
     }
 
-    // MARK: - Subviews (broken out to help Swift type-checker)
+    // MARK: - Org Banner
+
+    private var orgBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "building.2.fill")
+                .font(.system(size: 12))
+                .foregroundColor(.blue)
+            Text(orgService.currentOrganization?.name ?? "")
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundColor(.primary)
+            Text("•")
+                .foregroundColor(.secondary.opacity(0.4))
+            Text(orgService.currentRole?.displayName ?? "")
+                .font(.system(.caption2, design: .rounded))
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color.blue.opacity(0.06))
+        .clipShape(Capsule())
+    }
+
+    // MARK: - Background
+
+    private var backgroundGradient: some View {
+        Group {
+            if recordingService.isRecording {
+                LinearGradient(
+                    colors: recordingService.isPaused
+                        ? [Color.orange.opacity(0.06), Color(.systemBackground)]
+                        : [Color.red.opacity(0.08), Color(.systemBackground)],
+                    startPoint: .top,
+                    endPoint: .center
+                )
+                .animation(.easeInOut(duration: 0.6), value: recordingService.isPaused)
+            } else {
+                LinearGradient(
+                    colors: [Color.blue.opacity(0.04), Color(.systemBackground)],
+                    startPoint: .top,
+                    endPoint: .center
+                )
+            }
+        }
+    }
+
+    // MARK: - Subviews
 
     private var timerDisplay: some View {
         Text(formatDuration(recordingService.recordingDuration))
-            .font(.system(size: 54, weight: .semibold, design: .rounded))
+            .font(.system(size: isIPad ? 72 : 58, weight: .semibold, design: .monospaced))
             .monospacedDigit()
-            .foregroundColor(recordingService.isRecording ? .primary : .secondary.opacity(0.5))
-            .kerning(1.5)
+            .foregroundColor(recordingService.isRecording
+                ? (recordingService.isPaused ? .orange : .primary)
+                : .secondary.opacity(0.4))
+            .contentTransition(.numericText())
+            .animation(.easeInOut(duration: 0.15), value: recordingService.recordingDuration)
             .accessibilityLabel("Recording duration: \(formatDuration(recordingService.recordingDuration))")
     }
 
@@ -175,33 +267,42 @@ struct RecordView: View {
     private var waveformDisplay: some View {
         if recordingService.isRecording {
             AudioWaveformView(levels: recordingService.audioLevelHistory)
-                .transition(.opacity)
+                .opacity(recordingService.isPaused ? 0.35 : 1.0)
+                .animation(.easeInOut(duration: 0.3), value: recordingService.isPaused)
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
         }
     }
 
     @ViewBuilder
     private var statusIndicator: some View {
         if recordingService.isRecording {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Circle()
-                    .fill(Color.red)
+                    .fill(recordingService.isPaused ? Color.orange : Color.red)
                     .frame(width: 8, height: 8)
-                    .opacity(recordingService.isPaused ? 0.4 : recordingDotOpacity)
+                    .opacity(recordingService.isPaused ? 0.5 : recordingDotOpacity)
 
-                Text(recordingService.isPaused ? "Paused" : "Recording")
-                    .font(.system(.caption, design: .rounded, weight: .medium))
+                Text(recordingService.isPaused ? "PAUSED" : "REC")
+                    .font(.system(.caption2, design: .rounded, weight: .bold))
                     .foregroundColor(recordingService.isPaused ? .orange : .red)
-                    .textCase(.uppercase)
-                    .kerning(1)
+                    .kerning(1.5)
 
-                Text("|")
+                Text("\u{2022}")
                     .font(.caption2)
-                    .foregroundColor(.secondary.opacity(0.5))
+                    .foregroundColor(.secondary.opacity(0.3))
 
                 Text(estimatedFileSize(recordingService.recordingDuration))
                     .font(.system(.caption2, design: .monospaced))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.secondary.opacity(0.6))
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(recordingService.isPaused
+                        ? Color.orange.opacity(0.08)
+                        : Color.red.opacity(0.08))
+            )
             .onAppear {
                 withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                     recordingDotOpacity = 0.2
@@ -216,37 +317,44 @@ struct RecordView: View {
     @ViewBuilder
     private var lowAudioWarning: some View {
         if showLowAudioWarning && recordingService.isRecording && !recordingService.isPaused {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.caption2)
-                Text("Audio level is low — move closer to the speaker")
-                    .font(.caption)
+                Text("Audio level low \u{2014} move closer to speaker")
+                    .font(.system(.caption2, design: .rounded))
             }
             .foregroundColor(.orange)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color.orange.opacity(0.08))
+            .clipShape(Capsule())
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
     }
 
     @ViewBuilder
     private var bookmarkToast: some View {
         if showBookmarkToast {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Image(systemName: "bookmark.fill")
-                    .font(.caption)
+                    .font(.caption2)
                 Text("Bookmarked!")
-                    .font(.caption)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
             }
             .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Color.accentColor.opacity(0.9))
-            .cornerRadius(16)
-            .transition(.opacity.combined(with: .scale))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color.accentColor)
+            .clipShape(Capsule())
+            .shadow(color: .accentColor.opacity(0.3), radius: 8, y: 4)
+            .transition(.opacity.combined(with: .scale(scale: 0.8)))
         }
     }
 
     private var controlButtons: some View {
-        HStack(spacing: isIPad ? 32 : 24) {
+        HStack(spacing: isIPad ? 36 : 28) {
             if recordingService.isRecording {
+                // Pause/Resume
                 Button(action: {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     if recordingService.isPaused {
@@ -257,16 +365,19 @@ struct RecordView: View {
                 }) {
                     ZStack {
                         Circle()
-                            .fill(Color.orange.opacity(0.8))
-                            .frame(width: isIPad ? 72 : 56, height: isIPad ? 72 : 56)
+                            .fill(Color.orange)
+                            .frame(width: isIPad ? 64 : 52, height: isIPad ? 64 : 52)
                         Image(systemName: recordingService.isPaused ? "play.fill" : "pause.fill")
-                            .font(.system(size: isIPad ? 26 : 20))
+                            .font(.system(size: isIPad ? 22 : 18, weight: .semibold))
                             .foregroundColor(.white)
                     }
+                    .shadow(color: .orange.opacity(0.3), radius: 8, y: 4)
                 }
                 .accessibilityLabel(recordingService.isPaused ? "Resume recording" : "Pause recording")
+                .transition(.scale.combined(with: .opacity))
             }
 
+            // Main record/stop button
             Button(action: {
                 if recordingService.isRecording {
                     stopRecording()
@@ -275,75 +386,110 @@ struct RecordView: View {
                 }
             }) {
                 ZStack {
+                    // Outer pulse ring (recording only)
+                    if recordingService.isRecording && !recordingService.isPaused {
+                        Circle()
+                            .stroke(Color.red.opacity(0.2), lineWidth: 2)
+                            .frame(width: isIPad ? 110 : 86, height: isIPad ? 110 : 86)
+                            .scaleEffect(ringPulse ? 1.15 : 1.0)
+                            .opacity(ringPulse ? 0 : 0.6)
+                    }
+
+                    // Outer ring
                     Circle()
-                        .fill(recordingService.isRecording ? Color.red.opacity(0.8) : Color.blue)
-                        .frame(width: isIPad ? 96 : 72, height: isIPad ? 96 : 72)
-                        .shadow(color: recordingService.isRecording ? .red.opacity(0.3) : .blue.opacity(0.3), radius: 8, y: 4)
-                    Image(systemName: recordingService.isRecording ? "stop.fill" : "mic.fill")
-                        .font(.system(size: isIPad ? 34 : 26))
-                        .foregroundColor(.white)
+                        .stroke(
+                            recordingService.isRecording ? Color.red.opacity(0.2) : Color.blue.opacity(0.15),
+                            lineWidth: 3
+                        )
+                        .frame(width: isIPad ? 100 : 80, height: isIPad ? 100 : 80)
+
+                    // Main button
+                    Circle()
+                        .fill(recordingService.isRecording ? Color.red : Color.blue)
+                        .frame(width: isIPad ? 80 : 64, height: isIPad ? 80 : 64)
+
+                    // Icon
+                    Group {
+                        if recordingService.isRecording {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.white)
+                                .frame(width: isIPad ? 24 : 20, height: isIPad ? 24 : 20)
+                        } else {
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: isIPad ? 28 : 22))
+                                .foregroundColor(.white)
+                        }
+                    }
                 }
+                .shadow(color: recordingService.isRecording ? .red.opacity(0.25) : .blue.opacity(0.25), radius: 12, y: 6)
             }
             .accessibilityLabel(recordingService.isRecording ? "Stop recording" : "Start recording")
 
             if recordingService.isRecording {
+                // Bookmark
                 Button(action: addBookmark) {
                     ZStack {
                         Circle()
-                            .fill(Color.accentColor.opacity(0.8))
-                            .frame(width: isIPad ? 72 : 56, height: isIPad ? 72 : 56)
+                            .fill(Color.accentColor)
+                            .frame(width: isIPad ? 64 : 52, height: isIPad ? 64 : 52)
                         Image(systemName: "bookmark.fill")
-                            .font(.system(size: isIPad ? 26 : 20))
+                            .font(.system(size: isIPad ? 22 : 18, weight: .semibold))
                             .foregroundColor(.white)
                     }
+                    .shadow(color: .accentColor.opacity(0.3), radius: 8, y: 4)
                 }
                 .accessibilityLabel("Add bookmark")
+                .transition(.scale.combined(with: .opacity))
             }
         }
+        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: recordingService.isRecording)
     }
 
     @ViewBuilder
     private var bookmarkCount: some View {
         if recordingService.isRecording && !pendingBookmarks.isEmpty {
-            Text("\(pendingBookmarks.count) bookmark\(pendingBookmarks.count == 1 ? "" : "s")")
-                .font(.caption2)
-                .foregroundColor(.secondary)
+            HStack(spacing: 4) {
+                Image(systemName: "bookmark.fill")
+                    .font(.system(size: 9))
+                Text("\(pendingBookmarks.count)")
+                    .font(.system(.caption2, design: .rounded, weight: .medium))
+            }
+            .foregroundColor(.accentColor.opacity(0.7))
         }
     }
 
     @ViewBuilder
     private var idleHint: some View {
         if !recordingService.isRecording {
-            VStack(spacing: 8) {
+            VStack(spacing: 10) {
                 Text("Tap to start recording")
-                    .font(.system(.caption, design: .rounded))
-                    .foregroundColor(.secondary.opacity(0.6))
-                    .kerning(0.5)
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundColor(.secondary.opacity(0.5))
 
                 Button {
                     showLanguagePicker = true
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         Image(systemName: "globe")
-                            .font(.caption2)
+                            .font(.system(size: 12))
                         Text(currentLanguageDisplay)
-                            .font(.system(.caption2, design: .rounded))
+                            .font(.system(.caption, design: .rounded, weight: .medium))
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 8, weight: .semibold))
+                            .font(.system(size: 8, weight: .bold))
                     }
-                    .foregroundColor(.blue.opacity(0.7))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.blue.opacity(0.08))
+                    .foregroundColor(.blue.opacity(0.8))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color.blue.opacity(0.06))
                     .clipShape(Capsule())
                 }
 
                 if !transcriptionService.isModelLoaded {
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         ProgressView()
-                            .scaleEffect(0.5)
-                        Text("AI preparing...")
-                            .font(.caption2)
+                            .scaleEffect(0.6)
+                        Text("Preparing AI model...")
+                            .font(.system(.caption2, design: .rounded))
                     }
                     .foregroundColor(.secondary.opacity(0.4))
                 }
@@ -361,8 +507,8 @@ struct RecordView: View {
         let bookmark = LectureBookmark(timestamp: recordingService.recordingDuration)
         pendingBookmarks.append(bookmark)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withAnimation { showBookmarkToast = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { showBookmarkToast = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             withAnimation { showBookmarkToast = false }
         }
     }
@@ -379,13 +525,11 @@ struct RecordView: View {
 
     private func startRecording() {
         Task { @MainActor in
-            // Check AI consent
             if !hasAcceptedAIConsent {
                 showAIConsentSheet = true
                 return
             }
 
-            // Permission check
             let permissionStatus = AVAudioSession.sharedInstance().recordPermission
             if permissionStatus == .undetermined {
                 let granted = await recordingService.requestMicrophonePermission()
@@ -505,8 +649,6 @@ struct RecordView: View {
         updatedLecture.transcriptStatus = .processing
         store.updateLecture(updatedLecture)
 
-        // Progressive update: show partial transcript as each chunk completes
-        // Read latest from store each time to avoid overwriting user's title edits
         transcriptionService.onChunkCompleted = { partialText, partialSegments in
             guard var latest = store.getLecture(by: lectureId) else { return }
             latest.transcriptText = partialText
@@ -572,11 +714,13 @@ private struct RecoverySheet: View {
     @State private var title: String
     @State private var courseName: String = ""
     let duration: TimeInterval
+    let isMaxDuration: Bool
     let onSave: (String, String?) -> Void
     let onDiscard: () -> Void
 
-    init(duration: TimeInterval, defaultTitle: String, onSave: @escaping (String, String?) -> Void, onDiscard: @escaping () -> Void) {
+    init(duration: TimeInterval, defaultTitle: String, isMaxDuration: Bool = false, onSave: @escaping (String, String?) -> Void, onDiscard: @escaping () -> Void) {
         self.duration = duration
+        self.isMaxDuration = isMaxDuration
         _title = State(initialValue: defaultTitle)
         self.onSave = onSave
         self.onDiscard = onDiscard
@@ -585,15 +729,17 @@ private struct RecoverySheet: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
-                Image(systemName: "exclamationmark.triangle.fill")
+                Image(systemName: isMaxDuration ? "clock.badge.checkmark" : "exclamationmark.triangle.fill")
                     .font(.system(size: 40))
-                    .foregroundColor(.orange)
+                    .foregroundColor(isMaxDuration ? .blue : .orange)
                     .padding(.top, 24)
 
-                Text("Recording Recovered")
-                    .font(.title3.bold())
+                Text(isMaxDuration ? "Maximum Length Reached" : "Recording Recovered")
+                    .font(.system(.title3, design: .rounded, weight: .bold))
 
-                Text("A previous recording was interrupted. We saved \(formatDuration(duration)) of audio.")
+                Text(isMaxDuration
+                     ? "Recording reached the maximum length of \(formatDuration(duration)). Your audio has been saved."
+                     : "A previous recording was interrupted. We saved \(formatDuration(duration)) of audio.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -612,7 +758,7 @@ private struct RecoverySheet: View {
 
                 Button(action: save) {
                     Text("Save Recording")
-                        .font(.headline)
+                        .font(.system(.headline, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.blue)

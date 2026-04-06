@@ -160,23 +160,6 @@ class LectureStore: ObservableObject {
         lectures = []
     }
     
-    /// Mark as saved to Web
-    func markAsSavedToWeb(_ lecture: Lecture, webId: UUID) {
-        var updatedLecture = lecture
-        updatedLecture.savedToWeb = true
-        updatedLecture.webTranscriptId = webId
-        updateLecture(updatedLecture)
-    }
-    
-    /// Get lectures not saved to Web
-    func getPendingUploads() -> [Lecture] {
-        return lectures.filter { lecture in
-            lecture.transcriptStatus == .completed &&
-            !lecture.savedToWeb &&
-            lecture.transcriptText != nil
-        }
-    }
-    
     /// Search
     func searchLectures(query: String) -> [Lecture] {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)

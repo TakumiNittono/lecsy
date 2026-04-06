@@ -10,10 +10,7 @@ import CoreText
 
 struct LectureDetailView: View {
     @StateObject private var store = LectureStore.shared
-    @StateObject private var syncService = SyncService.shared
-    @StateObject private var authService = AuthService.shared
     @StateObject private var audioPlayer = AudioPlayerService.shared
-    @StateObject private var orgService = OrganizationService.shared
     @ObservedObject private var transcriptionStatus = TranscriptionService.shared
     @State private var title: String
     @State private var lecture: Lecture
@@ -37,10 +34,9 @@ struct LectureDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // Title editing
                 TextField("Title", text: $title)
-                    .font(.system(.title3, design: .rounded, weight: .semibold))
-                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.title3, design: .rounded, weight: .bold))
+                    .textFieldStyle(.plain)
                     .onChange(of: title) { _, newValue in
-                        // Debounce: save to disk and sync to web after 500ms of inactivity
                         titleSaveTask?.cancel()
                         titleSaveTask = Task {
                             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -50,28 +46,37 @@ struct LectureDetailView: View {
                             updatedLecture.title = newValue
                             store.updateLecture(updatedLecture)
                             lecture = updatedLecture
-
-                            if lecture.savedToWeb, lecture.webTranscriptId != nil {
-                                do {
-                                    try await syncService.updateTitleOnWeb(lecture: updatedLecture, newTitle: newValue)
-                                } catch {
-                                    AppLogger.warning("LectureDetailView: Web title update failed - \(error.localizedDescription)", category: .sync)
-                                }
-                            }
                         }
                     }
 
-                // Metadata
-                HStack {
-                    Label(lecture.formattedDuration, systemImage: "clock")
-                    Spacer()
+                // Metadata pills
+                HStack(spacing: 12) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 10))
+                        Text(lecture.formattedDuration)
+                    }
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.secondary.opacity(0.08))
+                    .clipShape(Capsule())
+
                     HStack(spacing: 4) {
                         Image(systemName: "calendar")
+                            .font(.system(size: 10))
                         Text(lecture.createdAt, style: .date)
                     }
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.secondary.opacity(0.08))
+                    .clipShape(Capsule())
+
+                    Spacer()
                 }
-                .font(.system(.caption, design: .rounded))
-                .foregroundColor(.secondary)
 
                 // Audio Player
                 if lecture.audioPath != nil {
@@ -87,9 +92,10 @@ struct LectureDetailView: View {
 
                 // Copy & Share buttons
                 if let transcript = lecture.transcriptText, !transcript.isEmpty {
-                    HStack(spacing: 20) {
+                    let cleanTranscript = TranscriptionResult.TranscriptionSegment.stripWhisperTokens(transcript)
+                    HStack(spacing: 10) {
                         Spacer()
-                        CopyButton(text: transcript)
+                        CopyButton(text: cleanTranscript)
 
                         Menu {
                             Button {
@@ -107,25 +113,22 @@ struct LectureDetailView: View {
                             } label: {
                                 Label("Export PDF", systemImage: "doc.richtext")
                             }
-                            if lecture.savedToWeb, lecture.webTranscriptId != nil {
-                                Divider()
-                                Button {
-                                    shareLink()
-                                } label: {
-                                    Label("Share Web Link", systemImage: "link")
-                                }
-                            }
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 5) {
                                 Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 13))
                                 Text("Share")
+                                    .font(.system(.subheadline, design: .rounded, weight: .medium))
                             }
-                            .font(.body)
                             .foregroundColor(.blue)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.blue.opacity(0.08))
+                            .clipShape(Capsule())
                         }
                         .accessibilityLabel("Share or export transcript")
                     }
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 4)
                 }
 
                 // Cancel + Retry button (visible when stuck in processing)
@@ -187,7 +190,7 @@ struct LectureDetailView: View {
                             )
                             .frame(minHeight: 200)
                         } else if let transcript = lecture.transcriptText, !transcript.isEmpty {
-                            Text(transcript)
+                            Text(TranscriptionResult.TranscriptionSegment.stripWhisperTokens(transcript))
                                 .font(.body)
                                 .foregroundColor(.secondary)
                         }
@@ -221,41 +224,6 @@ struct LectureDetailView: View {
                         .foregroundColor(.secondary)
                 }
 
-                // MARK: - B2B AI Assist Section (org members only)
-                if orgService.isMember, lecture.savedToWeb, lecture.webTranscriptId != nil {
-                    Divider()
-                        .padding(.vertical, 8)
-
-                    CrossSummaryView(transcriptId: lecture.webTranscriptId!)
-
-                    // Glossary link
-                    NavigationLink {
-                        OrgGlossaryView()
-                    } label: {
-                        HStack {
-                            Image(systemName: "book")
-                                .foregroundColor(.green)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Organization Glossary")
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundColor(.primary)
-                                if let org = orgService.organization {
-                                    Text(org.name)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding()
-                        .background(Color(.systemBackground))
-                        .cornerRadius(16)
-                        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
-                    }
-                }
             }
             .padding()
             .frame(maxWidth: 720)
@@ -309,53 +277,57 @@ struct LectureDetailView: View {
     // MARK: - Audio Player Section
 
     private var audioPlayerSection: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             if let error = audioLoadError {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle")
-                        .foregroundColor(.orange)
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text(error)
+                            .font(.system(.caption, design: .rounded))
+                            .foregroundColor(.secondary)
+                    }
+                    Button {
+                        loadAudio()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text("Retry")
+                                .font(.system(.caption, design: .rounded, weight: .semibold))
+                        }
+                        .foregroundColor(.accentColor)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(Color.accentColor.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
                 }
             } else {
-                HStack(spacing: 12) {
-                    // Play/Pause button
-                    Button(action: {
-                        if audioPlayer.isPlaying {
-                            audioPlayer.pause()
-                        } else {
-                            audioPlayer.play()
-                        }
-                    }) {
-                        Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 36))
-                            .foregroundColor(.accentColor)
-                    }
-                    .accessibilityLabel(audioPlayer.isPlaying ? "Pause" : "Play")
+                // Progress slider
+                VStack(spacing: 2) {
+                    Slider(
+                        value: Binding(
+                            get: { audioPlayer.currentTime },
+                            set: { audioPlayer.seek(to: $0) }
+                        ),
+                        in: 0...max(audioPlayer.duration, 0.01)
+                    )
+                    .tint(.accentColor)
+                    .accessibilityLabel("Seek through audio")
 
-                    VStack(spacing: 4) {
-                        // Seek slider
-                        Slider(
-                            value: Binding(
-                                get: { audioPlayer.currentTime },
-                                set: { audioPlayer.seek(to: $0) }
-                            ),
-                            in: 0...max(audioPlayer.duration, 0.01)
-                        )
-                        .accessibilityLabel("Seek through audio")
-
-                        // Time labels
-                        HStack {
-                            Text(formatTime(audioPlayer.currentTime))
-                                .font(.system(.caption2, design: .monospaced))
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text(formatTime(audioPlayer.duration))
-                                .font(.system(.caption2, design: .monospaced))
-                                .foregroundColor(.secondary)
-                        }
+                    HStack {
+                        Text(formatTime(audioPlayer.currentTime))
+                        Spacer()
+                        Text("-\(formatTime(max(0, audioPlayer.duration - audioPlayer.currentTime)))")
                     }
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary.opacity(0.7))
+                }
+
+                // Controls row
+                HStack(spacing: 16) {
+                    Spacer()
 
                     // Speed button
                     Button(action: {
@@ -364,17 +336,44 @@ struct LectureDetailView: View {
                         Text(formatRate(audioPlayer.playbackRate))
                             .font(.system(.caption, design: .rounded, weight: .bold))
                             .foregroundColor(.accentColor)
-                            .frame(width: 44, height: 30)
-                            .background(Color.accentColor.opacity(0.1))
-                            .cornerRadius(8)
+                            .frame(width: 44, height: 32)
+                            .background(Color.accentColor.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .accessibilityLabel("Playback speed \(formatRate(audioPlayer.playbackRate))")
+
+                    // Play/Pause button
+                    Button(action: {
+                        if audioPlayer.isPlaying {
+                            audioPlayer.pause()
+                        } else {
+                            audioPlayer.play()
+                        }
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.accentColor)
+                                .frame(width: 48, height: 48)
+                            Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .offset(x: audioPlayer.isPlaying ? 0 : 2)
+                        }
+                        .shadow(color: .accentColor.opacity(0.2), radius: 6, y: 3)
+                    }
+                    .accessibilityLabel(audioPlayer.isPlaying ? "Pause" : "Play")
+
+                    // Placeholder for symmetry
+                    Color.clear
+                        .frame(width: 44, height: 32)
+
+                    Spacer()
                 }
             }
         }
-        .padding(12)
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: - Retry Button
@@ -387,14 +386,16 @@ struct LectureDetailView: View {
         }) {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 13, weight: .semibold))
                 Text(lecture.transcriptStatus == .notStarted ? "Transcribe" : "Retry Transcription")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
             }
-            .font(.subheadline)
             .foregroundColor(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
             .background(Color.accentColor)
-            .cornerRadius(8)
+            .clipShape(Capsule())
+            .shadow(color: .accentColor.opacity(0.2), radius: 6, y: 3)
         }
         .disabled(isRetrying)
     }
@@ -411,14 +412,15 @@ struct LectureDetailView: View {
         }) {
             HStack(spacing: 6) {
                 Image(systemName: "xmark.circle")
+                    .font(.system(size: 13, weight: .semibold))
                 Text("Cancel & Retry")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
             }
-            .font(.subheadline)
             .foregroundColor(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
             .background(Color.orange)
-            .cornerRadius(8)
+            .clipShape(Capsule())
         }
     }
 
@@ -640,7 +642,7 @@ struct LectureDetailView: View {
         if let segments = lecture.transcriptSegments, !segments.isEmpty {
             for segment in segments {
                 let timestamp = formatTime(segment.startTime)
-                text += "[\(timestamp)] \(segment.text)\n"
+                text += "[\(timestamp)] \(segment.cleanText)\n"
             }
         } else {
             text += transcript
@@ -680,7 +682,7 @@ struct LectureDetailView: View {
         if let segments = lecture.transcriptSegments, !segments.isEmpty {
             for segment in segments {
                 md += "> [\(formatTime(segment.startTime))]\n\n"
-                md += "\(segment.text)\n\n"
+                md += "\(segment.cleanText)\n\n"
             }
         } else {
             md += transcript
@@ -697,13 +699,6 @@ struct LectureDetailView: View {
             errorMessage = "Failed to export Markdown: \(error.localizedDescription)"
             showErrorAlert = true
         }
-    }
-
-    private func shareLink() {
-        guard let webId = lecture.webTranscriptId else { return }
-        let url = SupabaseConfig.webBaseURL.appendingPathComponent("app/t/\(webId.uuidString)")
-        shareItems = [url]
-        showShareSheet = true
     }
 
     private func shareAsPDF() {
@@ -771,7 +766,7 @@ struct LectureDetailView: View {
             ]
             for segment in segments {
                 content.append(NSAttributedString(string: "[\(formatTime(segment.startTime))] ", attributes: timestampAttrs))
-                content.append(NSAttributedString(string: segment.text + "\n", attributes: bodyAttrs))
+                content.append(NSAttributedString(string: segment.cleanText + "\n", attributes: bodyAttrs))
             }
         } else {
             let bodyAttrs: [NSAttributedString.Key: Any] = [

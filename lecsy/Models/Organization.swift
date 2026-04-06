@@ -2,131 +2,289 @@
 //  Organization.swift
 //  lecsy
 //
-//  B2B組織関連のモデル定義
+//  Created on 2026/04/05.
 //
 
 import Foundation
 
-/// 組織情報
-struct Organization: Codable, Identifiable, Equatable {
-    let id: UUID
-    let name: String
-    let slug: String
-    let type: String    // language_school, university_iep, college, corporate
-    let plan: String    // starter, growth, enterprise
-    let maxSeats: Int
+// MARK: - Organization Role
 
-    enum CodingKeys: String, CodingKey {
-        case id, name, slug, type, plan
-        case maxSeats = "max_seats"
-    }
-}
-
-/// 組織メンバーシップ
-struct OrgMembership: Codable, Equatable {
-    let orgId: UUID
-    let userId: UUID?
-    let role: OrgRole
-    let status: String  // "active" or "pending"
-    let organization: Organization
-
-    enum CodingKeys: String, CodingKey {
-        case orgId = "org_id"
-        case userId = "user_id"
-        case role
-        case status
-        case organization = "organizations"
-    }
-}
-
-/// 組織内のロール
-enum OrgRole: String, Codable, Comparable {
+enum OrganizationRole: String, Codable, CaseIterable, Comparable {
     case student
     case teacher
     case admin
     case owner
 
+    var displayName: String {
+        switch self {
+        case .student: return "Student"
+        case .teacher: return "Teacher"
+        case .admin: return "Admin"
+        case .owner: return "Owner"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .student: return "person.fill"
+        case .teacher: return "person.badge.key.fill"
+        case .admin: return "person.badge.shield.checkmark.fill"
+        case .owner: return "crown.fill"
+        }
+    }
+
+    /// Permission level for comparison
     private var level: Int {
         switch self {
-        case .student: return 1
-        case .teacher: return 2
-        case .admin: return 3
-        case .owner: return 4
+        case .student: return 0
+        case .teacher: return 1
+        case .admin: return 2
+        case .owner: return 3
         }
     }
 
-    static func < (lhs: OrgRole, rhs: OrgRole) -> Bool {
+    static func < (lhs: OrganizationRole, rhs: OrganizationRole) -> Bool {
         lhs.level < rhs.level
     }
+
+    var canManageMembers: Bool { self >= .admin }
+    var canManageClasses: Bool { self >= .teacher }
+    var canGenerateGlossary: Bool { self >= .teacher }
+    var canViewUsageStats: Bool { self >= .teacher }
+    var canChangeOrgSettings: Bool { self >= .admin }
+    var canManageBilling: Bool { self >= .admin }
+    var canDeleteOrg: Bool { self == .owner }
 }
 
-/// 組織用語集の用語
-struct GlossaryTerm: Codable, Identifiable, Equatable {
-    let id: UUID
-    let orgId: UUID
-    let term: String
-    let definition: String
-    let language: String
-    let category: String?
-    let sourceTranscriptId: UUID?
-    let createdAt: Date
+// MARK: - Organization Plan
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case orgId = "org_id"
-        case term, definition, language, category
-        case sourceTranscriptId = "source_transcript_id"
-        case createdAt = "created_at"
-    }
-}
+enum OrganizationPlan: String, Codable, CaseIterable {
+    case starter
+    case growth
+    case enterprise
 
-/// クロス要約の結果
-struct CrossSummaryResult: Codable, Equatable {
-    let summary: String
-    let keyPoints: [String]
-    let sections: [SummarySection]
-    let sourceLanguage: String
-    let targetLanguage: String
-    let keyTermsBilingual: [BilingualTerm]?
-
-    enum CodingKeys: String, CodingKey {
-        case summary
-        case keyPoints = "key_points"
-        case sections
-        case sourceLanguage = "source_language"
-        case targetLanguage = "target_language"
-        case keyTermsBilingual = "key_terms_bilingual"
+    var displayName: String {
+        switch self {
+        case .starter: return "Starter"
+        case .growth: return "Growth"
+        case .enterprise: return "Enterprise"
+        }
     }
 
-    struct SummarySection: Codable, Equatable {
-        let heading: String
-        let content: String
+    var dailyAILimit: Int {
+        switch self {
+        case .starter: return 10
+        case .growth: return 50
+        case .enterprise: return 200
+        }
     }
 
-    struct BilingualTerm: Codable, Identifiable, Equatable {
-        var id: String { "\(original)-\(translated)" }
-        let original: String
-        let translated: String
-        let context: String?
-
-        private enum CodingKeys: String, CodingKey {
-            case original, translated, context
+    var monthlyPrice: String {
+        switch self {
+        case .starter: return "$299"
+        case .growth: return "$599"
+        case .enterprise: return "Custom"
         }
     }
 }
 
-/// クロス要約のローカルキャッシュ
-struct CachedCrossSummary: Codable, Identifiable, Equatable {
-    var id: String { "\(transcriptId)-\(targetLanguage)" }
-    let transcriptId: UUID
-    let targetLanguage: String
-    let result: CrossSummaryResult
-    let cachedAt: Date
+// MARK: - Organization Type
 
-    private enum CodingKeys: String, CodingKey {
-        case transcriptId = "transcript_id"
-        case targetLanguage = "target_language"
-        case result
-        case cachedAt = "cached_at"
+enum OrganizationType: String, Codable, CaseIterable {
+    case languageSchool = "language_school"
+    case universityIEP = "university_iep"
+    case college
+    case corporate
+
+    var displayName: String {
+        switch self {
+        case .languageSchool: return "Language School"
+        case .universityIEP: return "University IEP"
+        case .college: return "College"
+        case .corporate: return "Corporate"
+        }
+    }
+}
+
+// MARK: - Member Status
+
+enum MemberStatus: String, Codable {
+    case pending
+    case active
+    case removed
+}
+
+// MARK: - Recording Visibility
+
+enum RecordingVisibility: String, Codable {
+    case `private`
+    case shared
+    case orgWide = "org_wide"
+
+    var displayName: String {
+        switch self {
+        case .private: return "Private"
+        case .shared: return "Shared (Class)"
+        case .orgWide: return "Organization"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .private: return "lock.fill"
+        case .shared: return "person.2.fill"
+        case .orgWide: return "building.2.fill"
+        }
+    }
+}
+
+// MARK: - Organization
+
+struct Organization: Identifiable, Codable, Equatable {
+    let id: UUID
+    var name: String
+    var slug: String
+    var type: OrganizationType
+    var plan: OrganizationPlan
+    var maxSeats: Int
+    let createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        slug: String,
+        type: OrganizationType = .languageSchool,
+        plan: OrganizationPlan = .starter,
+        maxSeats: Int = 50,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.slug = slug
+        self.type = type
+        self.plan = plan
+        self.maxSeats = maxSeats
+        self.createdAt = createdAt
+    }
+}
+
+// MARK: - Organization Member
+
+struct OrganizationMember: Identifiable, Codable, Equatable {
+    let id: UUID
+    let organizationId: UUID
+    var userId: UUID?
+    var email: String
+    var displayName: String
+    var role: OrganizationRole
+    var status: MemberStatus
+    let joinedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        organizationId: UUID,
+        userId: UUID? = nil,
+        email: String,
+        displayName: String,
+        role: OrganizationRole = .student,
+        status: MemberStatus = .pending,
+        joinedAt: Date = Date()
+    ) {
+        self.id = id
+        self.organizationId = organizationId
+        self.userId = userId
+        self.email = email
+        self.displayName = displayName
+        self.role = role
+        self.status = status
+        self.joinedAt = joinedAt
+    }
+}
+
+// MARK: - Organization Class
+
+struct OrganizationClass: Identifiable, Codable, Equatable {
+    let id: UUID
+    let organizationId: UUID
+    var name: String
+    var language: TranscriptionLanguage
+    var semester: String
+    var teacherId: UUID?
+    var studentIds: [UUID]
+
+    init(
+        id: UUID = UUID(),
+        organizationId: UUID,
+        name: String,
+        language: TranscriptionLanguage = .english,
+        semester: String = "",
+        teacherId: UUID? = nil,
+        studentIds: [UUID] = []
+    ) {
+        self.id = id
+        self.organizationId = organizationId
+        self.name = name
+        self.language = language
+        self.semester = semester
+        self.teacherId = teacherId
+        self.studentIds = studentIds
+    }
+}
+
+// MARK: - Glossary Entry
+
+struct GlossaryEntry: Identifiable, Codable, Equatable {
+    let id: UUID
+    let organizationId: UUID
+    var term: String
+    var definition: String
+    var example: String
+    var targetLanguage: TranscriptionLanguage
+    var translation: String
+    var difficulty: DifficultyLevel
+    let createdAt: Date
+
+    enum DifficultyLevel: String, Codable, CaseIterable {
+        case beginner
+        case intermediate
+        case advanced
+
+        var displayName: String {
+            switch self {
+            case .beginner: return "Beginner"
+            case .intermediate: return "Intermediate"
+            case .advanced: return "Advanced"
+            }
+        }
+
+        var color: String {
+            switch self {
+            case .beginner: return "green"
+            case .intermediate: return "orange"
+            case .advanced: return "red"
+            }
+        }
+    }
+
+    init(
+        id: UUID = UUID(),
+        organizationId: UUID,
+        term: String,
+        definition: String,
+        example: String = "",
+        targetLanguage: TranscriptionLanguage = .spanish,
+        translation: String = "",
+        difficulty: DifficultyLevel = .intermediate,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.organizationId = organizationId
+        self.term = term
+        self.definition = definition
+        self.example = example
+        self.targetLanguage = targetLanguage
+        self.translation = translation
+        self.difficulty = difficulty
+        self.createdAt = createdAt
     }
 }

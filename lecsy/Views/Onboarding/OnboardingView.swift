@@ -33,7 +33,13 @@ struct OnboardingView: View {
 
             bottomSection
         }
-        .onAppear { startSetupTimer() }
+        .onAppear {
+            startSetupTimer()
+            // Ensure model preloading has started (safety net in case init was skipped)
+            if !transcriptionService.isModelLoaded {
+                transcriptionService.prepareModelInBackground(force: true)
+            }
+        }
         .onDisappear { stopSetupTimer() }
     }
 
@@ -80,6 +86,11 @@ struct OnboardingView: View {
     }
 
     private var canProceed: Bool {
+        // Require AI consent on first page
+        if currentPage == 0 {
+            return true // Tapping "Agree & Continue" itself gives consent
+        }
+        // Block final page until model is loaded
         if currentPage == totalPages - 1 {
             return transcriptionService.isModelLoaded
         }
@@ -127,7 +138,7 @@ struct OnboardingView: View {
                     iconRow(icon: "cpu", text: "All AI transcription runs on-device. No third-party AI service is used.")
                     iconRow(icon: "iphone", text: "Your audio recordings never leave your device.")
                     iconRow(icon: "wifi", text: "No internet needed for transcription. Everything works offline.")
-                    iconRow(icon: "icloud", text: "If you sign in, only transcription text syncs for cross-device access.")
+                    iconRow(icon: "lock.shield", text: "Your recordings and transcriptions stay on your device. Nothing is uploaded.")
                 }
                 .padding(.horizontal, 32)
 
@@ -159,7 +170,7 @@ struct OnboardingView: View {
                              desc: "AI automatically converts speech to text, entirely on your device.")
                     stepCard(step: "3", icon: "doc.text.magnifyingglass", color: .green,
                              title: "Review",
-                             desc: "Read, search, and copy your transcription. Syncs across devices if signed in.")
+                             desc: "Read, search, and copy your transcription. Export as text, Markdown, or PDF.")
                 }
                 .padding(.horizontal, 32)
 
@@ -192,9 +203,9 @@ struct OnboardingView: View {
                     featureCard(icon: "globe", color: .blue,
                                 title: "12 Languages",
                                 desc: "English, Japanese, Korean, Chinese, Spanish, French, and more.")
-                    featureCard(icon: "arrow.triangle.2.circlepath", color: .green,
-                                title: "Cross-Device Sync",
-                                desc: "Sign in to access your transcriptions from any device.")
+                    featureCard(icon: "square.and.arrow.up", color: .green,
+                                title: "Export Anywhere",
+                                desc: "Share your transcriptions as text, Markdown, or PDF.")
                 }
                 .padding(.horizontal, 32)
 
@@ -268,6 +279,29 @@ struct OnboardingView: View {
                 Text("Start recording your first lecture.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            } else if transcriptionService.state == .failed {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.red)
+
+                Text("Setup Failed")
+                    .font(.title.bold())
+
+                Text("Couldn't prepare the AI model.\nPlease try again.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Button("Retry") {
+                    elapsedSeconds = 0
+                    transcriptionService.prepareModelInBackground(force: true)
+                }
+                .font(.headline)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 12)
+                .background(Color.red)
+                .foregroundStyle(.white)
+                .clipShape(Capsule())
             } else {
                 Image(systemName: "cpu")
                     .font(.system(size: 48))

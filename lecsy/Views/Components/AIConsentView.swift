@@ -37,8 +37,8 @@ struct AIConsentView: View {
                         text: "Internet is only used once to download the AI model (~150 MB). No user data is transmitted during the download."
                     )
                     privacyPoint(
-                        icon: "icloud",
-                        text: "If you sign in, only transcription text syncs to our server for cross-device access. Audio is never uploaded."
+                        icon: "lock.shield",
+                        text: "Your data stays on your device. Nothing is uploaded to any server."
                     )
                 }
                 .padding(.horizontal, 24)

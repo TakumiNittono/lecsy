@@ -30,8 +30,6 @@ struct Lecture: Identifiable, Codable, Equatable {
     var transcriptText: String?
     var transcriptSegments: [TranscriptionResult.TranscriptionSegment]?
     var transcriptStatus: TranscriptionStatus
-    var savedToWeb: Bool
-    var webTranscriptId: UUID?
     var language: TranscriptionLanguage
     var bookmarks: [LectureBookmark]
     var courseName: String?
@@ -54,8 +52,6 @@ struct Lecture: Identifiable, Codable, Equatable {
         transcriptText: String? = nil,
         transcriptSegments: [TranscriptionResult.TranscriptionSegment]? = nil,
         transcriptStatus: TranscriptionStatus = .notStarted,
-        savedToWeb: Bool = false,
-        webTranscriptId: UUID? = nil,
         language: TranscriptionLanguage = .english,
         bookmarks: [LectureBookmark] = [],
         courseName: String? = nil,
@@ -69,8 +65,6 @@ struct Lecture: Identifiable, Codable, Equatable {
         self.transcriptText = transcriptText
         self.transcriptSegments = transcriptSegments
         self.transcriptStatus = transcriptStatus
-        self.savedToWeb = savedToWeb
-        self.webTranscriptId = webTranscriptId
         self.language = language
         self.bookmarks = bookmarks
         self.courseName = courseName
@@ -84,7 +78,7 @@ struct Lecture: Identifiable, Codable, Equatable {
         case audioFileName
         case audioPath // legacy key for migration
         case transcriptText, transcriptSegments, transcriptStatus
-        case savedToWeb, webTranscriptId, language, bookmarks, courseName
+        case language, bookmarks, courseName
         case lastPlaybackPosition
     }
 
@@ -108,8 +102,6 @@ struct Lecture: Identifiable, Codable, Equatable {
         transcriptText = try container.decodeIfPresent(String.self, forKey: .transcriptText)
         transcriptSegments = try container.decodeIfPresent([TranscriptionResult.TranscriptionSegment].self, forKey: .transcriptSegments)
         transcriptStatus = try container.decodeIfPresent(TranscriptionStatus.self, forKey: .transcriptStatus) ?? .notStarted
-        savedToWeb = try container.decodeIfPresent(Bool.self, forKey: .savedToWeb) ?? false
-        webTranscriptId = try container.decodeIfPresent(UUID.self, forKey: .webTranscriptId)
         language = try container.decodeIfPresent(TranscriptionLanguage.self, forKey: .language) ?? .english
         bookmarks = try container.decodeIfPresent([LectureBookmark].self, forKey: .bookmarks) ?? []
         courseName = try container.decodeIfPresent(String.self, forKey: .courseName)
@@ -127,8 +119,6 @@ struct Lecture: Identifiable, Codable, Equatable {
         try container.encodeIfPresent(transcriptText, forKey: .transcriptText)
         try container.encodeIfPresent(transcriptSegments, forKey: .transcriptSegments)
         try container.encode(transcriptStatus, forKey: .transcriptStatus)
-        try container.encode(savedToWeb, forKey: .savedToWeb)
-        try container.encodeIfPresent(webTranscriptId, forKey: .webTranscriptId)
         try container.encode(language, forKey: .language)
         try container.encode(bookmarks, forKey: .bookmarks)
         try container.encodeIfPresent(courseName, forKey: .courseName)
@@ -155,7 +145,7 @@ struct Lecture: Identifiable, Codable, Equatable {
         let seconds = Int(duration) % 60
 
         if hours > 0 {
-            return String(format: "%dh %dm", hours, minutes)
+            return String(format: "%dh %02dm", hours, minutes)
         } else if minutes > 0 {
             return String(format: "%dm %ds", minutes, seconds)
         } else {

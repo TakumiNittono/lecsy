@@ -10,8 +10,9 @@ import Testing
 
 struct lecsyTests {
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+    @Test func appImportsSuccessfully() async throws {
+        // Verify the module can be imported and basic types are accessible
+        let lecture = Lecture(title: "Smoke Test", duration: 1)
+        #expect(lecture.title == "Smoke Test")
     }
-
 }

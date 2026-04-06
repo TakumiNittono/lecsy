@@ -96,6 +96,11 @@ enum ErrorMessages {
                     title: "Transcription Too Slow",
                     message: "The recording may be too long for this device. Try recording shorter segments (under 30 minutes)."
                 )
+            case .alreadyProcessing:
+                return UserFacingError(
+                    title: "Already Processing",
+                    message: "Transcription is already in progress for this recording."
+                )
             }
         }
 

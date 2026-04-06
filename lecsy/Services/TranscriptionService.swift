@@ -10,6 +10,7 @@ import WhisperKit
 import AVFoundation
 import CoreMedia
 import Combine
+import CoreML
 import Network
 
 /// Transcription service
@@ -43,8 +44,6 @@ class TranscriptionService: ObservableObject {
     private let shortAudioThreshold: TimeInterval = 180 // Under 3 min → process whole file
 
     // Model selection (multilingual — supports English, Japanese, etc.):
-    // - Bundled: use small (higher accuracy, no download)
-    // - Download: use small directly (one download, all languages unlocked)
     private static let bundledModel = "small"
     private static let downloadModel = "small"
     private static let upgradeModel = "small"
@@ -52,7 +51,6 @@ class TranscriptionService: ObservableObject {
     /// The model that will actually be used
     private var preferredModel: String {
         if isModelBundled { return Self.bundledModel }
-        // If user has explicitly upgraded to small, use it
         if UserDefaults.standard.string(forKey: "lecsy.activeModelName") == Self.upgradeModel,
            isModelCached(Self.upgradeModel) {
             return Self.upgradeModel
@@ -65,11 +63,10 @@ class TranscriptionService: ObservableObject {
 
     /// Whether a better model is available to upgrade to
     var canUpgradeModel: Bool {
-        guard !isModelBundled else { return false } // Bundled already has best model
-        // Once upgraded, never show the prompt again
+        guard !isModelBundled else { return false }
         if UserDefaults.standard.bool(forKey: "lecsy.didUpgradeModel") { return false }
         let current = UserDefaults.standard.string(forKey: "lecsy.activeModelName") ?? Self.downloadModel
-        return current == Self.downloadModel // Can upgrade from base → small
+        return current == Self.downloadModel
     }
 
     /// Whether the AI model is bundled with the app (no download needed)
@@ -250,7 +247,11 @@ class TranscriptionService: ObservableObject {
         startElapsedTimer()
 
         do {
-            let config = WhisperKitConfig(model: Self.upgradeModel)
+            let upgradeCompute = ModelComputeOptions(
+                audioEncoderCompute: .cpuAndNeuralEngine,
+                textDecoderCompute: .cpuAndNeuralEngine
+            )
+            let config = WhisperKitConfig(model: Self.upgradeModel, computeOptions: upgradeCompute)
             whisperKit = try await withTimeout(seconds: modelLoadTimeout) {
                 try await WhisperKit(config)
             }
@@ -308,7 +309,11 @@ class TranscriptionService: ObservableObject {
         startElapsedTimer()
 
         do {
-            let config = WhisperKitConfig(model: Self.upgradeModel)
+            let upgradeCompute = ModelComputeOptions(
+                audioEncoderCompute: .cpuAndNeuralEngine,
+                textDecoderCompute: .cpuAndNeuralEngine
+            )
+            let config = WhisperKitConfig(model: Self.upgradeModel, computeOptions: upgradeCompute)
             whisperKit = try await withTimeout(seconds: modelLoadTimeout) {
                 try await WhisperKit(config)
             }
@@ -436,10 +441,21 @@ class TranscriptionService: ObservableObject {
     private func loadModelInternal() async throws {
         AppLogger.debug("Loading WhisperKit model (\(preferredModel))", category: .transcription)
 
+        // Use ANE (Apple Neural Engine) for faster model loading & inference
+        // ANE for encoder (compute-heavy), GPU for decoder (faster compile, good perf)
+        let compute = ModelComputeOptions(
+            audioEncoderCompute: .cpuAndNeuralEngine,
+            textDecoderCompute: .cpuAndGPU
+        )
+
         if let bundledPath = bundledModelPath {
             downloadStatusText = "Loading bundled model..."
+            let loadStart = CFAbsoluteTimeGetCurrent()
             AppLogger.debug("Using bundled model at: \(bundledPath)", category: .transcription)
-            whisperKit = try await WhisperKit(WhisperKitConfig(modelFolder: bundledPath))
+            whisperKit = try await WhisperKit(WhisperKitConfig(
+                modelFolder: bundledPath,
+                computeOptions: compute
+            ))
         } else {
             let cached = isModelAvailable()
             downloadStatusText = cached ? "Loading AI model..." : "Downloading AI model (~460 MB)..."
@@ -450,7 +466,10 @@ class TranscriptionService: ObservableObject {
                 startElapsedTimer()
             }
 
-            let config = WhisperKitConfig(model: preferredModel)
+            let config = WhisperKitConfig(
+                model: preferredModel,
+                computeOptions: compute
+            )
             whisperKit = try await withTimeout(seconds: modelLoadTimeout) {
                 try await WhisperKit(config)
             }
@@ -465,6 +484,7 @@ class TranscriptionService: ObservableObject {
         progress = 1.0
         downloadStatusText = "AI model ready"
         UserDefaults.standard.set(preferredModel, forKey: "lecsy.activeModelName")
+        UserDefaults.standard.set(true, forKey: "lecsy.hasCompletedFirstModelLoad")
         updateMultilingualKitStatus()
         AppLogger.info("WhisperKit model loading completed (\(preferredModel))", category: .transcription)
     }
@@ -512,7 +532,17 @@ class TranscriptionService: ObservableObject {
     var onChunkCompleted: ((_ partialText: String, _ partialSegments: [TranscriptionResult.TranscriptionSegment]) -> Void)?
 
     /// Execute transcription
+    private var activeTranscriptionURL: URL?
+
     func transcribe(audioURL: URL) async throws -> TranscriptionResult {
+        // Prevent duplicate transcription of the same file
+        if activeTranscriptionURL == audioURL {
+            AppLogger.warning("Transcription already in progress for: \(audioURL.lastPathComponent)", category: .transcription)
+            throw TranscriptionError.alreadyProcessing
+        }
+        activeTranscriptionURL = audioURL
+        defer { activeTranscriptionURL = nil }
+
         // Validate audio file exists
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
             AppLogger.error("Audio file not found: \(audioURL.path)", category: .transcription)
@@ -574,7 +604,8 @@ class TranscriptionService: ObservableObject {
         decodeOptions.compressionRatioThreshold = 2.4 // Skip segments with high repetition
         decodeOptions.logProbThreshold = -1.0 // Skip low-confidence segments
         decodeOptions.noSpeechThreshold = 0.6 // Skip silence more aggressively
-        decodeOptions.temperatureFallbackCount = 3 // Fewer retries before giving up on a segment
+        decodeOptions.temperatureFallbackCount = 1 // Minimal retries for speed
+        decodeOptions.temperature = 0 // Greedy decoding — fastest
 
         // Lecture context prompt — helps Whisper with academic vocabulary,
         // proper nouns, and accented speakers by setting expectations
@@ -1046,6 +1077,7 @@ enum TranscriptionError: LocalizedError {
     case audioFileTooShort
     case emptyTranscriptionResult
     case transcriptionTimedOut
+    case alreadyProcessing
 
     var errorDescription: String? {
         switch self {
@@ -1065,6 +1097,8 @@ enum TranscriptionError: LocalizedError {
             return "Transcription failed"
         case .transcriptionTimedOut:
             return "Transcription timed out. The audio may be too long or the device is too slow. Please try again with a shorter recording."
+        case .alreadyProcessing:
+            return "Transcription is already in progress for this file."
         }
     }
 }

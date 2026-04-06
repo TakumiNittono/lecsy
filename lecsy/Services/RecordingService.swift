@@ -25,6 +25,7 @@ class RecordingService: NSObject, ObservableObject {
     @Published var audioLevelHistory: [Float] = Array(repeating: 0, count: 30)
     @Published var showLowAudioWarning = false
     @Published var unexpectedlySavedRecording: SavedRecording?
+    @Published var stoppedAtMaxDuration = false
 
     /// Current duration computed from wall clock (for use outside UI)
     var currentDuration: TimeInterval {
@@ -488,6 +489,7 @@ class RecordingService: NSObject, ObservableObject {
             }
             if self.recordingDuration >= self.maxRecordingDuration {
                 AppLogger.info("Max recording duration reached (\(Int(self.maxRecordingDuration))s), auto-saving", category: .recording)
+                self.stoppedAtMaxDuration = true
                 self.autoSaveAndNotify()
                 return
             }

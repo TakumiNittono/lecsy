@@ -8,14 +8,12 @@ import SwiftUI
 struct ReportSheet: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var reportService = ReportService.shared
-    @StateObject private var authService = AuthService.shared
 
     @State private var selectedCategory: ReportCategory = .bug
     @State private var title = ""
     @State private var description = ""
     @State private var email = ""
-    @State private var showSuccess = false
-    @State private var errorMessage: String?
+    @State private var showMailError = false
 
     var body: some View {
         NavigationView {
@@ -43,49 +41,43 @@ struct ReportSheet: View {
                     Text("Details")
                 }
 
-                // Email (only if not signed in)
-                if !authService.isAuthenticated {
-                    Section {
-                        TextField("your@email.com", text: $email)
-                            .keyboardType(.emailAddress)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    } header: {
-                        Text("Email (optional)")
-                    } footer: {
-                        Text("So we can follow up with you")
-                    }
-                }
-
-                // Error
-                if let error = errorMessage {
-                    Section {
-                        Text(error)
-                            .foregroundColor(.red)
-                            .font(.caption)
-                    }
+                // Email
+                Section {
+                    TextField("your@email.com", text: $email)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Email (optional)")
+                } footer: {
+                    Text("So we can follow up with you")
                 }
 
                 // Submit
                 Section {
                     Button {
-                        submitReport()
+                        let success = reportService.submitReport(
+                            category: selectedCategory,
+                            title: title.trimmingCharacters(in: .whitespaces),
+                            description: description.trimmingCharacters(in: .whitespaces),
+                            email: email.isEmpty ? nil : email.trimmingCharacters(in: .whitespaces)
+                        )
+                        if success {
+                            dismiss()
+                        } else {
+                            showMailError = true
+                        }
                     } label: {
                         HStack {
                             Spacer()
-                            if reportService.isSubmitting {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                    .padding(.trailing, 8)
-                            }
-                            Text(reportService.isSubmitting ? "Sending..." : "Submit Report")
+                            Text("Submit Report")
                                 .fontWeight(.semibold)
                             Spacer()
                         }
                     }
-                    .disabled(!isFormValid || reportService.isSubmitting)
+                    .disabled(!isFormValid)
                 } footer: {
-                    Text("Device info and app version will be included automatically.")
+                    Text("Opens your email app with the report details.")
                         .font(.caption2)
                 }
             }
@@ -98,36 +90,21 @@ struct ReportSheet: View {
                     }
                 }
             }
-            .alert("Report Sent", isPresented: $showSuccess) {
-                Button("OK") {
-                    dismiss()
-                }
-            } message: {
-                Text("Thank you for your feedback! We'll look into it.")
-            }
         }
         .navigationViewStyle(.stack)
+        .alert("Mail Not Available", isPresented: $showMailError) {
+            Button("Copy Email") {
+                UIPasteboard.general.string = "support@lecsy.app"
+                dismiss()
+            }
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Mail app is not configured. You can email us at support@lecsy.app")
+        }
     }
 
     private var isFormValid: Bool {
         !title.isEmpty && !description.isEmpty
-    }
-
-    private func submitReport() {
-        errorMessage = nil
-        Task {
-            do {
-                try await reportService.submitReport(
-                    category: selectedCategory,
-                    title: title.trimmingCharacters(in: .whitespaces),
-                    description: description.trimmingCharacters(in: .whitespaces),
-                    email: email.isEmpty ? nil : email.trimmingCharacters(in: .whitespaces)
-                )
-                showSuccess = true
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
     }
 }
 

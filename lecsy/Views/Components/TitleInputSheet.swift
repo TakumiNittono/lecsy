@@ -109,10 +109,7 @@ struct TitleInputSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        save()
-                    }
-                    .buttonStyle(.plain)
+                    EmptyView()
                 }
             }
         }

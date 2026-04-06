@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import GrantOwnershipButton from './GrantOwnershipButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -189,12 +190,15 @@ export default async function AdminPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <Link
-                          href={`/org/${org.slug}`}
-                          className="text-sm text-blue-600 hover:text-blue-800 mr-4"
-                        >
-                          Manage
-                        </Link>
+                        <div className="flex items-center gap-4">
+                          <Link
+                            href={`/org/${org.slug}`}
+                            className="text-sm text-blue-600 hover:text-blue-800"
+                          >
+                            Manage
+                          </Link>
+                          <GrantOwnershipButton orgId={org.id} orgName={org.name} />
+                        </div>
                       </td>
                     </tr>
                   ))}
