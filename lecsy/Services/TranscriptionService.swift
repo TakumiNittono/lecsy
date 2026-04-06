@@ -36,12 +36,12 @@ class TranscriptionService: ObservableObject {
 
     // Timeout settings
     private let modelLoadTimeout: TimeInterval = 600 // 10 minutes (460MB needs time on slower connections)
-    private let perChunkTimeout: TimeInterval = 120 // 2 minutes per chunk (aggressive — kills stuck decoding)
+    private let perChunkTimeout: TimeInterval = 90 // 90s per chunk (aggressive — kills stuck decoding)
 
     // Chunking settings
-    private let chunkDuration: TimeInterval = 120 // 2 minutes per chunk (shorter = less chance of Whisper loop)
-    private let chunkOverlap: TimeInterval = 3 // 3 seconds overlap to avoid cutting words
-    private let shortAudioThreshold: TimeInterval = 180 // Under 3 min → process whole file
+    private let chunkDuration: TimeInterval = 45 // 45s per chunk — first text appears ~3x faster than 2min
+    private let chunkOverlap: TimeInterval = 2 // 2 seconds overlap to avoid cutting words
+    private let shortAudioThreshold: TimeInterval = 60 // Under 1 min → process whole file
 
     // Model selection (multilingual — supports English, Japanese, etc.):
     private static let bundledModel = "small"
