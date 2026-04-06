@@ -17,6 +17,87 @@ function isValidUUID(id: string): boolean {
   return uuidRegex.test(id);
 }
 
+// ---- B2B price → plan name mapping (mirrors org-checkout) ----
+function priceToPlan(priceId: string | null | undefined): string | null {
+  if (!priceId) return null;
+  const map: Record<string, string> = {
+    [Deno.env.get("STRIPE_PRICE_STARTER_MONTHLY")  ?? "_"]: "starter",
+    [Deno.env.get("STRIPE_PRICE_STARTER_YEARLY")   ?? "_"]: "starter",
+    [Deno.env.get("STRIPE_PRICE_GROWTH_MONTHLY")   ?? "_"]: "growth",
+    [Deno.env.get("STRIPE_PRICE_GROWTH_YEARLY")    ?? "_"]: "growth",
+    [Deno.env.get("STRIPE_PRICE_BUSINESS_MONTHLY") ?? "_"]: "business",
+    [Deno.env.get("STRIPE_PRICE_BUSINESS_YEARLY")  ?? "_"]: "business",
+  };
+  return map[priceId] ?? null;
+}
+
+async function writeOrgAudit(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  action: string,
+  metadata: Record<string, unknown>,
+) {
+  try {
+    await supabase.from("audit_logs").insert({
+      org_id: orgId,
+      actor_user_id: null,
+      actor_email: "stripe-webhook",
+      action,
+      target_type: "subscription",
+      target_id: (metadata.stripe_subscription_id as string) ?? null,
+      metadata,
+    });
+  } catch (e) {
+    console.error("[Stripe Webhook] audit insert failed", e);
+  }
+}
+
+/**
+ * Apply a Stripe subscription to the organizations row.
+ * Returns true if the event was a B2B (org-scoped) event and was handled.
+ */
+async function applyB2BSubscription(
+  supabase: ReturnType<typeof createClient>,
+  subscription: Stripe.Subscription,
+): Promise<boolean> {
+  const orgId = subscription.metadata?.org_id;
+  if (!orgId || !isValidUUID(orgId)) return false;
+
+  const item = subscription.items?.data?.[0];
+  const priceId = item?.price?.id;
+  const quantity = item?.quantity ?? 0;
+  const plan = priceToPlan(priceId);
+
+  const update: Record<string, unknown> = {
+    stripe_customer_id: subscription.customer as string,
+    stripe_subscription_id: subscription.id,
+    stripe_subscription_item_id: item?.id ?? null,
+    seats_purchased: quantity,
+    updated_at: new Date().toISOString(),
+  };
+  if (plan) update.plan = plan;
+
+  const { error } = await supabase
+    .from("organizations")
+    .update(update)
+    .eq("id", orgId);
+
+  if (error) {
+    logError(`Failed to update organization ${orgId}`, error);
+    throw error;
+  }
+
+  await writeOrgAudit(supabase, orgId, "billing.subscription_synced", {
+    stripe_subscription_id: subscription.id,
+    plan,
+    seats_purchased: quantity,
+    status: subscription.status,
+  });
+
+  console.log(`[Stripe Webhook] B2B subscription synced for org ${orgId} (plan=${plan}, seats=${quantity})`);
+  return true;
+}
+
 // エラーログを安全に記録
 function logError(context: string, error: unknown): void {
   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -58,8 +139,21 @@ serve(async (req) => {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const userId = session.metadata?.user_id;
         const subscriptionId = session.subscription as string;
+
+        // ---- B2B path: metadata.org_id present ----
+        if (session.metadata?.org_id && subscriptionId) {
+          try {
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+            await applyB2BSubscription(supabase, subscription);
+          } catch (e) {
+            logError("B2B checkout sync failed", e);
+            return new Response("B2B sync failed", { status: 500 });
+          }
+          break;
+        }
+
+        const userId = session.metadata?.user_id;
 
         // メタデータの検証
         if (!userId) {
@@ -103,8 +197,19 @@ serve(async (req) => {
         break;
       }
 
+      case "customer.subscription.created":
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
+
+        // B2B path
+        if (subscription.metadata?.org_id) {
+          try {
+            await applyB2BSubscription(supabase, subscription);
+          } catch (e) {
+            return new Response("B2B sync failed", { status: 500 });
+          }
+          break;
+        }
 
         const { error: updateError } = await supabase
           .from("subscriptions")
@@ -126,6 +231,30 @@ serve(async (req) => {
 
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
+
+        // B2B path: revert org to free / canceled
+        if (subscription.metadata?.org_id && isValidUUID(subscription.metadata.org_id)) {
+          const orgId = subscription.metadata.org_id;
+          const { error: orgErr } = await supabase
+            .from("organizations")
+            .update({
+              plan: "free",
+              seats_purchased: 0,
+              stripe_subscription_id: null,
+              stripe_subscription_item_id: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", orgId);
+          if (orgErr) {
+            logError("Failed to cancel B2B subscription", orgErr);
+            return new Response("Database error", { status: 500 });
+          }
+          await writeOrgAudit(supabase, orgId, "billing.subscription_canceled", {
+            stripe_subscription_id: subscription.id,
+          });
+          console.log(`[Stripe Webhook] B2B subscription canceled for org ${orgId}`);
+          break;
+        }
 
         const { error: deleteError } = await supabase
           .from("subscriptions")

@@ -13,7 +13,27 @@ interface Payload {
   rows: Row[];
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// RFC-ish email regex requiring TLD ≥ 2 chars and a non-empty local/domain.
+const EMAIL_RE = /^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,255}\.[A-Za-z]{2,24}$/;
+const MAX_FIELD_LEN = 320;
+// Strip leading characters that Excel/Sheets/Numbers interpret as a formula
+// (CSV injection: =cmd|... / +HYPERLINK / -2+3 / @SUM / TAB-prefix tricks).
+function stripCsvInjection(v: string): string {
+  let s = v;
+  while (s.length > 0 && (s[0] === '=' || s[0] === '+' || s[0] === '-' || s[0] === '@' || s[0] === '\t' || s[0] === '\r')) {
+    s = s.slice(1);
+  }
+  return s;
+}
+// Reject any control character (except plain spaces) — newlines, NUL, etc.
+const CONTROL_RE = /[\u0000-\u0008\u000B-\u001F\u007F]/;
+
+function sanitizeField(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  if (v.length > MAX_FIELD_LEN) return null;
+  if (CONTROL_RE.test(v)) return null;
+  return stripCsvInjection(v).trim();
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return createPreflightResponse(req);
@@ -50,8 +70,19 @@ serve(async (req) => {
     let used = 0;
     for (let i = 0; i < body.rows.length; i++) {
       const r = body.rows[i];
-      const email = r.email?.toLowerCase().trim();
-      const role = r.role ?? 'student';
+
+      // Sanitize every field before any use
+      const cleanEmailRaw = sanitizeField(r.email);
+      const cleanDisplay = r.display_name === undefined ? '' : sanitizeField(r.display_name);
+      const cleanRoleRaw = r.role === undefined ? 'student' : sanitizeField(r.role);
+
+      if (cleanEmailRaw === null || cleanDisplay === null || cleanRoleRaw === null) {
+        failures.push({ row: i + 1, email: String(r.email ?? ''), reason: 'invalid_field' });
+        continue;
+      }
+
+      const email = cleanEmailRaw.toLowerCase();
+      const role = (cleanRoleRaw || 'student') as string;
 
       if (!email || !EMAIL_RE.test(email)) {
         failures.push({ row: i + 1, email: r.email ?? '', reason: 'invalid_email' });
@@ -89,6 +120,11 @@ serve(async (req) => {
       }
       successes.push({ email, status: 'pending' });
       used++;
+
+      // Per-row audit (granular member.added events)
+      await writeAudit(admin, body.org_id, user.id, user.email!, 'member.added', 'organization_member', email, {
+        email, role, source: 'csv_import',
+      });
     }
 
     await writeAudit(admin, body.org_id, user.id, user.email!, 'org.csv_import', 'organization', body.org_id, {

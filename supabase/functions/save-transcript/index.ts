@@ -32,6 +32,12 @@ interface SaveTranscriptRequest {
   duration?: number;
   language?: string;
   app_version?: string;
+  // B2B context (optional). When the user has an active organization
+  // membership, the iOS client passes these so the transcript becomes
+  // visible according to the chosen visibility level.
+  organization_id?: string | null;
+  visibility?: 'private' | 'class' | 'org_wide' | null;
+  class_id?: string | null;
 }
 
 serve(async (req) => {
@@ -69,6 +75,27 @@ serve(async (req) => {
     // word_count計算
     const wordCount = body.content.split(/\s+/).filter(Boolean).length;
 
+    // B2B context: validate org membership before trusting the org_id
+    let orgId: string | null = null;
+    let visibility: string = 'private';
+    let classId: string | null = null;
+    if (body.organization_id) {
+      const { data: membership } = await supabase
+        .from('organization_members')
+        .select('id')
+        .eq('org_id', body.organization_id)
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (membership) {
+        orgId = body.organization_id;
+        if (body.visibility && ['private', 'class', 'org_wide'].includes(body.visibility)) {
+          visibility = body.visibility;
+        }
+        if (body.class_id) classId = body.class_id;
+      }
+    }
+
     // 保存
     const { data, error } = await supabase
       .from("transcripts")
@@ -81,6 +108,9 @@ serve(async (req) => {
         language: body.language,
         word_count: wordCount,
         source: "ios",
+        organization_id: orgId,
+        visibility: visibility,
+        class_id: classId,
       })
       .select("id, created_at")
       .single();

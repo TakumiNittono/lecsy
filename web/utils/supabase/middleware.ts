@@ -48,10 +48,15 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // 認証が必要なページ（/appなど）へのアクセスを保護
+  // 認証が必要なページ（/app, /org/**, /admin/** など）へのアクセスを保護
+  const path = request.nextUrl.pathname
+  const isProtectedB2B = path.startsWith('/org') || path.startsWith('/admin')
   if (!user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    if (isProtectedB2B) {
+      url.searchParams.set('redirect', path)
+    }
     return NextResponse.redirect(url)
   }
 

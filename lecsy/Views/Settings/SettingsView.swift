@@ -10,7 +10,12 @@ import SwiftUI
 struct SettingsView: View {
     @StateObject private var transcriptionService = TranscriptionService.shared
     @StateObject private var orgService = OrganizationService.shared
+    @StateObject private var orgContext = OrganizationContext.shared
     @State private var showReportSheet = false
+
+    private var isSuperAdmin: Bool {
+        (SupabaseClient.shared.userEmail ?? "").lowercased() == "nittonotakumi@gmail.com"
+    }
 
     var body: some View {
         NavigationView {
@@ -92,6 +97,31 @@ struct SettingsView: View {
                     Label("Organization", systemImage: "building.2")
                         .font(.system(.caption, design: .rounded, weight: .semibold))
                         .textCase(.uppercase)
+                }
+
+                // Super-admin section (only visible to the platform owner)
+                if isSuperAdmin {
+                    Section {
+                        NavigationLink(destination: SuperAdminView()) {
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.red.opacity(0.12))
+                                        .frame(width: 32, height: 32)
+                                    Image(systemName: "shield.lefthalf.filled")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.red)
+                                }
+                                Text("Super Admin")
+                                    .font(.system(.body, design: .rounded))
+                                    .foregroundColor(.primary)
+                            }
+                        }
+                    } header: {
+                        Label("Platform", systemImage: "lock.shield")
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .textCase(.uppercase)
+                    }
                 }
 
                 // Support section

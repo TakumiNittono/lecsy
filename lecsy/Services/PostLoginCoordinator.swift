@@ -11,9 +11,41 @@
 
 import Foundation
 
+/// Notification posted by any auth/sign-in flow once a Supabase session is
+/// available. Object payload must be a `[String: String]` with keys
+/// `userId`, `email`, `accessToken`. PostLoginCoordinator listens for this
+/// and runs `handleSignIn` automatically — so future Supabase / OAuth
+/// integration only has to `post(name: .lecsyDidSignIn, ...)`.
+extension Notification.Name {
+    static let lecsyDidSignIn  = Notification.Name("lecsy.didSignIn")
+    static let lecsyDidSignOut = Notification.Name("lecsy.didSignOut")
+}
+
 @MainActor
 final class PostLoginCoordinator {
     static let shared = PostLoginCoordinator()
+
+    private init() {
+        // Observe sign-in / sign-out notifications so auth code can stay decoupled.
+        NotificationCenter.default.addObserver(
+            forName: .lecsyDidSignIn, object: nil, queue: .main
+        ) { note in
+            guard let info = note.userInfo as? [String: String],
+                  let uid = info["userId"],
+                  let email = info["email"],
+                  let token = info["accessToken"] else { return }
+            Task { @MainActor in
+                await PostLoginCoordinator.shared.handleSignIn(
+                    userId: uid, email: email, accessToken: token
+                )
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .lecsyDidSignOut, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in PostLoginCoordinator.shared.handleSignOut() }
+        }
+    }
 
     /// Call this immediately after Supabase sign-in completes.
     /// - Parameters:
@@ -49,6 +81,7 @@ final class PostLoginCoordinator {
         SupabaseClient.shared.userId = nil
         SupabaseClient.shared.userEmail = nil
         SupabaseClient.shared.accessToken = nil
+        OrganizationContext.shared.clear()
     }
 
     private func refreshMemberships() async {
@@ -66,6 +99,8 @@ final class PostLoginCoordinator {
                 )
                 let role = OrganizationRole(rawValue: first.role) ?? .student
                 OrganizationService.shared.joinOrganization(mapped, as: role)
+                // Adopt org context for new recordings (Phase 1.5 #4).
+                OrganizationContext.shared.adoptDefaultContext(orgId: org.id)
             }
         } catch {
             #if DEBUG
