@@ -8,239 +8,331 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @StateObject private var authService = AuthService.shared
     @StateObject private var transcriptionService = TranscriptionService.shared
-    @StateObject private var orgService = OrganizationService.shared
-    @StateObject private var orgContext = OrganizationContext.shared
-    @State private var showReportSheet = false
 
-    private var isSuperAdmin: Bool {
-        (SupabaseClient.shared.userEmail ?? "").lowercased() == "nittonotakumi@gmail.com"
-    }
+    @State private var showSignInSheet = false
+    @State private var showDeleteAccountAlert = false
+    @State private var showDeleteAccountErrorAlert = false
+    @State private var deleteAccountErrorMessage = ""
+    @State private var isDeletingAccount = false
+    @State private var showReportSheet = false
 
     var body: some View {
         NavigationView {
             List {
-                // Organization section
+                // Transcription Language
                 Section {
-                    // B2B Demo Mode toggle
-                    Toggle(isOn: $orgService.isDemoMode) {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.blue.opacity(0.12))
-                                    .frame(width: 32, height: 32)
-                                Image(systemName: "building.2.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.blue)
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("B2B Demo Mode")
-                                    .font(.system(.body, design: .rounded))
+                    // Show all available languages (base + unlocked extended)
+                    ForEach(availableLanguages, id: \.self) { language in
+                        Button {
+                            transcriptionService.setLanguage(language)
+                        } label: {
+                            HStack {
+                                Text(language.displayName)
                                     .foregroundColor(.primary)
-                                Text("Enable organization features")
-                                    .font(.system(.caption2, design: .rounded))
-                                    .foregroundColor(.secondary)
+                                Spacer()
+                                if transcriptionService.transcriptionLanguage == language {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.blue)
+                                }
                             }
                         }
                     }
 
-                    if orgService.isInOrganization {
-                        // Current org info
-                        HStack(spacing: 12) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.green.opacity(0.12))
-                                    .frame(width: 32, height: 32)
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.green)
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(orgService.currentOrganization?.name ?? "")
-                                    .font(.system(.body, design: .rounded, weight: .semibold))
-                                    .foregroundColor(.primary)
-                                Text("\(orgService.currentRole?.displayName ?? "") • \(orgService.activeMembers.count) members")
-                                    .font(.system(.caption2, design: .rounded))
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                        }
-
-                        // Switch org if multiple
-                        if orgService.organizations.count > 1 {
-                            ForEach(orgService.organizations.filter { $0.id != orgService.currentOrganization?.id }) { org in
-                                Button {
-                                    orgService.switchOrganization(to: org)
-                                } label: {
-                                    HStack(spacing: 12) {
-                                        ZStack {
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .fill(Color.secondary.opacity(0.08))
-                                                .frame(width: 32, height: 32)
-                                            Image(systemName: "arrow.triangle.2.circlepath")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.secondary)
-                                        }
-                                        Text("Switch to \(org.name)")
-                                            .font(.system(.body, design: .rounded))
-                                            .foregroundColor(.primary)
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundColor(.secondary.opacity(0.4))
-                                    }
+                    // Multilingual kit download / status
+                    if transcriptionService.isDownloadingMultilingualKit {
+                        // Downloading — show progress
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(transcriptionService.downloadStatusText)
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    Text(formatDownloadElapsed(transcriptionService.downloadElapsedSeconds))
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
                                 }
+                                Spacer()
+                            }
+                            Text("Do not close the app during download")
+                                .font(.caption2)
+                                .foregroundColor(.secondary.opacity(0.7))
+                        }
+                        .padding(.vertical, 4)
+                    } else if !transcriptionService.isMultilingualKitInstalled {
+                        // Not installed — show download button
+                        Button {
+                            Task {
+                                await transcriptionService.downloadMultilingualKit()
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: transcriptionService.multilingualKitDownloadFailed ? "exclamationmark.triangle.fill" : "globe")
+                                        .font(.title3)
+                                        .foregroundColor(transcriptionService.multilingualKitDownloadFailed ? .orange : .blue)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(transcriptionService.multilingualKitDownloadFailed ? "Retry Download" : "Add More Languages")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundColor(transcriptionService.multilingualKitDownloadFailed ? .orange : .blue)
+                                        Text("日本語, 한국어, 中文, Español and more")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "arrow.down.circle")
+                                        .foregroundColor(transcriptionService.multilingualKitDownloadFailed ? .orange.opacity(0.6) : .blue.opacity(0.6))
+                                }
+                                Text(transcriptionService.multilingualKitDownloadFailed ? "Download failed — tap to retry (~460 MB)" : "~460 MB download")
+                                    .font(.caption2)
+                                    .foregroundColor(transcriptionService.multilingualKitDownloadFailed ? .orange.opacity(0.7) : .secondary.opacity(0.7))
                             }
                         }
+                        .padding(.vertical, 4)
                     }
                 } header: {
-                    Label("Organization", systemImage: "building.2")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .textCase(.uppercase)
+                    Text("Transcription Language")
                 }
 
-                // Super-admin section (only visible to the platform owner)
-                if isSuperAdmin {
-                    Section {
-                        NavigationLink(destination: SuperAdminView()) {
-                            HStack(spacing: 12) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.red.opacity(0.12))
-                                        .frame(width: 32, height: 32)
-                                    Image(systemName: "shield.lefthalf.filled")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.red)
-                                }
-                                Text("Super Admin")
-                                    .font(.system(.body, design: .rounded))
-                                    .foregroundColor(.primary)
+
+                // Account section
+                Section("Account") {
+                    if authService.isAuthenticated {
+                        if let user = authService.currentUser {
+                            HStack {
+                                Text("Signed in as:")
+                                Spacer()
+                                Text(user.email ?? "Unknown")
+                                    .foregroundColor(.secondary)
                             }
                         }
-                    } header: {
-                        Label("Platform", systemImage: "lock.shield")
-                            .font(.system(.caption, design: .rounded, weight: .semibold))
-                            .textCase(.uppercase)
+
+                        Button("Sign Out", role: .destructive) {
+                            Task {
+                                do {
+                                    try await authService.signOut()
+                                } catch {
+                                    deleteAccountErrorMessage = error.localizedDescription
+                                    showDeleteAccountErrorAlert = true
+                                }
+                            }
+                        }
+
+                        Button(action: {
+                            showDeleteAccountAlert = true
+                        }) {
+                            HStack {
+                                if isDeletingAccount {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                }
+                                Text("Delete Account")
+                            }
+                        }
+                        .foregroundColor(.red)
+                        .disabled(isDeletingAccount)
+                    } else {
+                        Button("Sign In") {
+                            showSignInSheet = true
+                        }
                     }
                 }
 
                 // Support section
-                Section {
+                Section("Support") {
                     Button {
                         showReportSheet = true
                     } label: {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.orange.opacity(0.12))
-                                    .frame(width: 32, height: 32)
-                                Image(systemName: "exclamationmark.bubble.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.orange)
-                            }
+                        HStack {
+                            Image(systemName: "exclamationmark.bubble")
+                                .foregroundColor(.orange)
                             Text("Report a Problem")
-                                .font(.system(.body, design: .rounded))
                                 .foregroundColor(.primary)
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.secondary.opacity(0.4))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
                     }
-                } header: {
-                    Label("Support", systemImage: "questionmark.circle")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .textCase(.uppercase)
                 }
 
                 // Privacy section
-                Section {
+                Section("Privacy") {
                     if let url = URL(string: "https://lecsy.app/privacy") {
                         Link(destination: url) {
-                            HStack(spacing: 12) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.blue.opacity(0.12))
-                                        .frame(width: 32, height: 32)
-                                    Image(systemName: "hand.raised.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.blue)
-                                }
+                            HStack {
                                 Text("Privacy Policy")
-                                    .font(.system(.body, design: .rounded))
                                     .foregroundColor(.primary)
                                 Spacer()
-                                Image(systemName: "arrow.up.right")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(.secondary.opacity(0.4))
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
                         }
                     }
 
                     if let url = URL(string: "https://lecsy.app/terms") {
                         Link(destination: url) {
-                            HStack(spacing: 12) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.purple.opacity(0.12))
-                                        .frame(width: 32, height: 32)
-                                    Image(systemName: "doc.text.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.purple)
-                                }
+                            HStack {
                                 Text("Terms of Service")
-                                    .font(.system(.body, design: .rounded))
                                     .foregroundColor(.primary)
                                 Spacer()
-                                Image(systemName: "arrow.up.right")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(.secondary.opacity(0.4))
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
                         }
                     }
-                } header: {
-                    Label("Privacy", systemImage: "lock.shield")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .textCase(.uppercase)
                 }
 
                 // About section
-                Section {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.secondary.opacity(0.08))
-                                .frame(width: 32, height: 32)
-                            Image(systemName: "info.circle.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(.secondary)
-                        }
+                Section("About") {
+                    HStack {
                         Text("Version")
-                            .font(.system(.body, design: .rounded))
                         Spacer()
                         Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
-                            .font(.system(.body, design: .rounded))
                             .foregroundColor(.secondary)
                     }
-                } header: {
-                    Label("About", systemImage: "info.circle")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .textCase(.uppercase)
                 }
             }
             .navigationTitle("Settings")
+            .sheet(isPresented: $showSignInSheet) {
+                SignInSheet()
+            }
             .sheet(isPresented: $showReportSheet) {
                 ReportSheet()
+            }
+            .alert("Delete Account", isPresented: $showDeleteAccountAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    Task {
+                        isDeletingAccount = true
+                        do {
+                            try await authService.deleteAccount()
+                        } catch {
+                            deleteAccountErrorMessage = error.localizedDescription
+                            showDeleteAccountErrorAlert = true
+                        }
+                        isDeletingAccount = false
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete your account? This action cannot be undone. All your data will be permanently deleted.")
+            }
+            .alert("Failed to Delete Account", isPresented: $showDeleteAccountErrorAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(deleteAccountErrorMessage)
             }
         }
         .navigationViewStyle(.stack)
     }
 
+    /// Languages available for selection (base always, extended only with kit)
     private var availableLanguages: [TranscriptionLanguage] {
         if transcriptionService.isMultilingualKitInstalled {
             return TranscriptionLanguage.allCases
         }
         return TranscriptionLanguage.baseLanguages
+    }
+}
+
+struct SignInSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var authService = AuthService.shared
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                Text("Sign in to sync lectures with the web app")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding()
+
+                if let error = errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding()
+                }
+
+                VStack(spacing: 16) {
+                    Button(action: {
+                        Task {
+                            isLoading = true
+                            errorMessage = nil
+                            do {
+                                try await authService.signInWithGoogle()
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                            isLoading = false
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "globe")
+                            Text("Sign in with Google")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                    }
+                    .disabled(isLoading)
+
+                    Button(action: {
+                        Task {
+                            isLoading = true
+                            errorMessage = nil
+                            do {
+                                try await authService.signInWithApple()
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                            isLoading = false
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "applelogo")
+                            Text("Sign in with Apple")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.black)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                    }
+                    .disabled(isLoading)
+                }
+                .frame(maxWidth: 400)
+                .padding()
+
+                Spacer()
+            }
+            .navigationTitle("Sign In")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .onChange(of: authService.isAuthenticated) { oldValue, newValue in
+                if newValue {
+                    dismiss()
+                }
+            }
+        }
+        .navigationViewStyle(.stack)
     }
 }
 

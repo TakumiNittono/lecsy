@@ -53,9 +53,9 @@ final class PostLoginCoordinator {
     ///   - email: authenticated user email (lowercased)
     ///   - accessToken: Supabase JWT
     func handleSignIn(userId: String, email: String, accessToken: String) async {
-        SupabaseClient.shared.userId = userId
-        SupabaseClient.shared.userEmail = email.lowercased()
-        SupabaseClient.shared.accessToken = accessToken
+        LecsyAPIClient.shared.userId = userId
+        LecsyAPIClient.shared.userEmail = email.lowercased()
+        LecsyAPIClient.shared.accessToken = accessToken
 
         do {
             let activated = try await OrganizationAPI.shared.activatePendingMemberships()
@@ -78,9 +78,9 @@ final class PostLoginCoordinator {
 
     /// Call on sign-out to clear cached state.
     func handleSignOut() {
-        SupabaseClient.shared.userId = nil
-        SupabaseClient.shared.userEmail = nil
-        SupabaseClient.shared.accessToken = nil
+        LecsyAPIClient.shared.userId = nil
+        LecsyAPIClient.shared.userEmail = nil
+        LecsyAPIClient.shared.accessToken = nil
         OrganizationContext.shared.clear()
     }
 

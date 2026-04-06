@@ -11,7 +11,7 @@ import Foundation
 @MainActor
 final class OrganizationAPI {
     static let shared = OrganizationAPI()
-    private let sb = SupabaseClient.shared
+    private let sb = LecsyAPIClient.shared
 
     // MARK: - Post-login activation
 

@@ -7,9 +7,11 @@
 
 import SwiftUI
 import StoreKit
+import AuthenticationServices
 
 @main
 struct lecsyApp: App {
+    @StateObject private var authService = AuthService.shared
     @AppStorage("lecsy.hasSeenOnboarding") private var hasSeenOnboarding = false
     @Environment(\.requestReview) private var requestReview
     private let streakService = StudyStreakService.shared
@@ -32,6 +34,25 @@ struct lecsyApp: App {
             .animation(.easeInOut(duration: 0.3), value: hasSeenOnboarding)
             .task {
                 recoverStuckTranscriptions()
+            }
+            .onOpenURL { url in
+                handleIncomingURL(url)
+            }
+            .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { userActivity in
+                if let url = userActivity.webpageURL {
+                    handleIncomingURL(url)
+                }
+            }
+        }
+    }
+
+
+    private func handleIncomingURL(_ url: URL) {
+        if url.scheme == "lecsy" {
+            if url.host == "auth" || url.path.contains("callback") {
+                Task { @MainActor in
+                    await AuthService.shared.handleOAuthCallbackURL(url)
+                }
             }
         }
     }

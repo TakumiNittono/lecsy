@@ -29,8 +29,8 @@ enum SupabaseError: Error, LocalizedError {
 }
 
 @MainActor
-final class SupabaseClient {
-    static let shared = SupabaseClient()
+final class LecsyAPIClient {
+    static let shared = LecsyAPIClient()
 
     /// Current access token (set after sign-in). Read by every authenticated request.
     var accessToken: String?
