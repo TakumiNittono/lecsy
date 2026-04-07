@@ -666,6 +666,21 @@ struct RecordView: View {
             latest.transcriptStatus = .completed
             latest.language = transcriptionService.transcriptionLanguage
             store.updateLecture(latest)
+
+            // Cloud sync (fire-and-forget): upload the transcript text — NOT
+            // the audio file — to Supabase so school admins can see activity
+            // and users don't lose notes when their phone breaks. Gated by
+            // CloudSyncService (default ON, opt-out per device, signed-in only).
+            // See doc/STRATEGIC_REVIEW_2026Q2.md for the strategic rationale.
+            Task {
+                await CloudSyncService.shared.uploadTranscriptIfEnabled(
+                    title: latest.title,
+                    content: result.text,
+                    createdAt: latest.createdAt,
+                    durationSeconds: latest.duration,
+                    language: transcriptionService.transcriptionLanguage
+                )
+            }
         } catch {
             transcriptionService.onChunkCompleted = nil
             if var latest = store.getLecture(by: lectureId) {

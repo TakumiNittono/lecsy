@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var deleteAccountErrorMessage = ""
     @State private var isDeletingAccount = false
     @State private var showReportSheet = false
+    @State private var cloudSyncEnabled = CloudSyncService.shared.isEnabled
 
     var body: some View {
         NavigationView {
@@ -155,6 +156,14 @@ struct SettingsView: View {
 
                 // Privacy section
                 Section("Privacy") {
+                    Toggle("Cloud Sync", isOn: $cloudSyncEnabled)
+                        .onChange(of: cloudSyncEnabled) { _, newValue in
+                            CloudSyncService.shared.setEnabled(newValue)
+                        }
+                    Text("Your transcript text is saved to Lecsy servers so you don't lose notes if your phone breaks. Audio files are NEVER uploaded — only the text. We do not use your data to train AI models.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
                     if let url = URL(string: "https://lecsy.app/privacy") {
                         Link(destination: url) {
                             HStack {

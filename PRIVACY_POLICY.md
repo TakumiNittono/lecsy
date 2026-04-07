@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last Updated: January 28, 2026**
+**Last Updated: April 7, 2026**
 
 ---
 
@@ -21,11 +21,13 @@ We may collect the following types of information:
 
 ### Audio Data
 - Recorded lecture audio
-- **Important**: Audio is processed entirely on your device and is never sent to our servers
+- **Important**: Audio is processed entirely on your device and is **never** uploaded to our servers. Audio files stay on your iPhone.
 
 ### Transcript Data
-- Text generated from speech recognition
-- Stored on our servers only when you explicitly choose to save to the web
+- Text generated from on-device speech recognition
+- When you are signed in, completed transcript text is automatically synced to our servers so you don't lose your notes if your device is lost, broken, or replaced
+- Cloud sync can be turned **off** at any time from Settings → Privacy → Cloud Sync
+- We **do not** use your transcript text or audio to train AI models
 
 ### Usage Data
 - App usage frequency
@@ -48,11 +50,15 @@ We use the collected information for the following purposes:
 
 ## 4. Audio Data Processing
 
-**Important Notice**: 
+**Important Notice**:
 
-lecsy does **not** send your audio data to any server. All speech recognition (transcription) processing is performed locally on your device using offline technology. This ensures your lecture content remains private.
+lecsy does **not** send your audio data to any server, ever. All speech recognition (transcription) is performed locally on your device using offline technology. The recorded audio file (`.m4a`) stays on your iPhone and is never transmitted.
 
-Only the text transcription is saved to our servers, and only when you explicitly tap "Save to Web."
+After transcription completes, the resulting **text** (and only the text — never the audio) is uploaded to our servers when you are signed in. This allows you to recover your notes if your device is lost or replaced, and — for users who are members of an organization (school) — allows your school's administrators to see your activity per the organization's data policy.
+
+You can disable this transcript upload at any time from Settings → Privacy → Cloud Sync. When disabled, transcripts remain only on your device.
+
+We **do not** use your audio, transcripts, or any other personal data to train artificial intelligence models. Your data is yours.
 
 ---
 
