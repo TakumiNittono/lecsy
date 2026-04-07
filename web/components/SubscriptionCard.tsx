@@ -8,10 +8,13 @@ interface SubscriptionCardProps {
   currentPeriodEnd: string | null
   cancelAtPeriodEnd: boolean | null
   isWhitelisted?: boolean
+  /** Set when the user is Pro because their school/org is on a paid plan. */
+  orgName?: string
 }
 
-export default function SubscriptionCard({ status, currentPeriodEnd, cancelAtPeriodEnd, isWhitelisted = false }: SubscriptionCardProps) {
+export default function SubscriptionCard({ status, currentPeriodEnd, cancelAtPeriodEnd, isWhitelisted = false, orgName }: SubscriptionCardProps) {
   const isPro = status === 'active'
+  const isViaOrg = !!orgName
   const willCancel = cancelAtPeriodEnd === true
 
   // 次回更新日のフォーマット
@@ -43,11 +46,15 @@ export default function SubscriptionCard({ status, currentPeriodEnd, cancelAtPer
           <div className="mb-4">
             <p className="text-lg font-semibold text-gray-900">Pro</p>
             <p className="text-sm text-gray-500 mt-1">
-              {isWhitelisted ? 'Developer access' : 'Current plan'}
+              {isWhitelisted ? 'Developer access' : isViaOrg ? `via ${orgName}` : 'Current plan'}
             </p>
             {isWhitelisted ? (
               <p className="text-xs text-blue-600 mt-2 font-medium">
                 ✨ Complimentary access
+              </p>
+            ) : isViaOrg ? (
+              <p className="text-xs text-green-600 mt-2 font-medium">
+                🏫 Provided by your organization
               </p>
             ) : willCancel ? (
               <p className="text-xs text-orange-600 mt-2 font-medium">
@@ -59,7 +66,7 @@ export default function SubscriptionCard({ status, currentPeriodEnd, cancelAtPer
               </p>
             ) : null}
           </div>
-          {!isWhitelisted && (
+          {!isWhitelisted && !isViaOrg && (
             <div className="mt-4 pt-4 border-t border-gray-200">
               <ManageSubscriptionButton className="w-full text-center justify-center" />
             </div>

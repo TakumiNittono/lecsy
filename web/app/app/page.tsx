@@ -6,6 +6,7 @@ import SubscriptionCard from '@/components/SubscriptionCard'
 import ToastProvider from './ToastProvider'
 import { Suspense } from 'react'
 import { getUserOrganizations } from '@/utils/api/org-auth'
+import { getProStatus } from '@/utils/isPro'
 
 // 動的レンダリングを強制（cookiesを使用するため）
 export const dynamic = 'force-dynamic'
@@ -19,20 +20,12 @@ export default async function AppPage() {
       redirect('/login')
     }
 
-  // ホワイトリストチェック
-  const whitelistEmails = process.env.WHITELIST_EMAILS || ''
-  const whitelistedUsers = whitelistEmails.split(',').map(email => email.trim())
-  const isWhitelisted = !!(user.email && whitelistedUsers.includes(user.email))
-
-  // サブスクリプション状態を取得
-  const { data: subscription } = await supabase
-    .from('subscriptions')
-    .select('status, current_period_end, cancel_at_period_end')
-    .eq('user_id', user.id)
-    .single()
-
-  // ホワイトリストユーザーは自動的にProとして扱う
-  const effectiveStatus = isWhitelisted ? 'active' : (subscription?.status || null)
+  // Pro 判定: whitelist / 個人 sub / 組織所属 (任意の有料プラン) のいずれか
+  const proStatus = await getProStatus(supabase, user)
+  const isWhitelisted = proStatus.source === 'whitelist'
+  const isProViaOrg = proStatus.source === 'organization'
+  const subscription = proStatus.subscription
+  const effectiveStatus = proStatus.isPro ? 'active' : (subscription?.status || null)
 
   // ユーザーの組織を取得
   const userOrgs = await getUserOrganizations()
@@ -183,6 +176,7 @@ export default async function AppPage() {
             currentPeriodEnd={subscription?.current_period_end || null}
             cancelAtPeriodEnd={subscription?.cancel_at_period_end || null}
             isWhitelisted={isWhitelisted}
+            orgName={isProViaOrg ? proStatus.orgName : undefined}
           />
         </div>
 

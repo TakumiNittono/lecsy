@@ -9,6 +9,7 @@ import DeleteForm from '@/components/DeleteForm'
 import AISummaryButton from '@/components/AISummaryButton'
 import ExamModeButton from '@/components/ExamModeButton'
 import { sanitizeText } from '@/utils/sanitize'
+import { getProStatus } from '@/utils/isPro'
 
 // 動的レンダリングを強制（cookiesを使用するため）
 export const dynamic = 'force-dynamic'
@@ -33,20 +34,9 @@ export default async function TranscriptDetailPage({
       redirect('/login')
     }
 
-    // ホワイトリストチェック
-    const whitelistEmails = process.env.WHITELIST_EMAILS || ''
-    const whitelistedUsers = whitelistEmails.split(',').map(email => email.trim())
-    const isWhitelisted = !!(user.email && whitelistedUsers.includes(user.email))
-
-    // Pro状態を取得
-    const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select('status')
-      .eq('user_id', user.id)
-      .single()
-
-    // ホワイトリストユーザーは自動的にProとして扱う
-    const isPro = isWhitelisted || subscription?.status === 'active'
+    // Pro 判定: whitelist / 個人 sub / 組織所属 (有料プラン) のいずれか
+    const proStatus = await getProStatus(supabase, user)
+    const isPro = proStatus.isPro
 
     // 講義詳細を取得
     const { data: transcriptRaw, error: transcriptError } = await supabase
