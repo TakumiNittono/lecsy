@@ -39,7 +39,7 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
   // org info
   const { data: org } = await admin
     .from('organizations')
-    .select('id, max_seats, allowed_email_domains')
+    .select('id, name, max_seats, allowed_email_domains')
     .eq('id', orgId)
     .single()
   if (!org) return NextResponse.json({ error: 'org_not_found' }, { status: 404 })
@@ -95,6 +95,22 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     }
     successes.push({ email, status: 'pending' })
     used++
+
+    // Send invite email (best-effort, non-fatal). Built-in Supabase Auth invite.
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.lecsy.app'
+      const redirectTo = `${appUrl}/login?org=${encodeURIComponent(params.slug)}`
+      const meta = { org_id: orgId, org_name: org.name, org_slug: params.slug, invited_role: role }
+      const { error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, { data: meta, redirectTo })
+      if (inviteErr) {
+        const msg = (inviteErr.message ?? '').toLowerCase()
+        if (msg.includes('already') || msg.includes('exists') || (inviteErr as { status?: number }).status === 422) {
+          await admin.auth.admin.generateLink({ type: 'magiclink', email, options: { data: meta, redirectTo } })
+        }
+      }
+    } catch {
+      // Swallow — pending row already created; user can still sign in via Apple/Google.
+    }
   }
 
   // audit log

@@ -56,6 +56,20 @@ final class OrganizationAPI {
             "/organization_members",
             body: Body(org_id: orgId, email: email.lowercased(), role: role)
         )
+
+        // 招待メールを送る (Edge Function 経由 / best-effort)
+        // 失敗しても pending 行はあるので Apple/Google サインインで自動ジョイン可能
+        struct InviteBody: Encodable { let org_id: String; let email: String }
+        struct InviteResp: Decodable { let ok: Bool? }
+        do {
+            let _: InviteResp = try await sb.invokeFunction(
+                "send-org-invite",
+                body: InviteBody(org_id: orgId, email: email.lowercased())
+            )
+        } catch {
+            // 招待送信失敗はログのみ。メンバー追加自体は成功扱い。
+            print("[OrganizationAPI] send-org-invite failed (non-fatal): \(error)")
+        }
     }
 
     func removeMember(memberId: String) async throws {

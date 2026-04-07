@@ -40,6 +40,15 @@ export async function requireSuperAdmin(req: Request) {
 export async function requireOrgRole(req: Request, orgId: string, minRole: 'student'|'teacher'|'admin'|'owner') {
   const { user } = await requireUser(req);
   const admin = adminClient();
+
+  // Super admin bypass: super admins can operate on any org regardless of membership
+  const { data: superAdmin } = await admin
+    .from('super_admin_emails')
+    .select('email')
+    .eq('email', user.email!.toLowerCase())
+    .maybeSingle();
+  if (superAdmin) return { user, admin };
+
   const { data, error } = await admin
     .rpc('is_org_role_at_least', { p_org: orgId, p_user: user.id, p_min: minRole });
   if (error) throw new HttpError(500, error.message);

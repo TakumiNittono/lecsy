@@ -146,8 +146,57 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
   }
 
+  // Send invitation emails via Supabase Auth (built-in, no external service).
+  // Failure to send is not fatal — the pending row exists and the user can still
+  // sign in via Apple/Google with the same email to auto-activate.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.lecsy.app'
+  const redirectTo = `${appUrl}/login?org=${encodeURIComponent(params.slug)}`
+  const inviteMetadata = {
+    org_id: orgId,
+    org_name: org.name,
+    org_slug: params.slug,
+    invited_role: role,
+  }
+
+  const invited: string[] = []
+  const inviteFailed: { email: string; reason: string }[] = []
+
+  for (const m of createdMembers ?? []) {
+    if (!m.email) continue
+    try {
+      const { error: inviteErr } = await supabase.auth.admin.inviteUserByEmail(m.email, {
+        data: inviteMetadata,
+        redirectTo,
+      })
+      if (inviteErr) {
+        // User already exists in auth → fall back to magic link so they still get notified.
+        const msg = (inviteErr.message ?? '').toLowerCase()
+        if (msg.includes('already') || msg.includes('exists') || (inviteErr as { status?: number }).status === 422) {
+          const { error: linkErr } = await supabase.auth.admin.generateLink({
+            type: 'magiclink',
+            email: m.email,
+            options: { data: inviteMetadata, redirectTo },
+          })
+          if (linkErr) {
+            inviteFailed.push({ email: m.email, reason: linkErr.message })
+          } else {
+            invited.push(m.email)
+          }
+        } else {
+          inviteFailed.push({ email: m.email, reason: inviteErr.message })
+        }
+      } else {
+        invited.push(m.email)
+      }
+    } catch (e) {
+      inviteFailed.push({ email: m.email, reason: (e as Error).message })
+    }
+  }
+
   return NextResponse.json({
     added: createdMembers,
     skipped: duplicateEmails,
+    invited,
+    invite_failed: inviteFailed,
   }, { status: 201 })
 }

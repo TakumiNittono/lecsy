@@ -58,7 +58,7 @@ serve(async (req) => {
       throw new HttpError(500, orgErr.message);
     }
 
-    // owner を pending メンバーとして追加（ログイン時に active 化）
+    // owner を pending メンバーとして追加（ログイン時に active 化）+ 招待メール送信
     if (body.owner_email) {
       const ownerEmail = body.owner_email.toLowerCase().trim();
       const { error: memErr } = await admin
@@ -70,11 +70,37 @@ serve(async (req) => {
           status: 'pending',
         });
       if (memErr) {
-        // 組織はロールバックしないが、エラー内容を返す
         return createJsonResponse(req, {
           organization: org,
           warning: `owner_add_failed: ${memErr.message}`,
         }, 201);
+      }
+
+      // 招待メール送信 (best-effort)
+      const redirectTo = `https://www.lecsy.app/login?org=${encodeURIComponent(org.slug)}`;
+      const inviteMeta = {
+        org_id: org.id,
+        org_name: org.name,
+        org_slug: org.slug,
+        invited_role: 'owner',
+      };
+      try {
+        const { error: inviteErr } = await admin.auth.admin.inviteUserByEmail(ownerEmail, {
+          data: inviteMeta,
+          redirectTo,
+        });
+        if (inviteErr) {
+          const msg = (inviteErr.message ?? '').toLowerCase();
+          if (msg.includes('already') || msg.includes('exists') || (inviteErr as { status?: number }).status === 422) {
+            await admin.auth.admin.generateLink({
+              type: 'magiclink',
+              email: ownerEmail,
+              options: { data: inviteMeta, redirectTo },
+            });
+          }
+        }
+      } catch {
+        // Pending 行は作れているので無視。ユーザーは Apple/Google でも入れる。
       }
     }
 

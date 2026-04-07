@@ -2,9 +2,21 @@
 -- RLSのSELECTポリシー（メンバーのみ）とINSERT後のID取得の鶏卵問題を回避
 
 -- status カラムを先に追加（この後の関数で参照するため）
-ALTER TABLE organization_members
-    ADD COLUMN status TEXT NOT NULL DEFAULT 'active'
-        CHECK (status IN ('pending', 'active'));
+-- 冪等: prod に既に部分適用されているケース (関数だけ存在 / カラム未追加) に対応
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'organization_members'
+          AND column_name = 'status'
+    ) THEN
+        ALTER TABLE organization_members
+            ADD COLUMN status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('pending', 'active'));
+    END IF;
+END
+$$;
 
 CREATE OR REPLACE FUNCTION create_organization(
   p_name TEXT,
