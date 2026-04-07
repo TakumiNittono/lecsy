@@ -879,6 +879,107 @@ class AuthService: NSObject, ObservableObject {
         return hashString
     }
     
+    // MARK: - Magic Link (Email OTP)
+    //
+    // Why this exists: international students from mainland China can't reliably
+    // use Google Sign In (blocked at the great firewall). Many students don't
+    // have Apple ID linked to their school .edu address either. Without a
+    // universal email-based fallback, the B2B CSV invite flow (where a school
+    // pre-loads student emails into organization_members) is broken — students
+    // can't activate their seat because they have no way to authenticate as
+    // that specific email.
+    //
+    // We use 6-digit OTP entry instead of deep-link verification because:
+    //   1. Deep-link redirect URLs add routing complexity (Universal Links,
+    //      app-not-installed fallback, multiple redirect hops)
+    //   2. OTP works regardless of which device the student opens the email on
+    //   3. Supabase signInWithOTP sends BOTH a link and a code by default,
+    //      so users who prefer the link can still use it
+    //
+    // See doc/setup/MAGIC_LINK_SETUP.md for the Supabase dashboard setup.
+
+    /// Send a magic-link email containing both a clickable link AND a 6-digit
+    /// OTP code. The user enters the code in the next UI step.
+    func sendMagicLink(email: String) async throws {
+        AppLogger.info("AuthService: マジックリンク送信開始", category: .auth)
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.contains("@") else {
+            throw AuthError.signInFailed("Please enter a valid email address")
+        }
+
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+
+        do {
+            try await supabase.auth.signInWithOTP(
+                email: trimmed,
+                redirectTo: URL(string: "lecsy://auth/callback"),
+                shouldCreateUser: true
+            )
+            await MainActor.run { isLoading = false }
+            AppLogger.info("AuthService: マジックリンク送信完了 (\(trimmed))", category: .auth)
+        } catch {
+            await MainActor.run {
+                isLoading = false
+                errorMessage = error.localizedDescription
+            }
+            AppLogger.error("AuthService: マジックリンク送信失敗 - \(error.localizedDescription)", category: .auth)
+            throw AuthError.signInFailed("Could not send magic link: \(error.localizedDescription)")
+        }
+    }
+
+    /// Verify the 6-digit OTP code the user typed in. On success, populates
+    /// currentUser / isAuthenticated and caches tokens.
+    func verifyMagicLinkCode(email: String, code: String) async throws {
+        AppLogger.info("AuthService: OTP コード検証開始", category: .auth)
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedCode.isEmpty else {
+            throw AuthError.signInFailed("Please enter the code from your email")
+        }
+
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+
+        do {
+            let session = try await supabase.auth.verifyOTP(
+                email: trimmedEmail,
+                token: trimmedCode,
+                type: .email
+            )
+            AppLogger.info("AuthService: OTP 検証成功 - User ID: \(session.user.id)", category: .auth)
+
+            // Cache tokens immediately so REST/Edge calls don't 401 in the
+            // narrow window before the authStateChanges listener fires.
+            cachedAccessToken = session.accessToken
+            cachedRefreshToken = session.refreshToken
+            KeychainService.save(key: accessTokenKey, value: session.accessToken)
+            KeychainService.save(key: refreshTokenKey, value: session.refreshToken)
+
+            await MainActor.run {
+                isLoading = false
+                isAuthenticated = true
+                let userId = UUID(uuidString: session.user.id.uuidString) ?? UUID()
+                currentUser = LecsyUser(
+                    id: userId,
+                    email: session.user.email ?? trimmedEmail,
+                    fullName: nil
+                )
+            }
+        } catch {
+            await MainActor.run {
+                isLoading = false
+                errorMessage = error.localizedDescription
+            }
+            AppLogger.error("AuthService: OTP 検証失敗 - \(error.localizedDescription)", category: .auth)
+            throw AuthError.signInFailed("Invalid or expired code: \(error.localizedDescription)")
+        }
+    }
+
     /// サインアウト
     func signOut() async throws {
         isLoading = true

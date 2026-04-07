@@ -15,6 +15,21 @@ struct LoginView: View {
     @State private var errorMessage: String?
     @State private var currentNonce: String?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    // Magic link (email OTP) state.
+    // Why this exists: see AuthService.swift "Magic Link" section. TL;DR —
+    // international students from China can't always use Google Sign In, and
+    // the B2B CSV invite flow needs an email-based authentication path.
+    @State private var emailInput: String = ""
+    @State private var otpCodeInput: String = ""
+    @State private var magicLinkStage: MagicLinkStage = .email
+    @FocusState private var emailFieldFocused: Bool
+    @FocusState private var otpFieldFocused: Bool
+
+    private enum MagicLinkStage {
+        case email     // Show email field + Send Code button
+        case codeEntry // Show OTP field + Verify button (after email sent)
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -85,7 +100,22 @@ struct LoginView: View {
                     )
                 }
                 .disabled(authService.isLoading)
-                
+
+                // ── Divider ──
+                HStack {
+                    Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
+                    Text("OR")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                    Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
+                }
+                .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                .padding(.vertical, 4)
+
+                // ── Email magic link ──
+                magicLinkSection
+
                 // Skip button - allows using app without account
                 Button(action: {
                     authService.skipLogin()
@@ -120,6 +150,117 @@ struct LoginView: View {
         .padding()
     }
     
+    @ViewBuilder
+    private var magicLinkSection: some View {
+        VStack(spacing: 12) {
+            switch magicLinkStage {
+            case .email:
+                TextField("School email", text: $emailInput)
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .focused($emailFieldFocused)
+                    .padding(.horizontal, 16)
+                    .frame(height: 50)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+
+                Button {
+                    Task { await sendMagicLink() }
+                } label: {
+                    HStack {
+                        Image(systemName: "envelope.fill").font(.system(size: 16))
+                        Text("Send code to email").font(.headline)
+                    }
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                    .frame(height: 50)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                }
+                .disabled(authService.isLoading || emailInput.trimmingCharacters(in: .whitespaces).isEmpty)
+
+            case .codeEntry:
+                VStack(spacing: 6) {
+                    Text("We sent a 6-digit code to")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(emailInput)
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.primary)
+                }
+
+                TextField("000000", text: $otpCodeInput)
+                    .textContentType(.oneTimeCode)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 28, weight: .semibold, design: .monospaced))
+                    .focused($otpFieldFocused)
+                    .padding(.horizontal, 16)
+                    .frame(height: 60)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                    .onChange(of: otpCodeInput) { _, newValue in
+                        // Auto-submit when 6 digits are entered
+                        let digits = newValue.filter { $0.isNumber }
+                        if digits.count >= 6 {
+                            otpCodeInput = String(digits.prefix(6))
+                            Task { await verifyCode() }
+                        }
+                    }
+
+                HStack(spacing: 16) {
+                    Button("Use a different email") {
+                        magicLinkStage = .email
+                        otpCodeInput = ""
+                        errorMessage = nil
+                    }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    Button("Resend code") {
+                        Task { await sendMagicLink() }
+                    }
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                    .disabled(authService.isLoading)
+                }
+                .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+            }
+        }
+    }
+
+    private func sendMagicLink() async {
+        errorMessage = nil
+        do {
+            try await authService.sendMagicLink(email: emailInput)
+            magicLinkStage = .codeEntry
+            otpCodeInput = ""
+            // Slight delay so the focus change feels intentional
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            otpFieldFocused = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func verifyCode() async {
+        errorMessage = nil
+        do {
+            try await authService.verifyMagicLinkCode(email: emailInput, code: otpCodeInput)
+            // authStateChanges listener will flip isAuthenticated and dismiss
+            // this view via the parent navigator
+        } catch {
+            errorMessage = error.localizedDescription
+            // Don't reset stage — let user retry the code
+        }
+    }
+
     /// Apple Sign Inの完了を処理
     private func handleAppleSignInCompletion(result: Result<ASAuthorization, Error>) {
         switch result {
