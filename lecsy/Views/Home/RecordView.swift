@@ -678,7 +678,7 @@ struct RecordView: View {
                     content: result.text,
                     createdAt: latest.createdAt,
                     durationSeconds: latest.duration,
-                    language: transcriptionService.transcriptionLanguage
+                    language: transcriptionService.transcriptionLanguage.rawValue
                 )
             }
         } catch {
