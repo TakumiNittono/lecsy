@@ -1,154 +1,105 @@
-# 03. 営業ターゲットリスト
-**語学学校ファースト → 大学IEP → 大学本体**
+# 03. プロスペクトリスト — ESL / IEP / ISSO 30 校
+
+最終更新: 2026-04-07
+戦略マスタ: `doc/STRATEGIC_REVIEW_2026Q2.md` §6.2 / §7
+ピッチ資料: `B2B/06_PITCH_MATERIALS.md`
+
+旧版 (B2C ベンダーや個人教師向けリスト) は git history `B2B/03_PROSPECT_LIST.md@bb9d006` 参照。
 
 ---
 
-## Tier S: 最優先（Ocalaから1時間以内）
+## 戦略
 
-| # | 学校名 | タイプ | 場所 | 距離 | 特徴 | ステータス |
-|---|--------|--------|------|------|------|-----------|
-| 1 | **CF ESL Program** | 公立CC | Ocala | 0分 | ホームベース | [ ] |
-| 2 | **UF ELI** | 大学IEP | Gainesville | 35分 | 70年歴史、CEA認定 | [ ] |
-| 3 | **Santa Fe College ESL** | 公立CC | Gainesville | 35分 | UF訪問と同日で回れる | [ ] |
-| 4 | **Alachua County Adult ESOL** | 公立 | Gainesville | 35分 | 急成長中 | [ ] |
+3 ティアに分けて並行アタック。優先度は **Tier 1 → Tier 2 → Tier 3**:
 
----
+- **Tier 1: 中規模 ESL/IEP プログラム** — 購買サイクル 3-6 週、Academic Director 個人決裁、SOC2 不要、即パイロット可。これが今すぐ刺さる
+- **Tier 2: 大学付属 IEP** — 購買サイクル 6-12 週、ISSO/Director 経由、大学全体の調達は通さない
+- **Tier 3: 大学 ISSO 直接** — Tier 1/2 で実績作ってから
 
-## Tier A: Orlando圏（1.5時間 / 語学学校最大の集積地）
-
-### 私立語学学校（即決可能 = 最速の売上）
-
-| # | 学校名 | 特徴 | チェーン展開の可能性 | ステータス |
-|---|--------|------|-----------------|-----------|
-| 5 | **OHLA Orlando** | 7キャンパスチェーン、FL最大級 | →全7拠点$25-50K/年 | [ ] |
-| 6 | **Language On Orlando** | 8拠点チェーン | →全8拠点$20-40K/年 | [ ] |
-| 7 | **MILA Orlando** | 4拠点チェーン、25年以上 | →全4拠点$10-20K/年 | [ ] |
-| 8 | **UCEDA Orlando (Semoran)** | 3拠点、25年以上 | →全3拠点$8-15K/年 | [ ] |
-| 9 | **ELS Orlando/Celebration** | グローバルチェーン | →全米展開の可能性 | [ ] |
-| 10 | **inlingua Orlando** | (407)322-8700 | | [ ] |
-| 11 | **Orlando Language School** | 30年以上、テック重視 | テック導入に前向き | [ ] |
-| 12 | **Liberty Language Academy** | CEA認定10年 | | [ ] |
-| 13 | **English Language Institute Orlando** | CEA認定 | | [ ] |
-| 14 | **American English Academy Orlando** | CEA認定 | | [ ] |
-| 15 | **KEF USA Orlando** | サマーキャンプ+ESL | | [ ] |
-
-### 大学IEP・公立ESOL（Orlando圏）
-
-| # | 学校名 | 特徴 | ステータス |
-|---|--------|------|-----------|
-| 16 | **UCF IEP (UCF Global)** | CEA認定、FL最大大学 | [ ] |
-| 17 | **UCF Community English Program** | 無料、400+学習者/学期 | [ ] |
-| 18 | **Seminole State ESOL** | 3プログラム | [ ] |
-| 19 | **Orange Technical College ESOL** | 5キャンパス | [ ] |
+価格はピッチ資料 §2 参照: ESL/IEP $5/seat、ISSO $10/seat、年契約 50 seats min。
 
 ---
 
-## Tier B: Tampa圏（1.5-2時間）
+## Tier 1: 中規模 ESL / IEP (即アタック)
 
-| # | 学校名 | タイプ | 特徴 | ステータス |
-|---|--------|--------|------|-----------|
-| 20 | **OHLA Tampa** | 私立チェーン | OHLA攻略の入口としても有効 | [ ] |
-| 21 | **Tampa Language Center** | 私立 | 1988年設立 | [ ] |
-| 22 | **FELI (Dunedin)** | 私立 | CEA/SEVP認定 | [ ] |
-| 23 | **INTO USF** | 大学IEP | (813)905-4686 | [ ] |
-| 24 | **Spanish Consultants** | 法人研修 | スペイン語特化、女性経営 | [ ] |
-| 25 | **Alliance Francaise de Tampa** | 語学+文化 | フランス語 | [ ] |
+| # | 機関 | 場所 | 推定生徒数 | アプローチ先 | 備考 |
+|---|---|---|---|---|---|
+| 1 | **University of Pennsylvania ELP** | Philadelphia, PA | 250+ | Director, English Language Programs | CEA accredited、トップクラス、契約取れたら看板になる |
+| 2 | **Columbia University ALP** | New York, NY | 600+ (100+ countries) | Director, American Language Program | 大規模、購買決裁が複雑な可能性あり |
+| 3 | **Harvard Extension ESL Program** | Cambridge, MA | 200+ | ESL Program Coordinator | 4-12 週短期。テスト導入しやすい |
+| 4 | **Pace University English Language Institute** | New York, NY | 150+ | Director, English Language Institute | Kaplan パートナー校。導入後 Kaplan 全体への横展開可能性 |
+| 5 | **University of Cincinnati ELS Center** | Cincinnati, OH | 100+ | ELS Center Director | ELS チェーンの 1 拠点。Tier 2 への足がかり |
+| 6 | **UC Berkeley ELS Center** | Berkeley, CA | 100+ | ELS Center Director (Hillside Hall) | 同上。西海岸のショーケース |
+| 7 | **Tennessee State University IEC** | Nashville, TN | 80+ | Director, Intensive English Center | 州内唯一の CEA 認定 IEP。地域独占 |
+| 8 | **Capital University ESL Program** | Columbus, OH | 60+ | ESL Program Director | 中規模私立。決裁が早い |
+| 9 | **University of Indianapolis IUPUI ELS** | Indianapolis, IN | 80+ | ELS Center Director | ELS チェーン |
+| 10 | **University of St. Thomas ELS** | Minneapolis, MN | 70+ | ELS Center Director | ELS チェーン、北部 |
 
----
+## Tier 2: 大学付属 IEP / English Language Centers
 
-## Tier C: South Florida（3-5時間 / 最大の市場）
+| # | 機関 | 場所 | アプローチ先 | 備考 |
+|---|---|---|---|---|
+| 11 | **NYU American Language Institute** | New York, NY | Director, ALI | 大規模、ブランド力、契約難易度高 |
+| 12 | **USC International Academy** | Los Angeles, CA | Director, International Academy | 西海岸のフラッグシップ |
+| 13 | **UCLA Extension American Language Center** | Los Angeles, CA | Director, ALC | UCLA ブランド |
+| 14 | **University of California San Diego ELI** | San Diego, CA | Director, English Language Institute | アジア系学生比率高い |
+| 15 | **University of Washington IELP** | Seattle, WA | Director, IELP | 中国・韓国・日本人学生多数 |
+| 16 | **University of Florida ELI** | Gainesville, FL | Director, English Language Institute | 中南米学生に強い (スペイン語要約と相性◎) |
+| 17 | **Boston University CELOP** | Boston, MA | Director, CELOP | 老舗。Harvard/MIT の留学生も流れる |
+| 18 | **Northeastern University ESL Program** | Boston, MA | Director, ESL | iPhone 比率高い校風 |
+| 19 | **Georgetown University EFL** | Washington DC | Director, English as a Foreign Language | 政府関係の留学生多数 |
+| 20 | **University of Michigan ELI** | Ann Arbor, MI | Director, English Language Institute | 大規模研究大学 |
 
-### 私立語学学校
+## Tier 3: 大学 ISSO (実績後)
 
-| # | 学校名 | 所在地 | 特徴 | ステータス |
-|---|--------|--------|------|-----------|
-| 26 | **OHLA Miami HQ** | Miami | 本社、350+学生、25教室 | [ ] |
-| 27 | **TALK Schools HQ** | Fort Lauderdale | 法人研修部門あり | [ ] |
-| 28 | **Language On Miami Brickell** | Miami | 最大拠点、14教室 | [ ] |
-| 29 | **CCLS Miami** | Miami | FedEx,Visa,NBC Universal等の顧客 | [ ] |
-| 30 | **Berlitz South FL** | Coral Gables/Miramar | グローバルブランド | [ ] |
-| 31 | **Kaplan Miami** | Coral Gables | 80年以上、ACCET | [ ] |
-| 32 | **EF Miami Beach** | Miami Beach | 世界最大の語学教育 | [ ] |
-| 33 | **Lingua Language Center** | Fort Lauderdale+2 | Broward College提携 | [ ] |
-| 34 | **International Preparatory School** | Deerfield Beach | ACCET/SEVP | [ ] |
-| 35 | **Fluenz** | Miami Beach | 没入型 | [ ] |
-
-### 大学IEP（South Florida）
-
-| # | 学校名 | 特徴 | ステータス |
-|---|--------|------|-----------|
-| 36 | **FIU ELI** | 6レベル、TOEFL準備 | [ ] |
-| 37 | **University of Miami IEP** | 70年以上 | [ ] |
-| 38 | **FAU Intensive English** | CEA認定 | [ ] |
-| 39 | **Broward College IEP (Lingua)** | 12週/レベル×8レベル | [ ] |
-| 40 | **St. Petersburg College ILI** | Intensive English | [ ] |
-
----
-
-## Tier D: その他のFL + 大学本体（Phase 3-4用）
-
-### 大学（Disability Services / ADA営業）
-
-| # | 大学 | 学生数 | 距離 | ステータス |
-|---|------|--------|------|-----------|
-| 41 | College of Central Florida | 9,010 | 0分 | [ ] |
-| 42 | University of Florida | ~60,000 | 35分 | [ ] |
-| 43 | UCF | 69,233 | 1.5時間 | [ ] |
-| 44 | USF | 37,212 | 1.5時間 | [ ] |
-| 45 | Valencia College | ~50,000 | 1.5時間 | [ ] |
-| 46 | Seminole State College | 23,088 | 1.5時間 | [ ] |
-| 47 | FSU | ~45,000 | 3.5時間 | [ ] |
-| 48 | Embry-Riddle | ~11,000 | 1.5時間 | [ ] |
-| 49 | Stetson University | ~4,400 | 1.5時間 | [ ] |
-| 50 | Rollins College | ~3,600 | 1.5時間 | [ ] |
+| # | 機関 | 場所 | アプローチ先 | 備考 |
+|---|---|---|---|---|
+| 21 | **Stanford ISO** | Stanford, CA | Director, International Student Services | 中国・韓国・インド学生多数 |
+| 22 | **MIT ISO** | Cambridge, MA | Director, International Students Office | 工学留学生に強い |
+| 23 | **Carnegie Mellon OIE** | Pittsburgh, PA | Director, Office of International Education | テック系留学生 |
+| 24 | **Purdue ISS** | West Lafayette, IN | Director, International Students and Scholars | 中国人学生比率全米トップ級 |
+| 25 | **University of Illinois Urbana-Champaign ISSS** | Urbana, IL | Director, ISSS | 中国人学生多数 |
+| 26 | **Texas A&M International Student Services** | College Station, TX | Director, ISS | 中南米 + 中東 |
+| 27 | **Arizona State Global Education** | Tempe, AZ | Director, Global Education | 大規模、国際生 1 万人超 |
+| 28 | **Penn State University Global** | University Park, PA | Director, Penn State Global | 中国・インド学生多数 |
+| 29 | **Ohio State Office of International Affairs** | Columbus, OH | Director, OIA | 中規模、決裁早い可能性 |
+| 30 | **University of Wisconsin-Madison ISS** | Madison, WI | Director, International Student Services | 中国人学生比率高い |
 
 ---
 
-## CRM記録テンプレート
+## 営業フローの目安
 
 ```
-学校名:
-タイプ: [ ] 私立語学 [ ] 大学IEP [ ] 公立ESOL [ ] 法人研修
-担当者名:
-役職:
-メール:
-電話:
-LinkedIn:
----
-初回コンタクト: ____/____  方法: [ ] メール [ ] 電話 [ ] 訪問 [ ] LinkedIn
-返信日: ____/____
-ミーティング日: ____/____
-デモ実施日: ____/____
----
-パイロット開始: ____/____
-パイロット終了予定: ____/____
-参加生徒数:
-パイロット結果:
----
-有料提案日: ____/____
-プラン: [ ] Classroom [ ] School [ ] Chain [ ] Corporate
-契約額: $________/年
-契約日: ____/____
----
-メモ:
+Week 3 (4/21-4/27)
+  ├─ Tier 1 全 10 校に cold email 送信 (テンプレ: B2B/09_SALES_GUIDE.md §3)
+  ├─ Loom デモ動画リンクを必ず含める (台本: B2B/06_PITCH_MATERIALS.md §3)
+  └─ 返信率目標: 10-15% (1-2 校から返信)
+
+Week 4 (4/28-5/4)
+  ├─ Tier 1 で返信あった校とデモ商談 30 分
+  ├─ Tier 2 にも cold email 開始 (Tier 1 と並行)
+  └─ 目標: パイロット LOI 1 件 or 商談予約 2 件
+
+Week 5-6
+  ├─ Tier 1 / Tier 2 でクロージング
+  └─ 目標: 無償パイロット 1-2 校確定
 ```
 
 ---
 
-## 週次KPIトラッカー
+## ⚠️ コールドアウトリーチ前の注意
 
-| 週 | メール送信 | 返信 | ミーティング | デモ | パイロット提案 | 契約 | 売上 |
-|----|----------|------|-----------|------|------------|------|------|
-| W1 (6/1) | | | | | | | |
-| W2 (6/8) | | | | | | | |
-| W3 (6/15) | | | | | | | |
-| W4 (6/22) | | | | | | | |
-| W5 (6/29) | | | | | | | |
-| W6 (7/6) | | | | | | | |
-| W7 (7/13) | | | | | | | |
-| W8 (7/20) | | | | | | | |
-| W9 (7/27) | | | | | | | |
-| W10 (8/3) | | | | | | | |
-| W11 (8/10) | | | | | | | |
-| W12 (8/17) | | | | | | | |
-| W13 (8/24) | | | | | | | |
+1. **本番環境のサインアップが動くこと** を確認 (`/login` → 組織作成 → 招待 が動く)
+2. **Web LP の "For International Students" セクション** が公開されてること (`web/app/page.tsx` Week 3 で実装済)
+3. **iOS App Store の最新ビルド** が bilingual mode 対応の状態でレビュー通過済
+4. **Loom デモ動画** を録画・公開 (台本は `06_PITCH_MATERIALS.md §3`)
+
+これらが揃ってないとデモ商談で恥をかく。**メール送る前に必ず自分でフルフローを通すこと**。
+
+---
+
+## メモ
+
+- Tier 1 のうち 7-10 番 (ELS チェーン拠点) は、もし 1 拠点で導入が決まれば ELS 本部にエスカレートして 50+ 拠点同時展開の可能性がある。最大の上振れシナリオ
+- Tier 2-3 はアジア系学生比率の高い校を優先。中国・韓国・日本・台湾の留学生が iPhone ユーザー比率高いため
+- 連絡先 (実名・メール) は email-finder ツール (Hunter.io / Apollo.io) で個別に取得すること。ここにはハードコードしない (古くなる)

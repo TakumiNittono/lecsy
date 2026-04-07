@@ -233,8 +233,8 @@ export default function Home() {
           {[
             { value: "$0", label: "Forever free", accent: true },
             { value: "\u221E", label: "Recording minutes" },
-            { value: "100%", label: "Offline capable" },
-            { value: "0", label: "Data sent to cloud", suffix: "bytes" },
+            { value: "7", label: "Summary languages" },
+            { value: "0", label: "Audio sent to cloud", suffix: "bytes" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <div
@@ -250,6 +250,96 @@ export default function Home() {
               <div className="text-sm text-gray-500 mt-1">{stat.label}</div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ━━━ FOR INTERNATIONAL STUDENTS ━━━ */}
+      <section id="international-students" className="py-20 lg:py-28 bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+        <div className="max-w-5xl mx-auto px-5">
+          <div className="text-center mb-12">
+            <span className="inline-block px-3 py-1 mb-4 text-xs font-semibold uppercase tracking-wider text-blue-700 bg-blue-100 rounded-full">
+              For international students
+            </span>
+            <h2 className="font-[family-name:var(--font-display)] text-3xl lg:text-5xl font-bold text-gray-900 tracking-tight mb-4">
+              Lectures in English. <br className="hidden md:inline" />Notes in your language.
+            </h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              You passed TOEFL. You still struggle to follow a fast-talking professor. Lecsy records the lecture, transcribes it on your iPhone, and gives you an AI summary in Japanese, Korean, Chinese, Spanish, French, German, or English — side-by-side with the original.
+            </p>
+          </div>
+
+          {/* Bilingual notes mockup */}
+          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-12">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+              <div className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-3">日本語</div>
+              <p className="text-sm text-gray-800 leading-relaxed mb-4">
+                今回の講義では、細胞分裂のメカニズムと、それが多細胞生物の発達においてどう機能するかを説明しました。特に有糸分裂と減数分裂の違いがポイントです。
+              </p>
+              <div className="text-xs font-semibold text-gray-500 mb-2">Key Points</div>
+              <ul className="space-y-1 text-sm text-gray-700">
+                <li>• 有糸分裂 = 同じ DNA を持つ 2 つの娘細胞</li>
+                <li>• 減数分裂 = 配偶子形成、染色体半減</li>
+                <li>• チェックポイントが分裂の質を保証</li>
+              </ul>
+            </div>
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+              <div className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-3">English</div>
+              <p className="text-sm text-gray-800 leading-relaxed mb-4">
+                This lecture covered the mechanism of cell division and how it functions in the development of multicellular organisms, with particular focus on the difference between mitosis and meiosis.
+              </p>
+              <div className="text-xs font-semibold text-gray-500 mb-2">Key Points</div>
+              <ul className="space-y-1 text-sm text-gray-700">
+                <li>• Mitosis = two daughter cells with identical DNA</li>
+                <li>• Meiosis = gamete formation, chromosome halving</li>
+                <li>• Checkpoints ensure division quality</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Why us */}
+          <div className="grid md:grid-cols-3 gap-6 mb-12">
+            <div className="text-center">
+              <div className="w-12 h-12 mx-auto mb-3 bg-blue-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+              </div>
+              <h3 className="font-bold text-gray-900 mb-1">Built for iPhone</h3>
+              <p className="text-sm text-gray-600">Native iOS recording quality. No browser, no extension, no laptop.</p>
+            </div>
+            <div className="text-center">
+              <div className="w-12 h-12 mx-auto mb-3 bg-blue-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+              </div>
+              <h3 className="font-bold text-gray-900 mb-1">Audio never leaves your phone</h3>
+              <p className="text-sm text-gray-600">We never store your audio. Only the text. Unlike Otter.ai (currently in a class-action lawsuit on this).</p>
+            </div>
+            <div className="text-center">
+              <div className="w-12 h-12 mx-auto mb-3 bg-blue-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+              </div>
+              <h3 className="font-bold text-gray-900 mb-1">Never trained on your data</h3>
+              <p className="text-sm text-gray-600">Your lectures are private. We do not feed them into any AI training pipeline. Period.</p>
+            </div>
+          </div>
+
+          {/* B2B school CTA */}
+          <div className="bg-gray-900 rounded-3xl p-8 lg:p-12 text-center">
+            <span className="inline-block px-3 py-1 mb-4 text-xs font-semibold uppercase tracking-wider text-blue-300 bg-blue-900/40 rounded-full">
+              For ESL programs &amp; university ISSO
+            </span>
+            <h3 className="font-[family-name:var(--font-display)] text-2xl lg:text-3xl font-bold text-white mb-3">
+              Help your international students keep up
+            </h3>
+            <p className="text-gray-300 max-w-xl mx-auto mb-6">
+              Free pilot for one semester. No SOC2 box-check required. We don&apos;t store audio. We don&apos;t train on student data. FERPA-aligned.
+            </p>
+            <a
+              href="mailto:hello@lecsy.app?subject=ESL%20pilot%20program%20inquiry"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-full hover:bg-blue-400 transition-colors"
+            >
+              Request a pilot
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+            </a>
+          </div>
         </div>
       </section>
 

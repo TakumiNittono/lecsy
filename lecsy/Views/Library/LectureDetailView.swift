@@ -25,8 +25,26 @@ struct LectureDetailView: View {
     @State private var editingBookmarkLabel: String = ""
     // AI summary state (in-memory; not persisted to local store yet)
     @State private var summaryResult: SummaryService.SummaryResult?
+    @State private var summaryEnglishResult: SummaryService.SummaryResult?
     @State private var summaryLoading = false
     @State private var summaryError: String?
+    @AppStorage("summaryOutputLanguage") private var summaryOutputLanguage: String = "ja"
+    // Bilingual mode: show summary in both the user's language AND English.
+    // Designed for international students who want to learn English vocabulary
+    // alongside understanding the lecture in their native language.
+    // Costs 2x summary calls when ON; gated by daily/monthly fair-use limits
+    // server-side anyway (DAILY_LIMIT=20 / MONTHLY_LIMIT=400 in summarize/index.ts).
+    @AppStorage("summaryBilingualMode") private var bilingualMode: Bool = false
+
+    private let summaryLanguages: [(code: String, label: String)] = [
+        ("ja", "日本語"),
+        ("en", "English"),
+        ("zh", "中文"),
+        ("ko", "한국어"),
+        ("es", "Español"),
+        ("fr", "Français"),
+        ("de", "Deutsch"),
+    ]
     @ObservedObject private var authService = AuthService.shared
 
     init(lecture: Lecture) {
@@ -506,7 +524,46 @@ struct LectureDetailView: View {
             HStack {
                 Label("AI Summary", systemImage: "sparkles")
                     .font(.system(.subheadline, design: .rounded, weight: .semibold))
+
+                Menu {
+                    ForEach(summaryLanguages, id: \.code) { lang in
+                        Button {
+                            summaryOutputLanguage = lang.code
+                        } label: {
+                            if summaryOutputLanguage == lang.code {
+                                Label(lang.label, systemImage: "checkmark")
+                            } else {
+                                Text(lang.label)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Text(summaryLanguages.first { $0.code == summaryOutputLanguage }?.label ?? "日本語")
+                        Image(systemName: "chevron.down")
+                    }
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(.systemGray5))
+                    .clipShape(Capsule())
+                }
+                .disabled(summaryLoading)
+
                 Spacer()
+                // Bilingual mode toggle — only show when user's chosen output
+                // language is NOT English (otherwise it's pointless).
+                if summaryOutputLanguage != "en" {
+                    Toggle(isOn: $bilingualMode) {
+                        Text("Bilingual")
+                            .font(.system(.caption2, design: .rounded, weight: .medium))
+                    }
+                    .toggleStyle(.switch)
+                    .scaleEffect(0.7, anchor: .trailing)
+                    .frame(maxWidth: 110)
+                    .disabled(summaryLoading)
+                }
                 if summaryLoading {
                     ProgressView().scaleEffect(0.8)
                 } else if summaryResult == nil {
@@ -539,38 +596,24 @@ struct LectureDetailView: View {
             }
 
             if let result = summaryResult {
-                if let overall = result.summary, !overall.isEmpty {
-                    Text(overall)
-                        .font(.system(.subheadline, design: .rounded))
-                        .foregroundColor(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let points = result.key_points, !points.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Key Points")
-                            .font(.system(.caption, design: .rounded, weight: .semibold))
-                            .foregroundColor(.secondary)
-                        ForEach(points, id: \.self) { p in
-                            HStack(alignment: .top, spacing: 6) {
-                                Text("•").foregroundColor(.blue)
-                                Text(p).font(.system(.caption, design: .rounded))
-                            }
-                        }
-                    }
-                }
-                if let sections = result.sections, !sections.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(sections) { section in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(section.heading)
-                                    .font(.system(.caption, design: .rounded, weight: .semibold))
-                                Text(section.content)
-                                    .font(.system(.caption, design: .rounded))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                }
+                summaryBlock(
+                    result: result,
+                    languageLabel: bilingualMode ? languageDisplay(for: summaryOutputLanguage) : nil
+                )
+            }
+
+            // Bilingual: show the English version below the primary one.
+            // Only renders if (a) bilingual mode is on, (b) the user picked a
+            // non-English language, and (c) the English summary has loaded.
+            if bilingualMode,
+               summaryOutputLanguage != "en",
+               let englishResult = summaryEnglishResult {
+                Divider()
+                    .padding(.vertical, 4)
+                summaryBlock(
+                    result: englishResult,
+                    languageLabel: "English"
+                )
             }
         }
         .padding(12)
@@ -583,16 +626,94 @@ struct LectureDetailView: View {
         summaryError = nil
         summaryLoading = true
         defer { summaryLoading = false }
+        // Reset both caches so the user always sees fresh state
+        summaryEnglishResult = nil
         do {
+            // Primary summary in user's chosen language
             let result = try await SummaryService.shared.generateSummary(
                 title: lecture.title,
                 content: content,
                 durationSeconds: lecture.duration,
-                language: lecture.language.rawValue
+                language: lecture.language.rawValue,
+                outputLanguage: summaryOutputLanguage
             )
             summaryResult = result
+
+            // Bilingual mode: also fetch English version. Sequential rather
+            // than parallel because the underlying save-transcript Edge
+            // Function would otherwise insert two transcript rows for the
+            // same recording. The first call cached/saved the transcript;
+            // the second one will hit the same path but it's idempotent
+            // enough for now (a duplicate row is the worst case, not a crash).
+            if bilingualMode && summaryOutputLanguage != "en" {
+                do {
+                    let englishResult = try await SummaryService.shared.generateSummary(
+                        title: lecture.title,
+                        content: content,
+                        durationSeconds: lecture.duration,
+                        language: lecture.language.rawValue,
+                        outputLanguage: "en"
+                    )
+                    summaryEnglishResult = englishResult
+                } catch {
+                    // Don't fail the whole flow if only the English version
+                    // fails — user still gets their primary-language summary.
+                    AppLogger.warning("Bilingual English summary failed: \(error)", category: .recording)
+                }
+            }
         } catch {
             summaryError = error.localizedDescription
+        }
+    }
+
+    private func languageDisplay(for code: String) -> String {
+        summaryLanguages.first(where: { $0.code == code })?.label ?? code
+    }
+
+    @ViewBuilder
+    private func summaryBlock(result: SummaryService.SummaryResult, languageLabel: String?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let label = languageLabel {
+                Text(label)
+                    .font(.system(.caption2, design: .rounded, weight: .bold))
+                    .foregroundColor(.blue)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.blue.opacity(0.1))
+                    .clipShape(Capsule())
+            }
+            if let overall = result.summary, !overall.isEmpty {
+                Text(overall)
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let points = result.key_points, !points.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Key Points")
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .foregroundColor(.secondary)
+                    ForEach(points, id: \.self) { p in
+                        HStack(alignment: .top, spacing: 6) {
+                            Text("•").foregroundColor(.blue)
+                            Text(p).font(.system(.caption, design: .rounded))
+                        }
+                    }
+                }
+            }
+            if let sections = result.sections, !sections.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(sections) { section in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(section.heading)
+                                .font(.system(.caption, design: .rounded, weight: .semibold))
+                            Text(section.content)
+                                .font(.system(.caption, design: .rounded))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
         }
     }
 

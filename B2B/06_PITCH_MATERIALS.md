@@ -1,223 +1,175 @@
-# 06. ピッチ資料 & 営業ツール
+# Lecsy ピッチ資料 — ESL プログラム / 大学 ISSO 向け
+
+最終更新: 2026-04-07
+ターゲット: 米国の Intensive English Program (IEP) / ESL Director / International Student Services Office (ISSO) Director
+戦略マスタ: `doc/STRATEGIC_REVIEW_2026Q2.md`
+
+旧版 (個人課金 / 一般 SaaS 文脈) は git history `B2B/06_PITCH_MATERIALS.md@bb9d006` 参照。
 
 ---
 
-## ピッチデック（8スライド）
+## 1. 30 秒ピッチ (口頭で言う版)
 
-### Slide 1: タイトル
-```
-Lecsy
-AI Lecture Transcription in 12 Languages
-On-Device. Offline. Private.
-```
-
-### Slide 2: 問題
-```
-語学学校が直面する課題:
-
-1. リスニングの壁
-   → 生徒はテキストは読めるが、自然なスピードの英語が聞き取れない
-   → 聞き取れなかった言葉はそのまま消える
-
-2. 高額な言語ラボ
-   → SmartClass/Robotel = 1教室 $5,000-$50,000
-   → 全教室に設置できない
-
-3. 既存ツールの限界
-   → Otter.ai: 英語のみ、クラウド依存
-   → 教材音声: スクリプト付きの不自然な会話のみ
-   → 多言語サポートがほぼない
-```
-
-### Slide 3: ソリューション
-```
-Lecsy = 生徒のiPhoneが語学学習ツールになる
-
-[アプリスクリーンショット]
-
-✓ リアルタイムAI文字起こし（話している言葉が即テキストに）
-✓ 12言語対応（英/西/葡/中/韓/日/仏/独/伊/露/アラビア/ヒンディー）
-✓ 100%オンデバイスAI（データはクラウドに出ない）
-✓ オフラインで完全動作
-✓ AI要約 & 試験対策生成
-```
-
-### Slide 4: なぜLecsyか
-```
-                  Lecsy   Otter   SmartClass  ELSA
-12言語対応          ✓       ✗        △         ✗
-オンデバイスAI       ✓       ✗        ✗         △
-オフライン動作       ✓       ✗        ✗         △
-リアルタイム文字起こし ✓       ✓        ✗         ✗
-無料ティア          ✓       ✓        ✗         ✓
-月額/生徒          $3-8    $8-20    高額固定    Freemium
-
-"12言語リアルタイム文字起こし + オンデバイスAI
- この2つを同時に持つツールは世界でLecsyだけ"
-```
-
-### Slide 5: 使い方
-```
-授業中:
-  先生が話す → 生徒はLecsyで録音 → リアルタイムで文字起こし
-  → 聞き取れなかった単語がテキストで可視化
-
-自習:
-  録音を再生 → テキストと照合 → 聞き取れなかった部分を特定
-  → AI要約で重要ポイントを確認
-
-宿題:
-  Podcast/YouTube/映画を録音 → 文字起こしで内容確認
-  → 実践的なリスニング練習
-```
-
-### Slide 6: 価格
-```
-先生            $0          まず体験してもらう
-Classroom      $500-1,000/学期  1クラス~20人
-School         $2,000-5,000/年  学校全体~100人
-Chain          $5,000-25,000/年  複数キャンパス
-
-→ 言語ラボの10分の1以下
-→ 無料パイロット（1学期間）あり
-```
-
-### Slide 7: 創業者ストーリー
-```
-"フロリダに留学した時、英語の授業で先生の話す
-スピードについていけませんでした。
-
-聞き取れなかった言葉はそのまま消えてしまう。
-録音しても、後で聞き直す時間はない。
-
-その経験から、話している言葉がリアルタイムで
-テキストになるアプリを作りました。
-
-御校の生徒にも、同じ体験をさせたくありません。"
-```
-
-### Slide 8: Next Step
-```
-1. 先生2-3人に無料で試していただく
-2. 1ヶ月間、授業で使っていただく
-3. 生徒のフィードバックを確認
-4. 学校全体の導入を検討
-
-→ 来週お伺いしてセットアップをお手伝いします。
-   いつがご都合よろしいですか？
-```
+> Lecsy は、留学生のための iPhone ネイティブの講義ノートアプリです。
+> 学生が iPhone で講義を録音すると、デバイス上で文字起こしされ、AI が学生の母語 (日本語、韓国語、中国語、スペイン語、フランス語、ドイツ語、英語の 7 言語) で要約を作ります。
+> 英語と母語の bilingual ノートが並列表示されるので、学生は単語を学びながら内容を理解できます。
+>
+> 音声ファイルは絶対にサーバーに送信しません。テキストだけです。
+> Otter.ai が現在 集団訴訟を抱えてる "勝手に学習データに使われる" 問題、私たちは構造的に存在しません。
+>
+> 御校の学生が今あるアプリ (Otter, Notta) で困ってるのは、英語のままの要約しか出ないこと、そして学校管理者が活動を把握できないこと。Lecsy はその両方を解決します。
 
 ---
 
-## 1ページャー（PDF印刷用）
+## 2. 1 ページピッチ (PDF / メール添付用)
 
-### 表面
+### What is Lecsy?
 
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-LECSY for Language Schools
-AI Transcription in 12 Languages — On-Device, Offline, Private
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**An iOS-native lecture companion built specifically for international students who study in English.**
 
-THE PROBLEM
-→ Students can read English but can't understand natural speech
-→ Language labs cost $5,000-$50,000 per classroom
-→ Existing tools are English-only or require cloud/WiFi
+- Records lectures directly on the student's iPhone
+- Transcribes on-device using Whisper (no cloud round-trip for audio)
+- Generates AI summaries in 7 languages: 日本語 / English / 中文 / 한국어 / Español / Français / Deutsch
+- **Bilingual mode**: shows the summary side-by-side in the student's native language and English, so they learn vocabulary while understanding content
+- Web dashboard for ESL Directors / ISSO staff to see student activity, search transcripts, and export CSV reports
 
-THE SOLUTION
-→ Real-time AI transcription on the student's iPhone
-→ 12 languages: EN, ES, PT, ZH, KO, JA, FR, DE, IT, RU, AR, HI
-→ 100% on-device AI — no data leaves the phone
-→ Works offline — no WiFi needed
-→ AI summaries & exam prep (Pro)
+### Why it matters for your program
 
-FOR LANGUAGE SCHOOLS
-→ Students see exactly what the teacher said, word by word
-→ Replaces expensive language lab hardware
-→ Covers every student's native language
-→ Free for individual students and teachers
+| Pain | Lecsy solution |
+|---|---|
+| International students fall behind in fast-paced lectures | AI summary in their native language, available within 30 seconds of class ending |
+| TOEFL passed, but academic English still hard | Bilingual notes — read the same content in both languages |
+| Otter / Notta only summarize in English | 7 languages, optimized for academic terminology |
+| Privacy concerns about classroom recording | Audio NEVER leaves the iPhone. Only transcript text is stored. We do not train AI on student data |
+| You cannot see how your students are doing | Web dashboard: per-student activity, search across all transcripts, weekly CSV exports |
+| You don't have IT bandwidth for SOC2 procurement | Free pilot — no SOC2 box-check required for the pilot program |
 
-PRICING
-  Teacher:     FREE
-  Classroom:   $500-$1,000/semester (up to 20 students)
-  School:      $2,000-$5,000/year (whole school)
-  Chain:       $5,000-$25,000/year (all campuses)
-  Free pilot available (1 semester)
+### What you get
 
-CONTACT
-[Name] | Founder, Lecsy
-[Email] | [Phone]
-lecsy.app/languages
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
+- iOS app, free for all your students for the duration of the pilot
+- Web admin dashboard at `lecsy.app/org/your-school`
+- Per-student activity reports
+- Full transcript search
+- Weekly CSV export of all activity
+- Direct line to the founder (me) for feedback and feature requests
 
-### 裏面
+### What we ask in return (pilot)
 
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ROI: LECSY vs LANGUAGE LAB
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Use it for one semester (~14 weeks)
+- A 30-minute end-of-semester debrief call with your team
+- Permission to use your school's logo on our website (optional, can be anonymous)
 
-Language Lab (SmartClass/Robotel):
-  1 classroom: $5,000-$50,000
-  5 classrooms: $25,000-$250,000
-  Requires: dedicated room, hardware, IT support
+### Pricing after pilot
 
-Lecsy School License:
-  ALL classrooms: $2,000-$5,000/year
-  Requires: students' own iPhones (they already have them)
-  SAVINGS: 90-98%
+- **ESL / IEP programs**: $5 per seat per month, annual contract, minimum 50 seats
+  - 50 seats × $5 × 12 = **$3,000 / year**
+  - Most ESL programs of 100-300 students fit comfortably
+- **University ISSO**: $10 per seat per month, annual contract, minimum 100 seats
+  - 100 seats × $10 × 12 = **$12,000 / year**
+- **Enterprise (full university)**: custom + SOC2 — available 2026 Q3 onwards
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SUPPORTED LANGUAGES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+### Otter.ai vs Lecsy
 
-🇺🇸 English     🇪🇸 Español     🇧🇷 Português
-🇨🇳 中文        🇰🇷 한국어       🇯🇵 日本語
-🇫🇷 Français    🇩🇪 Deutsch     🇮🇹 Italiano
-🇷🇺 Русский     🇸🇦 العربية      🇮🇳 हिन्दी
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FREE PILOT PROGRAM
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Duration: 1 semester (or 4-8 weeks min)
-Scope: 1-3 classes, up to 50 students
-Cost: FREE
-We provide: Full Pro access, dedicated support
-We ask: Feedback, testimonial if successful
-
-[QR Code → App Store]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
+| | Otter Business | Lecsy ESL |
+|---|---|---|
+| Per seat / month | $20 | **$5** |
+| Native iOS app | ❌ Web/Android-first | ✅ iOS native |
+| Multi-language summary | ❌ English only | ✅ 7 languages |
+| Bilingual side-by-side notes | ❌ | ✅ |
+| Audio storage | ☁️ Cloud | 📱 Device only |
+| AI training on your data | ⚠️ Yes (basis of 2025-08 class action lawsuit) | ❌ Never |
+| Built for international students | ❌ Built for meetings | ✅ Built for lectures |
 
 ---
 
-## FAQ（営業中によく聞かれる質問）
+## 3. 5 分プレゼン (Loom 録画用台本)
 
-**Q: Androidには対応していますか？**
-A: 現在はiOS専用です。AppleはK-12から高等教育まで教育市場で圧倒的シェアを持っており、ほとんどの語学学校の生徒はiPhoneを使っています。Android版は2027年のロードマップに含まれています。
+### Slide 1 — Hook (10 秒)
 
-**Q: 文字起こしの精度は？**
-A: OpenAIのWhisperモデルベースで、英語は95%以上の精度です。静かな環境ではさらに高くなります。
+> "30% of your international students will tell you privately that they can't follow English lectures at full speed. They passed TOEFL. They're not slow learners. The vocabulary just hits faster than they can process. I built Lecsy because that was me."
 
-**Q: 生徒のデータはどこに保存される？**
-A: 文字起こしは100%生徒のiPhone上で処理・保存されます。クラウドに送信されるのは、生徒が明示的にWeb同期を有効にした場合のみです。
+### Slide 2 — Demo: record (30 秒)
 
-**Q: WiFiなしで使える？**
-A: はい。オンデバイスAIなので、インターネット接続なしで完全に動作します。飛行機の中でも使えます。
+> "Here's what they do. Open Lecsy on their iPhone. Tap record. Set the language they want notes in — let's say Japanese. Sit through class normally."
+>
+> [Show iPhone screen recording]
 
-**Q: 先生のトレーニングは必要？**
-A: 最小限です。録音ボタンを押すだけで文字起こしが始まります。パイロット開始時に15分のセットアップサポートを提供します。
+### Slide 3 — Demo: bilingual summary (60 秒)
 
-**Q: 契約は学期ごと？年間？**
-A: どちらにも対応しています。語学学校は生徒の入れ替わりが多いので、学期契約も用意しています。年間契約には割引があります。
+> "Class ends. Tap stop. The transcription is already on their phone — it ran on-device while the lecture was happening. They tap 'Generate Summary'. Within 30 seconds they have this:"
+>
+> [Show side-by-side bilingual notes]
+>
+> "Left side: full summary in Japanese. Right side: same summary in English. Key points, sections, exam-prep questions. They read the Japanese to understand. They read the English to learn vocabulary. Same lecture, two languages, no extra study time."
 
-**Q: 請求書払いは可能？**
-A: はい。クレジットカード、請求書（Net 30）、Purchase Orderに対応しています。
+### Slide 4 — Demo: web admin (60 秒)
 
-**Q: 他の学校での実績は？**
-A: [パイロット実施後に更新] 現在フロリダの複数の語学学校でパイロット中です。App Storeでは個人利用で多くの学生に使われています。
+> "Now let me show you what YOU see. This is the web dashboard for an ESL Director. You see your total students, how many recordings they made this week, total recorded minutes, language breakdown."
+>
+> [Show /org/[slug] dashboard]
+>
+> "Click any student to see their individual activity timeline. Search across all your students' transcripts. Export the whole thing to CSV for your weekly report."
+>
+> [Show /org/[slug]/students/[id]]
 
-**Q: Duolingo/Rosetta Stoneとの違いは？**
-A: それらはゲーミフィケーションによるドリル学習です。Lecsyは実際の授業や会話をリアルタイムで文字起こしするツールです。先生の「本物の英語」を理解する力を鍛えます。全く別の用途で、補完関係にあります。
+### Slide 5 — Privacy (45 秒)
+
+> "Three privacy points your IT department will ask about:
+>
+> 1. We never upload audio. Period. The recording stays on the student's iPhone. We only get the text transcription.
+> 2. We never train AI on your students' content. If you compare us to Otter — they're currently in a class action lawsuit on exactly this issue, filed August 2025.
+> 3. FERPA-aligned. We have a DPA template ready. No student PII in URLs, no data sharing with third parties beyond the OpenAI API call for summaries.
+>
+> If your IT requires SOC2 — we don't have it yet. We're launching pilots first, then pursuing SOC2 in late 2026. For the pilot semester, no SOC2 is required because we treat it as a research instrument, not a system of record."
+
+### Slide 6 — Ask (30 秒)
+
+> "Here's what I want from you. Free pilot for one semester. I onboard your team in 30 minutes. Your students download the app. At the end of the semester, you give me 30 minutes of feedback. That's it.
+>
+> If it works for your students, we talk pricing in the spring. If it doesn't, you owe me nothing.
+>
+> I'm a solo founder, currently on OPT in the US. I built this because I needed it. I'm looking for 4 partner programs to validate it before scaling.
+>
+> Are you in?"
+
+---
+
+## 4. FAQ (商談で聞かれたら答える用)
+
+### Q: How is this different from Otter / Notta?
+A: Three things. (1) iOS native, not browser-first. (2) Native-language summaries in 7 languages, not just English. (3) Audio never leaves the device. Otter and Notta both store full audio in the cloud and use it for AI training — that's the basis of the 2025 class action.
+
+### Q: What if a student doesn't have an iPhone?
+A: Honest answer: we don't support Android yet. International students from Asia (China, Korea, Japan, Taiwan, Hong Kong) are 70%+ iPhone — that's our beachhead. Android is a 2026 Q4 plan.
+
+### Q: How accurate is the transcription?
+A: Whisper-medium model on-device. ~92% on clean classroom audio with a single English-speaking professor. Accuracy degrades with thick accents (true of all transcription tools). We recommend students sit in the front 1/3 of the lecture hall.
+
+### Q: What about copyright? Recording professors without permission?
+A: The student is responsible for getting professor permission, just like with any recording app. We show a one-time consent modal in the app on first launch reminding them. Most US universities allow personal lecture recording for accessibility / second-language reasons, but the student should always check.
+
+### Q: Do you integrate with our LMS (Canvas, Blackboard, Moodle)?
+A: Not yet. On the roadmap for Q4 2026 if the pilot proves the core value.
+
+### Q: Can professors opt students out?
+A: Yes — and it's easy. We can add a "do not record this class" registration to a student's profile. Or the professor can simply tell students at the start of class. We'll honor any request.
+
+### Q: What happens to my students' data when the pilot ends?
+A: If you don't continue, every student gets a one-time export of their notes (CSV + JSON), and we delete all transcripts within 30 days of contract end. Standard SaaS exit.
+
+### Q: What's the minimum commitment?
+A: Pilot = 14 weeks (one semester). After that, annual contract, minimum 50 seats. We don't do month-to-month for B2B because it's not how schools budget anyway.
+
+### Q: Why are you so cheap compared to Otter ($5 vs $20)?
+A: Three reasons. (1) Solo founder, near-zero overhead. (2) International students segment is underserved — we'd rather get you to "yes" at $5 than miss the wedge at $20. (3) We're early. The price will go up after we have 10 paying schools and SOC2.
+
+---
+
+## 5. ピッチ資料の使い分け
+
+| シーン | 使うもの |
+|---|---|
+| 最初のコールドメール | §1 (30 秒) を本文に + §2 (1 ページ) を PDF 添付 |
+| デモ商談 (30 分) | §3 (5 分プレゼン) で 5 分話して残り 25 分は対話 |
+| 商談中の質問対応 | §4 FAQ |
+| クロージング後の正式提案書 | §2 (1 ページ) を整形した PDF |
