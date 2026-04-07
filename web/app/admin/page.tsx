@@ -1,18 +1,17 @@
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { isSuperAdmin } from '@/utils/isSuperAdmin'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import GrantOwnershipButton from './GrantOwnershipButton'
 
 export const dynamic = 'force-dynamic'
 
-const ADMIN_EMAIL = 'nittonotakumi@gmail.com'
-
 export default async function AdminPage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user || user.email !== ADMIN_EMAIL) {
+  if (!user || !(await isSuperAdmin(user.email))) {
     redirect('/app')
   }
 

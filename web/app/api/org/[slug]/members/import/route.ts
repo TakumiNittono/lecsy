@@ -96,20 +96,14 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     successes.push({ email, status: 'pending' })
     used++
 
-    // Send invite email (best-effort, non-fatal). Built-in Supabase Auth invite.
+    // Fan out to send-org-invite Edge Function (single source of truth).
+    // Best-effort: pending row already exists so a failure here is non-fatal.
     try {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.lecsy.app'
-      const redirectTo = `${appUrl}/login?org=${encodeURIComponent(params.slug)}`
-      const meta = { org_id: orgId, org_name: org.name, org_slug: params.slug, invited_role: role }
-      const { error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, { data: meta, redirectTo })
-      if (inviteErr) {
-        const msg = (inviteErr.message ?? '').toLowerCase()
-        if (msg.includes('already') || msg.includes('exists') || (inviteErr as { status?: number }).status === 422) {
-          await admin.auth.admin.generateLink({ type: 'magiclink', email, options: { data: meta, redirectTo } })
-        }
-      }
+      await admin.functions.invoke('send-org-invite', {
+        body: { org_id: orgId, email },
+      })
     } catch {
-      // Swallow — pending row already created; user can still sign in via Apple/Google.
+      // Swallow — user can still sign in via Apple/Google to auto-activate.
     }
   }
 

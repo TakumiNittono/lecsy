@@ -50,3 +50,25 @@ verify_jwt = false
 
 [functions.delete-account]
 verify_jwt = true
+
+# B2B 系 Edge Functions
+# Supabase の新形式 ES256 access token に platform-level JWT verify が
+# 対応していないため、関数コード側で auth.getUser() による検証に統一する。
+# (この設定が無いと "Invalid JWT" で 401 になる)
+[functions.org-create]
+verify_jwt = false
+
+[functions.org-grant-ownership]
+verify_jwt = false
+
+[functions.org-csv-import]
+verify_jwt = false
+
+[functions.org-ai-assist]
+verify_jwt = false
+
+[functions.send-org-invite]
+verify_jwt = false
+
+[functions.submit-report]
+verify_jwt = false

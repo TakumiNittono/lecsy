@@ -109,7 +109,7 @@ private struct CreateOrgSheet: View {
     @State private var name = ""
     @State private var slug = ""
     @State private var type = "language_school"
-    @State private var plan = "starter"
+    @State private var plan = "pro"
     @State private var maxSeats = 50
     @State private var ownerEmail = ""
     @State private var submitting = false
@@ -130,10 +130,8 @@ private struct CreateOrgSheet: View {
                         Text("Corporate").tag("corporate")
                     }
                     Picker("Plan", selection: $plan) {
-                        Text("Starter").tag("starter")
-                        Text("Growth").tag("growth")
-                        Text("Business").tag("business")
-                        Text("Enterprise").tag("enterprise")
+                        Text("Free").tag("free")
+                        Text("Pro").tag("pro")
                     }
                     Stepper("Max seats: \(maxSeats)", value: $maxSeats, in: 5...10000, step: 5)
                 }

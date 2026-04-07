@@ -1,18 +1,20 @@
 // supabase/functions/_shared/cors.ts
+//
+// 許可オリジンは ALLOWED_ORIGINS env (カンマ区切り) で全部設定する。
+// (旧コードはハードコード + env のミックスだったが、ハードコードが drift する
+//  ので env 1 本に統一。localhost 系だけは開発体験のためデフォルトで残す)
+//
+// 設定例:
+//   supabase secrets set ALLOWED_ORIGINS='https://admin.lecsy.app,https://web-xxx.vercel.app'
 
-// 許可するオリジンのリスト
-const ALLOWED_ORIGINS = [
-  // 本番環境
-  'https://lecsy.vercel.app',
-  'https://www.lecsy.app',
-  // 開発環境
+const LOCAL_DEV_ORIGINS = [
   'http://localhost:3000',
+  'http://localhost:3020',
   'http://localhost:54323',  // Supabase Studio
 ];
 
-// 追加のオリジン（環境変数から取得）
-const EXTRA_ORIGINS = Deno.env.get('ALLOWED_ORIGINS')?.split(',') || [];
-const ALL_ALLOWED_ORIGINS = [...ALLOWED_ORIGINS, ...EXTRA_ORIGINS];
+const ENV_ORIGINS = Deno.env.get('ALLOWED_ORIGINS')?.split(',').map(s => s.trim()).filter(Boolean) ?? [];
+const ALL_ALLOWED_ORIGINS = [...LOCAL_DEV_ORIGINS, ...ENV_ORIGINS];
 
 /**
  * オリジンが許可されているかチェック
@@ -33,9 +35,8 @@ export function getCorsOrigin(request: Request): string {
     return origin;
   }
   
-  // 許可されていない場合はデフォルトのオリジンを返す
-  // （これによりCORSエラーが発生する）
-  return ALL_ALLOWED_ORIGINS[0] || 'https://lecsy.vercel.app';
+  // 許可されていない場合はデフォルトを返す (これにより CORS エラー)
+  return ALL_ALLOWED_ORIGINS[0] || 'http://localhost:3020';
 }
 
 /**

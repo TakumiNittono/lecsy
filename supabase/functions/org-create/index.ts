@@ -7,7 +7,7 @@ interface CreateOrgPayload {
   name: string;
   slug: string;
   type?: 'language_school' | 'university_iep' | 'college' | 'corporate';
-  plan?: 'starter' | 'growth' | 'business' | 'enterprise';
+  plan?: 'free' | 'pro';
   max_seats?: number;
   owner_email?: string;
   allowed_email_domains?: string[];
@@ -44,7 +44,7 @@ serve(async (req) => {
         name: body.name.trim(),
         slug: body.slug.toLowerCase(),
         type: body.type ?? 'language_school',
-        plan: body.plan ?? 'starter',
+        plan: body.plan ?? 'pro',
         max_seats: maxSeats,
         allowed_email_domains: body.allowed_email_domains ?? [],
         locale: body.locale ?? 'en',
@@ -76,31 +76,15 @@ serve(async (req) => {
         }, 201);
       }
 
-      // 招待メール送信 (best-effort)
-      const redirectTo = `https://www.lecsy.app/login?org=${encodeURIComponent(org.slug)}`;
-      const inviteMeta = {
-        org_id: org.id,
-        org_name: org.name,
-        org_slug: org.slug,
-        invited_role: 'owner',
-      };
+      // 招待メール送信 (best-effort): send-org-invite Edge Function に集約。
+      // 自分自身を呼び出す形になるが、Supabase Functions runtime は同一プロジェクト
+      // 内の関数間呼び出しを問題なく扱う。
       try {
-        const { error: inviteErr } = await admin.auth.admin.inviteUserByEmail(ownerEmail, {
-          data: inviteMeta,
-          redirectTo,
+        await admin.functions.invoke('send-org-invite', {
+          body: { org_id: org.id, email: ownerEmail },
         });
-        if (inviteErr) {
-          const msg = (inviteErr.message ?? '').toLowerCase();
-          if (msg.includes('already') || msg.includes('exists') || (inviteErr as { status?: number }).status === 422) {
-            await admin.auth.admin.generateLink({
-              type: 'magiclink',
-              email: ownerEmail,
-              options: { data: inviteMeta, redirectTo },
-            });
-          }
-        }
       } catch {
-        // Pending 行は作れているので無視。ユーザーは Apple/Google でも入れる。
+        // Pending 行は作れているので無視。Apple/Google サインインで自動 active 化。
       }
     }
 

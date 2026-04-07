@@ -3,8 +3,7 @@
 // A user is considered Pro if ANY of:
 //   1) Their email is in WHITELIST_EMAILS env var (developer/comp access)
 //   2) They have an individual Stripe subscription with status='active'
-//   3) They are an active member of any organization on a paid plan
-//      (starter/growth/business/enterprise — anything except 'free')
+//   3) They are an active member of any organization on the 'pro' plan
 //
 // Use this everywhere that gates Pro features instead of hand-rolling
 // the same predicate, otherwise B2B users will be shown "Upgrade" UIs
@@ -12,7 +11,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-const PAID_PLANS = ['starter', 'growth', 'business', 'enterprise'] as const
+const PAID_PLANS = ['pro'] as const
 
 export interface ProStatus {
   isPro: boolean

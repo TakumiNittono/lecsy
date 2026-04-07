@@ -170,7 +170,7 @@ class OrganizationService: ObservableObject {
             name: "OHLA Orlando",
             slug: "ohla-orlando",
             type: .languageSchool,
-            plan: .growth,
+            plan: .pro,
             maxSeats: 50,
             createdAt: Calendar.current.date(byAdding: .month, value: -3, to: Date()) ?? Date()
         )
@@ -180,7 +180,7 @@ class OrganizationService: ObservableObject {
             name: "Miami Dade College IEP",
             slug: "mdc-iep",
             type: .universityIEP,
-            plan: .starter,
+            plan: .pro,
             maxSeats: 30,
             createdAt: Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
         )

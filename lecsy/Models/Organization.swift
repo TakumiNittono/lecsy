@@ -59,31 +59,22 @@ enum OrganizationRole: String, Codable, CaseIterable, Comparable {
 // MARK: - Organization Plan
 
 enum OrganizationPlan: String, Codable, CaseIterable {
-    case starter
-    case growth
-    case enterprise
+    case free
+    case pro
 
     var displayName: String {
         switch self {
-        case .starter: return "Starter"
-        case .growth: return "Growth"
-        case .enterprise: return "Enterprise"
+        case .free: return "Free"
+        case .pro: return "Pro"
         }
     }
 
+    /// 1 ユーザーあたりの 1 日 AI 利用上限 (要約・グロッサリ生成等)。
+    /// pro は実質無制限相当の大きい数字を返す。
     var dailyAILimit: Int {
         switch self {
-        case .starter: return 10
-        case .growth: return 50
-        case .enterprise: return 200
-        }
-    }
-
-    var monthlyPrice: String {
-        switch self {
-        case .starter: return "$299"
-        case .growth: return "$599"
-        case .enterprise: return "Custom"
+        case .free: return 5
+        case .pro: return 1000
         }
     }
 }
@@ -154,7 +145,7 @@ struct Organization: Identifiable, Codable, Equatable {
         name: String,
         slug: String,
         type: OrganizationType = .languageSchool,
-        plan: OrganizationPlan = .starter,
+        plan: OrganizationPlan = .pro,
         maxSeats: Int = 50,
         createdAt: Date = Date()
     ) {

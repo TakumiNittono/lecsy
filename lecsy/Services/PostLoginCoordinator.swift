@@ -90,7 +90,7 @@ final class PostLoginCoordinator {
                     name: org.name,
                     slug: org.slug,
                     type: .languageSchool,
-                    plan: OrganizationPlan(rawValue: org.plan ?? "starter") ?? .starter,
+                    plan: OrganizationPlan(rawValue: org.plan ?? "free") ?? .free,
                     maxSeats: org.max_seats ?? 50
                 )
                 let role = OrganizationRole(rawValue: first.role) ?? .student
