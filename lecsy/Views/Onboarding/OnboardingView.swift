@@ -11,12 +11,15 @@ struct OnboardingView: View {
     @AppStorage("lecsy.hasSeenOnboarding") private var hasSeenOnboarding = false
     @AppStorage("lecsy.hasAcceptedAIConsent") private var hasAcceptedAIConsent = false
     @StateObject private var transcriptionService = TranscriptionService.shared
+    @StateObject private var authService = AuthService.shared
     @State private var currentPage = 0
     @State private var selectedLanguage: TranscriptionLanguage = .english
     @State private var elapsedSeconds: Int = 0
     @State private var setupTimer: Timer?
 
-    private let totalPages = 5
+    private let totalPages = 6
+    private let authPageIndex = 4
+    private let readyPageIndex = 5
     private let estimatedSeconds: Double = 90
 
     var body: some View {
@@ -26,7 +29,8 @@ struct OnboardingView: View {
                 howItWorksPage.tag(1)
                 featuresPage.tag(2)
                 languagePage.tag(3)
-                readyPage.tag(4)
+                authPage.tag(4)
+                readyPage.tag(5)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.easeInOut(duration: 0.3), value: currentPage)
@@ -41,6 +45,17 @@ struct OnboardingView: View {
             }
         }
         .onDisappear { stopSetupTimer() }
+        // Auto-advance from auth page once the user signs in or skips
+        .onChange(of: authService.isAuthenticated) { _, signedIn in
+            if signedIn && currentPage == authPageIndex {
+                withAnimation { currentPage = readyPageIndex }
+            }
+        }
+        .onChange(of: authService.hasSkippedLogin) { _, skipped in
+            if skipped && currentPage == authPageIndex {
+                withAnimation { currentPage = readyPageIndex }
+            }
+        }
     }
 
     // MARK: - Bottom Section
@@ -56,6 +71,10 @@ struct OnboardingView: View {
                 }
             }
 
+            // Auth page renders its own buttons (Apple/Google/Skip)
+            if currentPage == authPageIndex {
+                EmptyView()
+            } else {
             Button(action: nextAction) {
                 Text(buttonText)
                     .font(.headline)
@@ -66,13 +85,14 @@ struct OnboardingView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14))
             }
             .disabled(!canProceed)
+            } // end of non-auth-page button branch
 
             if currentPage == 0 {
                 if let url = URL(string: "https://lecsy.app/privacy") {
                     Link("Privacy Policy", destination: url)
                         .font(.subheadline)
                 }
-            } else if currentPage < totalPages - 1 {
+            } else if currentPage < totalPages - 1 && currentPage != authPageIndex {
                 Button("Skip") {
                     withAnimation { currentPage = totalPages - 1 }
                 }
@@ -91,7 +111,7 @@ struct OnboardingView: View {
             return true // Tapping "Agree & Continue" itself gives consent
         }
         // Block final page until model is loaded
-        if currentPage == totalPages - 1 {
+        if currentPage == readyPageIndex {
             return transcriptionService.isModelLoaded
         }
         return true
@@ -100,7 +120,7 @@ struct OnboardingView: View {
     private var buttonText: String {
         switch currentPage {
         case 0: return "Agree & Continue"
-        case 4:
+        case readyPageIndex:
             return transcriptionService.isModelLoaded ? "Get Started" : "Preparing AI..."
         default: return "Next"
         }
@@ -261,7 +281,34 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Page 5: Ready
+    // MARK: - Page 5: Sign In (buys time while AI model loads in background)
+
+    private var authPage: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 24)
+
+            VStack(spacing: 12) {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.blue)
+
+                Text("Sign In (Optional)")
+                    .font(.title.bold())
+
+                Text("Sign in to back up and sync your lectures across devices.\nYou can also continue without an account.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+
+            // Embed LoginView (already has Apple / Google / "Continue without account")
+            LoginView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    // MARK: - Page 6: Ready
 
     private var readyPage: some View {
         VStack(spacing: 24) {
