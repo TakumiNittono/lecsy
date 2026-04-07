@@ -52,23 +52,10 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // ホワイトリストチェック（環境変数から取得）
-    const whitelistEmails = Deno.env.get("WHITELIST_EMAILS") || "";
-    const whitelistedUsers = whitelistEmails.split(",").map(email => email.trim());
-    const isWhitelisted = user.email && whitelistedUsers.includes(user.email);
-
-    // ホワイトリストユーザーでない場合はPro状態チェック
-    if (!isWhitelisted) {
-      const { data: subscription } = await serviceClient
-        .from("subscriptions")
-        .select("status")
-        .eq("user_id", user.id)
-        .single();
-
-      if (!subscription || subscription.status !== "active") {
-        return createErrorResponse(req, "Pro subscription required", 403);
-      }
-    }
+    // 認証されていれば誰でも要約を使える (個人 Pro / 学校所属 / 無料ユーザーの区別なし)
+    // 過剰利用は下の DAILY_LIMIT / MONTHLY_LIMIT で防ぐ。
+    // (B2B 学校ユーザーは自動的にここを通る。生徒に summary を提供するのが
+    //  Lecsy の最低限価値なので Pro ゲートはしない)
 
     // リクエスト
     const body: SummarizeRequest = await req.json();
@@ -261,7 +248,8 @@ Remember: ALL text values (terms, definitions, questions, answers, predictions) 
 
     return createJsonResponse(req, savedSummary);
   } catch (error) {
-    console.error("Summarize error:", error instanceof Error ? error.message : "Unknown error");
-    return createErrorResponse(req, "Internal server error", 500);
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Summarize error:", msg);
+    return createErrorResponse(req, `summarize_failed: ${msg}`, 500);
   }
 });

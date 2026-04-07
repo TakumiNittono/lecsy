@@ -36,8 +36,7 @@ interface SaveTranscriptRequest {
   // membership, the iOS client passes these so the transcript becomes
   // visible according to the chosen visibility level.
   organization_id?: string | null;
-  visibility?: 'private' | 'class' | 'org_wide' | null;
-  class_id?: string | null;
+  visibility?: 'private' | 'org_wide' | null;
 }
 
 serve(async (req) => {
@@ -78,7 +77,6 @@ serve(async (req) => {
     // B2B context: validate org membership before trusting the org_id
     let orgId: string | null = null;
     let visibility: string = 'private';
-    let classId: string | null = null;
     if (body.organization_id) {
       const { data: membership } = await supabase
         .from('organization_members')
@@ -89,10 +87,9 @@ serve(async (req) => {
         .maybeSingle();
       if (membership) {
         orgId = body.organization_id;
-        if (body.visibility && ['private', 'class', 'org_wide'].includes(body.visibility)) {
+        if (body.visibility && ['private', 'org_wide'].includes(body.visibility)) {
           visibility = body.visibility;
         }
-        if (body.class_id) classId = body.class_id;
       }
     }
 
@@ -110,7 +107,6 @@ serve(async (req) => {
         source: "ios",
         organization_id: orgId,
         visibility: visibility,
-        class_id: classId,
       })
       .select("id, created_at")
       .single();

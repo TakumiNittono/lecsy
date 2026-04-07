@@ -69,6 +69,7 @@ export default async function AdminPage() {
           <div className="flex items-center gap-4">
             <Link href="/app" className="text-sm text-gray-600 hover:text-gray-900">Dashboard</Link>
             <Link href="/app/reports" className="text-sm text-gray-600 hover:text-gray-900">Reports</Link>
+            <Link href="/admin/super-admins" className="text-sm text-gray-600 hover:text-gray-900">Super Admins</Link>
             <span className="text-gray-700 text-sm">{user.email}</span>
             <form action={handleSignOut}>
               <button type="submit" className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors font-medium">

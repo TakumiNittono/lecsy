@@ -45,12 +45,6 @@ struct OrgSettingsView: View {
                         .foregroundColor(.purple)
                 }
                 HStack {
-                    Label("Monthly Price", systemImage: "dollarsign.circle")
-                    Spacer()
-                    Text(orgService.currentOrganization?.plan.monthlyPrice ?? "")
-                        .foregroundColor(.secondary)
-                }
-                HStack {
                     Label("Max Seats", systemImage: "person.3")
                     Spacer()
                     Text("\(orgService.currentOrganization?.maxSeats ?? 0)")

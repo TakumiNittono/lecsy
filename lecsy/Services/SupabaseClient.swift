@@ -87,12 +87,15 @@ final class LecsyAPIClient {
 
     // MARK: - Edge Functions
 
-    func invokeFunction<T: Decodable>(_ name: String, body: Encodable) async throws -> T {
+    func invokeFunction<T: Decodable>(_ name: String, body: Encodable, timeout: TimeInterval? = nil) async throws -> T {
         let url = baseURL.appendingPathComponent("/functions/v1/\(name)")
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         applyAuth(&req)
         req.httpBody = try JSONEncoder().encode(AnyEncodable(body))
+        if let timeout {
+            req.timeoutInterval = timeout
+        }
         return try await perform(req)
     }
 

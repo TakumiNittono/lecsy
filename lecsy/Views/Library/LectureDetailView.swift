@@ -23,6 +23,11 @@ struct LectureDetailView: View {
     @State private var shareItems: [Any] = []
     @State private var editingBookmark: LectureBookmark?
     @State private var editingBookmarkLabel: String = ""
+    // AI summary state (in-memory; not persisted to local store yet)
+    @State private var summaryResult: SummaryService.SummaryResult?
+    @State private var summaryLoading = false
+    @State private var summaryError: String?
+    @ObservedObject private var authService = AuthService.shared
 
     init(lecture: Lecture) {
         _lecture = State(initialValue: lecture)
@@ -129,6 +134,11 @@ struct LectureDetailView: View {
                         .accessibilityLabel("Share or export transcript")
                     }
                     .padding(.bottom, 4)
+
+                    // AI Summary — 認証済みアカウントにのみ表示
+                    if authService.currentUser != nil {
+                        summarySection(transcript: cleanTranscript)
+                    }
                 }
 
                 // Cancel + Retry button (visible when stuck in processing)
@@ -485,6 +495,104 @@ struct LectureDetailView: View {
             Button("Cancel", role: .cancel) {
                 editingBookmark = nil
             }
+        }
+    }
+
+    // MARK: - AI Summary
+
+    @ViewBuilder
+    private func summarySection(transcript: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("AI Summary", systemImage: "sparkles")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                Spacer()
+                if summaryLoading {
+                    ProgressView().scaleEffect(0.8)
+                } else if summaryResult == nil {
+                    Button {
+                        Task { await runSummary(content: transcript) }
+                    } label: {
+                        Text("Generate")
+                            .font(.system(.subheadline, design: .rounded, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(Color.blue)
+                            .clipShape(Capsule())
+                    }
+                } else {
+                    Button {
+                        Task { await runSummary(content: transcript) }
+                    } label: {
+                        Text("Regenerate")
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .foregroundColor(.blue)
+                    }
+                }
+            }
+
+            if let error = summaryError {
+                Text(error)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundColor(.red)
+            }
+
+            if let result = summaryResult {
+                if let overall = result.summary, !overall.isEmpty {
+                    Text(overall)
+                        .font(.system(.subheadline, design: .rounded))
+                        .foregroundColor(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let points = result.key_points, !points.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Key Points")
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        ForEach(points, id: \.self) { p in
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("•").foregroundColor(.blue)
+                                Text(p).font(.system(.caption, design: .rounded))
+                            }
+                        }
+                    }
+                }
+                if let sections = result.sections, !sections.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(sections) { section in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(section.heading)
+                                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                                Text(section.content)
+                                    .font(.system(.caption, design: .rounded))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.bottom, 4)
+    }
+
+    private func runSummary(content: String) async {
+        summaryError = nil
+        summaryLoading = true
+        defer { summaryLoading = false }
+        do {
+            let result = try await SummaryService.shared.generateSummary(
+                title: lecture.title,
+                content: content,
+                durationSeconds: lecture.duration,
+                language: lecture.language.rawValue
+            )
+            summaryResult = result
+        } catch {
+            summaryError = error.localizedDescription
         }
     }
 
