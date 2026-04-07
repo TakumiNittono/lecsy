@@ -99,9 +99,23 @@ async function applyB2BSubscription(
 }
 
 // エラーログを安全に記録
+// Supabase の PostgrestError は Error インスタンスではなく { message, code, ... } の
+// プレーンオブジェクトなので String() すると "[object Object]" になって役に立たない。
+// JSON 経由で必ず読める形にする。
 function logError(context: string, error: unknown): void {
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  console.error(`[Stripe Webhook] ${context}:`, errorMessage);
+  let formatted: string;
+  if (error instanceof Error) {
+    formatted = error.message;
+  } else if (error && typeof error === "object") {
+    try {
+      formatted = JSON.stringify(error);
+    } catch {
+      formatted = String(error);
+    }
+  } else {
+    formatted = String(error);
+  }
+  console.error(`[Stripe Webhook] ${context}:`, formatted);
 }
 
 serve(async (req) => {
@@ -121,11 +135,15 @@ serve(async (req) => {
     const body = await req.text();
     
     // Stripe署名の検証
+    // Deno は crypto.createHmac の同期 API を持っていないので、
+    // 必ず constructEventAsync を使うこと。constructEvent (同期版) を
+    // 使うと Stripe Node SDK 内部で sync HMAC を呼んで例外が出て、
+    // production の全イベントが 400 で落ちる (実害発生済バグだった)。
     let event: Stripe.Event;
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
     } catch (signatureError) {
-      console.error("[Stripe Webhook] Signature verification failed");
+      console.error("[Stripe Webhook] Signature verification failed", signatureError instanceof Error ? signatureError.message : signatureError);
       return new Response("Invalid signature", { status: 400 });
     }
 
