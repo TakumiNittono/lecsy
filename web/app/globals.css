@@ -39,6 +39,15 @@ select option {
   color: #111827;
 }
 
+/* Sledgehammer: any low-contrast Tailwind gray utility on the org admin
+   pages was painful on white. Force them to gray-900 globally. */
+.text-gray-300,
+.text-gray-400,
+.text-gray-500,
+.text-gray-600 {
+  color: #111827 !important;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
