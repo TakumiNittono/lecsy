@@ -674,6 +674,7 @@ struct RecordView: View {
             // See doc/STRATEGIC_REVIEW_2026Q2.md for the strategic rationale.
             Task {
                 await CloudSyncService.shared.uploadTranscriptIfEnabled(
+                    clientId: latest.id,
                     title: latest.title,
                     content: result.text,
                     createdAt: latest.createdAt,

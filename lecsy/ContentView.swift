@@ -65,7 +65,9 @@ struct ContentView: View {
                     .padding(.bottom, 100)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .animation(.spring(response: 0.4, dampingFraction: 0.7), value: orgService.showJoinedToast)
+                
+
+            
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                         withAnimation { orgService.showJoinedToast = false }

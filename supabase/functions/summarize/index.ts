@@ -52,10 +52,28 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // 認証されていれば誰でも要約を使える (個人 Pro / 学校所属 / 無料ユーザーの区別なし)
-    // 過剰利用は下の DAILY_LIMIT / MONTHLY_LIMIT で防ぐ。
-    // (B2B 学校ユーザーは自動的にここを通る。生徒に summary を提供するのが
-    //  Lecsy の最低限価値なので Pro ゲートはしない)
+    // 要約は organization_members に active で登録されてる Web 経由ユーザーのみ。
+    // iOS 単体ユーザー (個人 Apple/Google/Magic link でサインインしただけ) は弾く。
+    const { data: orgMembership, error: orgError } = await serviceClient
+      .from("organization_members")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+
+    if (orgError) {
+      console.error("Org membership check failed:", orgError.message);
+      return createErrorResponse(req, "Internal server error", 500);
+    }
+
+    if (!orgMembership) {
+      return createErrorResponse(
+        req,
+        "AI summary is available only for organization members. Please sign up via the web.",
+        403
+      );
+    }
 
     // リクエスト
     const body: SummarizeRequest = await req.json();
@@ -161,7 +179,7 @@ ${transcript.content}
 
 Required JSON format:
 {
-  "summary": "Comprehensive summary in ${languageName} (200-300 characters)",
+  "summary": "Comprehensive summary in ${languageName} (200-300 characters). Start directly with the content. DO NOT begin with meta phrases like 今回の講義は / この講義では / Today's lecture is / This lecture covers — just state the substance.",
   "key_points": ["Key point 1 in ${languageName}", "Key point 2 in ${languageName}", "..."],
   "sections": [
     {"heading": "Section heading in ${languageName}", "content": "Section summary in ${languageName}"},
@@ -196,7 +214,7 @@ Remember: ALL text values (terms, definitions, questions, answers, predictions) 
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
@@ -214,7 +232,7 @@ Remember: ALL text values (terms, definitions, questions, answers, predictions) 
     const summaryData = {
       transcript_id: body.transcript_id,
       user_id: user.id,
-      model: "gpt-4-turbo",
+      model: "gpt-4o-mini",
       ...(body.mode === "summary"
         ? {
             summary: result.summary,

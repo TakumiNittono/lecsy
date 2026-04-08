@@ -17,9 +17,8 @@ struct OnboardingView: View {
     @State private var elapsedSeconds: Int = 0
     @State private var setupTimer: Timer?
 
-    private let totalPages = 6
+    private let totalPages = 5
     private let authPageIndex = 4
-    private let readyPageIndex = 5
     private let estimatedSeconds: Double = 90
 
     var body: some View {
@@ -30,7 +29,6 @@ struct OnboardingView: View {
                 featuresPage.tag(2)
                 languagePage.tag(3)
                 authPage.tag(4)
-                readyPage.tag(5)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.easeInOut(duration: 0.3), value: currentPage)
@@ -45,16 +43,16 @@ struct OnboardingView: View {
             }
         }
         .onDisappear { stopSetupTimer() }
-        // Auto-advance from auth page once the user signs in or skips
-        .onChange(of: authService.isAuthenticated) { _, signedIn in
-            if signedIn && currentPage == authPageIndex {
-                withAnimation { currentPage = readyPageIndex }
-            }
+        // Auto-complete onboarding once user has signed in (or skipped) AND
+        // the AI model is loaded — both conditions met means we're ready.
+        .onChange(of: authService.isAuthenticated) { _, _ in
+            tryFinishIfReady()
         }
-        .onChange(of: authService.hasSkippedLogin) { _, skipped in
-            if skipped && currentPage == authPageIndex {
-                withAnimation { currentPage = readyPageIndex }
-            }
+        .onChange(of: authService.hasSkippedLogin) { _, _ in
+            tryFinishIfReady()
+        }
+        .onChange(of: transcriptionService.isModelLoaded) { _, _ in
+            tryFinishIfReady()
         }
     }
 
@@ -106,23 +104,22 @@ struct OnboardingView: View {
     }
 
     private var canProceed: Bool {
-        // Require AI consent on first page
         if currentPage == 0 {
-            return true // Tapping "Agree & Continue" itself gives consent
-        }
-        // Block final page until model is loaded
-        if currentPage == readyPageIndex {
-            return transcriptionService.isModelLoaded
+            return true
         }
         return true
     }
 
     private var buttonText: String {
-        switch currentPage {
-        case 0: return "Agree & Continue"
-        case readyPageIndex:
-            return transcriptionService.isModelLoaded ? "Get Started" : "Preparing AI..."
-        default: return "Next"
+        if currentPage == 0 { return "Agree & Continue" }
+        return "Next"
+    }
+
+    private func tryFinishIfReady() {
+        guard currentPage == authPageIndex else { return }
+        let authedOrSkipped = authService.isAuthenticated || authService.hasSkippedLogin
+        if authedOrSkipped && transcriptionService.isModelLoaded {
+            completeOnboarding()
         }
     }
 
@@ -281,122 +278,49 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Page 5: Sign In (buys time while AI model loads in background)
+    // MARK: - Page 5: Sign In + AI download progress (concurrent)
 
     private var authPage: some View {
         VStack(spacing: 0) {
-            Spacer().frame(height: 24)
-
-            VStack(spacing: 12) {
-                Image(systemName: "person.crop.circle.badge.checkmark")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.blue)
-
-                Text("Sign In (Optional)")
-                    .font(.title.bold())
-
-                Text("Sign in to back up and sync your lectures across devices.\nYou can also continue without an account.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
-
-            // Embed LoginView (already has Apple / Google / "Continue without account")
+            modelDownloadBanner
             LoginView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    // MARK: - Page 6: Ready
-
-    private var readyPage: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            if transcriptionService.isModelLoaded {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 72))
-                    .foregroundStyle(.green)
-                    .transition(.scale.combined(with: .opacity))
-
-                Text("You're All Set!")
-                    .font(.title.bold())
-
-                Text("Start recording your first lecture.")
-                    .font(.subheadline)
+    @ViewBuilder
+    private var modelDownloadBanner: some View {
+        if transcriptionService.isModelLoaded {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text("AI model ready")
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-            } else if transcriptionService.state == .failed {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.red)
-
-                Text("Setup Failed")
-                    .font(.title.bold())
-
-                Text("Couldn't prepare the AI model.\nPlease try again.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Button("Retry") {
-                    elapsedSeconds = 0
-                    transcriptionService.prepareModelInBackground(force: true)
-                }
-                .font(.headline)
-                .padding(.horizontal, 32)
-                .padding(.vertical, 12)
-                .background(Color.red)
-                .foregroundStyle(.white)
-                .clipShape(Capsule())
-            } else {
-                Image(systemName: "cpu")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.blue)
-
-                Text("Setting Up AI")
-                    .font(.title.bold())
-
-                Text("Optimizing for your device.\nThis only happens once.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                // Progress bar + time
-                VStack(spacing: 8) {
-                    ProgressView(value: setupProgress)
-                        .tint(.blue)
-                        .scaleEffect(y: 2)
-
-                    HStack {
-                        Text(estimatedTimeRemaining)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(Int(setupProgress * 100))%")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.blue)
-                    }
-                }
-                .padding(.horizontal, 48)
-
-                // Tips while waiting
-                VStack(alignment: .leading, spacing: 14) {
-                    iconRow(icon: "lightbulb.fill",
-                            text: "Place your device near the speaker for the best transcription quality.")
-                    iconRow(icon: "hand.tap.fill",
-                            text: "Tap the bookmark button during recording to mark important moments.")
-                    iconRow(icon: "pause.circle.fill",
-                            text: "You can pause and resume recording anytime.")
-                }
-                .padding(.horizontal, 32)
-                .padding(.top, 8)
             }
-
-            Spacer()
-            Spacer()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(Color.green.opacity(0.08))
+        } else {
+            VStack(spacing: 6) {
+                HStack {
+                    Image(systemName: "cpu").foregroundStyle(.blue)
+                    Text("Setting up AI in background…")
+                        .font(.caption.weight(.medium))
+                    Spacer()
+                    Text("\(Int(setupProgress * 100))%")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.blue)
+                }
+                ProgressView(value: setupProgress).tint(.blue)
+                Text("You can sign in while it loads.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color.blue.opacity(0.06))
         }
-        .animation(.easeInOut(duration: 0.5), value: transcriptionService.isModelLoaded)
     }
 
     private var setupProgress: Double {

@@ -32,6 +32,8 @@ interface SaveTranscriptRequest {
   duration?: number;
   language?: string;
   app_version?: string;
+  // Local Lecture.id from iOS — used to dedupe on backfill retries.
+  client_id?: string | null;
   // B2B context (optional). When the user has an active organization
   // membership, the iOS client passes these so the transcript becomes
   // visible according to the chosen visibility level.
@@ -93,6 +95,21 @@ serve(async (req) => {
       }
     }
 
+    // Idempotent path: if iOS sent a client_id and we already have a row
+    // for (user_id, client_id), return the existing one instead of
+    // inserting a duplicate. This makes backfill safely retryable.
+    if (body.client_id) {
+      const { data: existing } = await supabase
+        .from("transcripts")
+        .select("id, created_at")
+        .eq("user_id", user.id)
+        .eq("client_id", body.client_id)
+        .maybeSingle();
+      if (existing) {
+        return createJsonResponse(req, existing);
+      }
+    }
+
     // 保存
     const { data, error } = await supabase
       .from("transcripts")
@@ -105,6 +122,7 @@ serve(async (req) => {
         language: body.language,
         word_count: wordCount,
         source: "ios",
+        client_id: body.client_id ?? null,
         organization_id: orgId,
         visibility: visibility,
       })

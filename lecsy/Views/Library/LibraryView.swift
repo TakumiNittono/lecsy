@@ -99,9 +99,22 @@ struct LibraryView: View {
         !debouncedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    @StateObject private var authService = AuthService.shared
+    @AppStorage("lecsy.backupBannerDismissed") private var backupBannerDismissed: Bool = false
+    @State private var showSignInSheet: Bool = false
+
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
+                // Cloud backup nudge for users who skipped login.
+                // Shown only when: not signed in, has at least one local
+                // recording with content, and user hasn't dismissed it.
+                if !authService.isAuthenticated
+                    && !backupBannerDismissed
+                    && store.lectures.contains(where: { !($0.transcriptText ?? "").isEmpty }) {
+                    backupNudgeBanner
+                }
+
                 // First-launch AI model warning
                 if !transcriptionService.isModelLoaded && !UserDefaults.standard.bool(forKey: "lecsy.hasCompletedFirstModelLoad") {
                     VStack(spacing: 6) {
@@ -363,6 +376,45 @@ struct LibraryView: View {
         .padding(.vertical, 14)
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var backupNudgeBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "icloud.and.arrow.up.fill")
+                .font(.system(size: 18))
+                .foregroundColor(.blue)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Back up your recordings")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                Text("Sign in to save notes if your phone breaks. Audio stays on device.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 4)
+            Button("Sign in") { showSignInSheet = true }
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .clipShape(Capsule())
+            Button {
+                backupBannerDismissed = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .padding(6)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.blue.opacity(0.08))
+        .overlay(Rectangle().fill(Color.blue.opacity(0.15)).frame(height: 0.5), alignment: .bottom)
+        .sheet(isPresented: $showSignInSheet) {
+            SignInSheet()
+        }
     }
 
     private func statItem(value: String, label: String, icon: String, color: Color) -> some View {

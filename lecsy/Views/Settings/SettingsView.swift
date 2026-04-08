@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var isDeletingAccount = false
     @State private var showReportSheet = false
     @State private var cloudSyncEnabled = CloudSyncService.shared.isEnabled
+    @ObservedObject private var cloudSync = CloudSyncService.shared
 
     var body: some View {
         NavigationView {
@@ -164,6 +165,32 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
+                    if authService.isAuthenticated && cloudSyncEnabled {
+                        Button {
+                            Task {
+                                await CloudSyncService.shared.backfillAllLocalLectures(store: LectureStore.shared)
+                            }
+                        } label: {
+                            HStack {
+                                if cloudSync.isBackfilling {
+                                    ProgressView().scaleEffect(0.8)
+                                    Text("Backing up…")
+                                } else {
+                                    Image(systemName: "icloud.and.arrow.up")
+                                    Text("Back up local recordings now")
+                                }
+                                Spacer()
+                            }
+                        }
+                        .disabled(cloudSync.isBackfilling)
+
+                        if let summary = cloudSync.lastBackfillSummary {
+                            Text(summary)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
                     if let url = URL(string: "https://lecsy.app/privacy") {
                         Link(destination: url) {
                             HStack {
@@ -251,89 +278,18 @@ struct SignInSheet: View {
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 24) {
-                Text("Sign in to sync lectures with the web app")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding()
-
-                if let error = errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .padding()
-                }
-
-                VStack(spacing: 16) {
-                    Button(action: {
-                        Task {
-                            isLoading = true
-                            errorMessage = nil
-                            do {
-                                try await authService.signInWithGoogle()
-                            } catch {
-                                errorMessage = error.localizedDescription
-                            }
-                            isLoading = false
-                        }
-                    }) {
-                        HStack {
-                            Image(systemName: "globe")
-                            Text("Sign in with Google")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
+            LoginView()
+                .navigationTitle("Sign In")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Cancel") { dismiss() }
+                            .buttonStyle(.plain)
                     }
-                    .disabled(isLoading)
-
-                    Button(action: {
-                        Task {
-                            isLoading = true
-                            errorMessage = nil
-                            do {
-                                try await authService.signInWithApple()
-                            } catch {
-                                errorMessage = error.localizedDescription
-                            }
-                            isLoading = false
-                        }
-                    }) {
-                        HStack {
-                            Image(systemName: "applelogo")
-                            Text("Sign in with Apple")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.black)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                    }
-                    .disabled(isLoading)
                 }
-                .frame(maxWidth: 400)
-                .padding()
-
-                Spacer()
-            }
-            .navigationTitle("Sign In")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .buttonStyle(.plain)
+                .onChange(of: authService.isAuthenticated) { _, newValue in
+                    if newValue { dismiss() }
                 }
-            }
-            .onChange(of: authService.isAuthenticated) { oldValue, newValue in
-                if newValue {
-                    dismiss()
-                }
-            }
         }
         .navigationViewStyle(.stack)
     }

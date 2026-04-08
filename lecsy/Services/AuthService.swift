@@ -31,6 +31,9 @@ class AuthService: NSObject, ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     @Published var hasSkippedLogin: Bool = false
+    /// True if the signed-in user belongs to an active organization (Web 経由登録).
+    /// Controls visibility of B2B-only features like AI summary.
+    @Published var isOrgMember: Bool = false
     
     let supabase: SupabaseClient  // Changed to public so SyncService can access it
     private var authStateTask: Task<Void, Never>?
@@ -95,6 +98,7 @@ class AuthService: NSObject, ObservableObject {
         Task {
             await restoreSessionIfNeeded()
             await checkSession()
+            await refreshOrgMembership()
             isInitialized = true
 
             // Start monitoring auth state changes AFTER session is restored
@@ -140,6 +144,10 @@ class AuthService: NSObject, ObservableObject {
                 resetSkipLogin()
             }
             await checkSession()
+            await refreshOrgMembership()
+            // Auto-backfill local lectures to Supabase on first sign-in.
+            // Idempotent server-side; flagged per-user in UserDefaults.
+            await CloudSyncService.shared.backfillAllLocalLecturesIfNeeded(store: LectureStore.shared)
         case .signedOut:
             AppLogger.info("AuthService: Signed out event received", category: .auth)
             isLoading = false
@@ -946,11 +954,14 @@ class AuthService: NSObject, ObservableObject {
         }
 
         do {
-            let session = try await supabase.auth.verifyOTP(
+            let response = try await supabase.auth.verifyOTP(
                 email: trimmedEmail,
                 token: trimmedCode,
                 type: .email
             )
+            guard let session = response.session else {
+                throw AuthError.signInFailed("No session returned from verifyOTP")
+            }
             AppLogger.info("AuthService: OTP 検証成功 - User ID: \(session.user.id)", category: .auth)
 
             // Cache tokens immediately so REST/Edge calls don't 401 in the
@@ -967,7 +978,7 @@ class AuthService: NSObject, ObservableObject {
                 currentUser = LecsyUser(
                     id: userId,
                     email: session.user.email ?? trimmedEmail,
-                    fullName: nil
+                    name: nil
                 )
             }
         } catch {
@@ -980,14 +991,33 @@ class AuthService: NSObject, ObservableObject {
         }
     }
 
+    /// Refresh `isOrgMember` by querying organization_members for the
+    /// current user. Called automatically after sign-in. Safe to call any
+    /// time; failures default to false.
+    func refreshOrgMembership() async {
+        guard isAuthenticated else {
+            await MainActor.run { isOrgMember = false }
+            return
+        }
+        do {
+            let orgs = try await OrganizationAPI.shared.listMyOrganizations()
+            let isMember = orgs.contains { $0.status.lowercased() == "active" }
+            await MainActor.run { isOrgMember = isMember }
+        } catch {
+            AppLogger.warning("refreshOrgMembership failed: \(error.localizedDescription)", category: .auth)
+            await MainActor.run { isOrgMember = false }
+        }
+    }
+
     /// サインアウト
     func signOut() async throws {
         isLoading = true
-        
+
         do {
             try await supabase.auth.signOut()
             isAuthenticated = false
             currentUser = nil
+            isOrgMember = false
             // キャッシュされたトークンもクリア
             cachedAccessToken = nil
             cachedRefreshToken = nil

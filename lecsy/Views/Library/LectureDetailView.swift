@@ -25,16 +25,9 @@ struct LectureDetailView: View {
     @State private var editingBookmarkLabel: String = ""
     // AI summary state (in-memory; not persisted to local store yet)
     @State private var summaryResult: SummaryService.SummaryResult?
-    @State private var summaryEnglishResult: SummaryService.SummaryResult?
     @State private var summaryLoading = false
     @State private var summaryError: String?
     @AppStorage("summaryOutputLanguage") private var summaryOutputLanguage: String = "ja"
-    // Bilingual mode: show summary in both the user's language AND English.
-    // Designed for international students who want to learn English vocabulary
-    // alongside understanding the lecture in their native language.
-    // Costs 2x summary calls when ON; gated by daily/monthly fair-use limits
-    // server-side anyway (DAILY_LIMIT=20 / MONTHLY_LIMIT=400 in summarize/index.ts).
-    @AppStorage("summaryBilingualMode") private var bilingualMode: Bool = false
 
     private let summaryLanguages: [(code: String, label: String)] = [
         ("ja", "日本語"),
@@ -153,8 +146,8 @@ struct LectureDetailView: View {
                     }
                     .padding(.bottom, 4)
 
-                    // AI Summary — 認証済みアカウントにのみ表示
-                    if authService.currentUser != nil {
+                    // AI Summary — Web 経由で組織登録した B2B メンバーのみ
+                    if authService.isOrgMember {
                         summarySection(transcript: cleanTranscript)
                     }
                 }
@@ -552,18 +545,7 @@ struct LectureDetailView: View {
                 .disabled(summaryLoading)
 
                 Spacer()
-                // Bilingual mode toggle — only show when user's chosen output
-                // language is NOT English (otherwise it's pointless).
-                if summaryOutputLanguage != "en" {
-                    Toggle(isOn: $bilingualMode) {
-                        Text("Bilingual")
-                            .font(.system(.caption2, design: .rounded, weight: .medium))
-                    }
-                    .toggleStyle(.switch)
-                    .scaleEffect(0.7, anchor: .trailing)
-                    .frame(maxWidth: 110)
-                    .disabled(summaryLoading)
-                }
+                let tooShort = lecture.duration < 60
                 if summaryLoading {
                     ProgressView().scaleEffect(0.8)
                 } else if summaryResult == nil {
@@ -575,18 +557,26 @@ struct LectureDetailView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 6)
-                            .background(Color.blue)
+                            .background(tooShort ? Color.gray : Color.blue)
                             .clipShape(Capsule())
                     }
+                    .disabled(tooShort)
                 } else {
                     Button {
                         Task { await runSummary(content: transcript) }
                     } label: {
                         Text("Regenerate")
                             .font(.system(.caption, design: .rounded, weight: .medium))
-                            .foregroundColor(.blue)
+                            .foregroundColor(tooShort ? .gray : .blue)
                     }
+                    .disabled(tooShort)
                 }
+            }
+
+            if lecture.duration < 60 && summaryResult == nil {
+                Text("Recordings under 1 minute can't be summarized.")
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundColor(.secondary)
             }
 
             if let error = summaryError {
@@ -598,21 +588,7 @@ struct LectureDetailView: View {
             if let result = summaryResult {
                 summaryBlock(
                     result: result,
-                    languageLabel: bilingualMode ? languageDisplay(for: summaryOutputLanguage) : nil
-                )
-            }
-
-            // Bilingual: show the English version below the primary one.
-            // Only renders if (a) bilingual mode is on, (b) the user picked a
-            // non-English language, and (c) the English summary has loaded.
-            if bilingualMode,
-               summaryOutputLanguage != "en",
-               let englishResult = summaryEnglishResult {
-                Divider()
-                    .padding(.vertical, 4)
-                summaryBlock(
-                    result: englishResult,
-                    languageLabel: "English"
+                    languageLabel: nil
                 )
             }
         }
@@ -626,10 +602,7 @@ struct LectureDetailView: View {
         summaryError = nil
         summaryLoading = true
         defer { summaryLoading = false }
-        // Reset both caches so the user always sees fresh state
-        summaryEnglishResult = nil
         do {
-            // Primary summary in user's chosen language
             let result = try await SummaryService.shared.generateSummary(
                 title: lecture.title,
                 content: content,
@@ -638,29 +611,6 @@ struct LectureDetailView: View {
                 outputLanguage: summaryOutputLanguage
             )
             summaryResult = result
-
-            // Bilingual mode: also fetch English version. Sequential rather
-            // than parallel because the underlying save-transcript Edge
-            // Function would otherwise insert two transcript rows for the
-            // same recording. The first call cached/saved the transcript;
-            // the second one will hit the same path but it's idempotent
-            // enough for now (a duplicate row is the worst case, not a crash).
-            if bilingualMode && summaryOutputLanguage != "en" {
-                do {
-                    let englishResult = try await SummaryService.shared.generateSummary(
-                        title: lecture.title,
-                        content: content,
-                        durationSeconds: lecture.duration,
-                        language: lecture.language.rawValue,
-                        outputLanguage: "en"
-                    )
-                    summaryEnglishResult = englishResult
-                } catch {
-                    // Don't fail the whole flow if only the English version
-                    // fails — user still gets their primary-language summary.
-                    AppLogger.warning("Bilingual English summary failed: \(error)", category: .recording)
-                }
-            }
         } catch {
             summaryError = error.localizedDescription
         }

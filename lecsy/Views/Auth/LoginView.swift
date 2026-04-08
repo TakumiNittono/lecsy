@@ -33,26 +33,27 @@ struct LoginView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            VStack(spacing: 30) {
-                Spacer()
-                
-                // アプリロゴ・タイトル
-                VStack(spacing: 16) {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: horizontalSizeClass == .regular ? 100 : 80))
-                        .foregroundColor(.blue)
-                    
-                    Text("Lecsy")
-                        .font(.system(size: horizontalSizeClass == .regular ? 56 : 48, weight: .bold, design: .rounded))
-                        .foregroundColor(.primary)
-                    
-                    Text("Record lectures and transcribe automatically")
-                        .font(horizontalSizeClass == .regular ? .title3 : .subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                
-                Spacer()
+            ScrollView {
+                VStack(spacing: horizontalSizeClass == .regular ? 40 : 24) {
+                    Spacer().frame(height: horizontalSizeClass == .regular ? 60 : 24)
+
+                    // アプリロゴ・タイトル
+                    VStack(spacing: horizontalSizeClass == .regular ? 20 : 16) {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: horizontalSizeClass == .regular ? 88 : 72))
+                            .foregroundColor(.blue)
+
+                        Text("Lecsy")
+                            .font(.system(size: horizontalSizeClass == .regular ? 48 : 40, weight: .bold, design: .rounded))
+                            .foregroundColor(.primary)
+
+                        Text("Record lectures and transcribe automatically")
+                            .font(horizontalSizeClass == .regular ? .title3 : .subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    Spacer().frame(height: horizontalSizeClass == .regular ? 24 : 8)
                 
                 // ログインボタン
                 VStack(spacing: 16) {
@@ -143,7 +144,9 @@ struct LoginView: View {
                     .padding(.top, 16)
             }
             
-            Spacer()
+                Spacer().frame(height: 24)
+                }
+                .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -155,7 +158,7 @@ struct LoginView: View {
         VStack(spacing: 12) {
             switch magicLinkStage {
             case .email:
-                TextField("School email", text: $emailInput)
+                TextField("Email", text: $emailInput)
                     .textContentType(.emailAddress)
                     .keyboardType(.emailAddress)
                     .autocorrectionDisabled()
@@ -184,7 +187,7 @@ struct LoginView: View {
 
             case .codeEntry:
                 VStack(spacing: 6) {
-                    Text("We sent a 6-digit code to")
+                    Text("We sent a code to")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Text(emailInput)
