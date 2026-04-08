@@ -77,7 +77,7 @@ export default async function MembersPage({
     <div className="px-6 lg:px-10 py-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Members</h1>
-        <p className="text-sm text-gray-700 mt-1">
+        <p className="text-sm text-gray-900 mt-1">
           Manage your organization members. Add members by email — they&apos;ll be activated automatically when they sign in.
         </p>
       </div>

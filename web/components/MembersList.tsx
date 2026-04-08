@@ -26,7 +26,7 @@ const ROLE_BADGE_COLORS: Record<string, string> = {
   owner: 'bg-purple-100 text-purple-700',
   admin: 'bg-blue-100 text-blue-700',
   teacher: 'bg-green-100 text-green-700',
-  student: 'bg-gray-100 text-gray-600',
+  student: 'bg-gray-100 text-gray-800',
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -184,10 +184,10 @@ export default function MembersList({
       {/* Seat usage */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-sm font-medium text-gray-700">
+          <div className="text-sm font-medium text-gray-900">
             Seat Usage
           </div>
-          <div className="text-sm text-gray-700">
+          <div className="text-sm text-gray-900">
             <span className="font-semibold text-gray-900">{seatUsage}</span> / {maxSeats} seats used
           </div>
         </div>
@@ -260,7 +260,7 @@ export default function MembersList({
       {showAddForm && canManage && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
           <h3 className="font-semibold text-gray-900">Add Members by Email</h3>
-          <p className="text-xs text-gray-700">
+          <p className="text-xs text-gray-900">
             Enter email addresses (comma or newline separated). Members will be activated automatically when they log in.
           </p>
           <textarea
@@ -272,7 +272,7 @@ export default function MembersList({
           />
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-600">Role:</label>
+              <label className="text-sm text-gray-800">Role:</label>
               <select
                 value={addRole}
                 onChange={(e) => setAddRole(e.target.value)}
@@ -286,7 +286,7 @@ export default function MembersList({
             <div className="flex items-center gap-2 ml-auto">
               <button
                 onClick={() => setShowAddForm(false)}
-                className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900"
+                className="px-4 py-2 text-sm text-gray-900 hover:text-gray-900"
               >
                 Cancel
               </button>
@@ -313,20 +313,20 @@ export default function MembersList({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="text-left px-6 py-3 font-medium text-gray-700">Member</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-700">Role</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-700">Status</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-700">Last Active</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-700">Added</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-900">Member</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-900">Role</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-900">Status</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-900">Last Active</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-900">Added</th>
                 {canManage && (
-                  <th className="text-right px-6 py-3 font-medium text-gray-700">Actions</th>
+                  <th className="text-right px-6 py-3 font-medium text-gray-900">Actions</th>
                 )}
               </tr>
             </thead>
             <tbody>
               {filteredMembers.length === 0 ? (
                 <tr>
-                  <td colSpan={canManage ? 6 : 5} className="px-6 py-12 text-center text-gray-600">
+                  <td colSpan={canManage ? 6 : 5} className="px-6 py-12 text-center text-gray-800">
                     {search ? 'No members match your search.' : 'No members found.'}
                   </td>
                 </tr>
@@ -350,7 +350,7 @@ export default function MembersList({
                             {displayName(member)}
                           </span>
                           {isSelf && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 uppercase">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-800 uppercase">
                               You
                             </span>
                           )}
@@ -386,7 +386,7 @@ export default function MembersList({
                       {/* Last Active */}
                       <td className="px-6 py-3">
                         {isPending ? (
-                          <span className="text-gray-500">--</span>
+                          <span className="text-gray-800">--</span>
                         ) : member.lastActive ? (
                           <span className={
                             Date.now() - new Date(member.lastActive).getTime() > 30 * 24 * 60 * 60 * 1000
@@ -398,12 +398,12 @@ export default function MembersList({
                             {formatDate(member.lastActive)}
                           </span>
                         ) : (
-                          <span className="text-gray-500">Never</span>
+                          <span className="text-gray-800">Never</span>
                         )}
                       </td>
 
                       {/* Added */}
-                      <td className="px-6 py-3 text-gray-700">
+                      <td className="px-6 py-3 text-gray-900">
                         {formatDate(member.joined_at)}
                       </td>
 
@@ -437,7 +437,7 @@ export default function MembersList({
                                   <button
                                     onClick={() => setConfirmDeleteId(null)}
                                     disabled={isLoading}
-                                    className="px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                                    className="px-2.5 py-1.5 text-xs font-medium text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
                                   >
                                     Cancel
                                   </button>
@@ -475,7 +475,7 @@ export default function MembersList({
       </div>
 
       {/* Member count footer */}
-      <div className="text-sm text-gray-600">
+      <div className="text-sm text-gray-800">
         {filteredMembers.length} {filteredMembers.length === 1 ? 'member' : 'members'}
         {search && ` matching "${search}"`}
         {' '}&middot; {members.filter(m => m.status === 'pending').length} pending
