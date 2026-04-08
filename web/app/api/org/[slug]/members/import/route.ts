@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { requireOrgRole } from '@/utils/api/org-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,28 +13,21 @@ interface Row {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export async function POST(req: Request, { params }: { params: { slug: string } }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  // Resolve org from URL slug — never trust body.org_id (prevents
+  // cross-org tampering). requireOrgRole also enforces admin+.
+  const auth = await requireOrgRole(params.slug, 'admin')
+  if (auth instanceof NextResponse) return auth
+  const orgId = auth.orgId
 
   const body = await req.json()
-  const orgId: string = body.org_id
   const rows: Row[] = body.rows
-  if (!orgId || !Array.isArray(rows)) {
+  if (!Array.isArray(rows)) {
     return NextResponse.json({ error: 'invalid_payload' }, { status: 400 })
   }
   if (rows.length === 0) return NextResponse.json({ error: 'empty_rows' }, { status: 400 })
   if (rows.length > 1000) return NextResponse.json({ error: 'too_many_rows' }, { status: 400 })
 
   const admin = createAdminClient()
-
-  // role check
-  const { data: roleOk } = await admin.rpc('is_org_role_at_least', {
-    p_org: orgId,
-    p_user: user.id,
-    p_min: 'admin',
-  })
-  if (!roleOk) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   // org info
   const { data: org } = await admin

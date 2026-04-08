@@ -27,7 +27,29 @@ class AuthService: NSObject, ObservableObject {
         let email: String?
         let name: String?
     }
-    @Published var currentUser: LecsyUser?
+    @Published var currentUser: LecsyUser? {
+        didSet {
+            // Phase 1.5 #2: Notify PostLoginCoordinator on every sign-in / sign-out
+            // transition. Centralised here so each auth path (Apple / Google /
+            // Magic Link / restored session) does not need to remember to post.
+            switch (oldValue, currentUser) {
+            case (nil, let new?):
+                NotificationCenter.default.post(
+                    name: .lecsyDidSignIn,
+                    object: nil,
+                    userInfo: [
+                        "userId": new.id.uuidString,
+                        "email": (new.email ?? "").lowercased(),
+                        "accessToken": cachedAccessToken ?? ""
+                    ]
+                )
+            case (_?, nil):
+                NotificationCenter.default.post(name: .lecsyDidSignOut, object: nil)
+            default:
+                break
+            }
+        }
+    }
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     @Published var hasSkippedLogin: Bool = false

@@ -89,6 +89,7 @@ final class CloudSyncService: ObservableObject {
             let client_id: String?
             let organization_id: String?
             let visibility: String?
+            let class_id: String?
         }
 
         struct SaveResp: Decodable {
@@ -104,7 +105,8 @@ final class CloudSyncService: ObservableObject {
             language: language,
             client_id: clientId?.uuidString,
             organization_id: orgContext?.orgId,
-            visibility: orgContext?.visibility
+            visibility: orgContext?.visibility,
+            class_id: orgContext?.classId
         )
 
         do {

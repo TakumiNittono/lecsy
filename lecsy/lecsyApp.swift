@@ -17,6 +17,9 @@ struct lecsyApp: App {
     private let streakService = StudyStreakService.shared
     // Touch TranscriptionService immediately so model preloading starts at app launch
     private let transcriptionService = TranscriptionService.shared
+    // Phase 1.5 #2: instantiate PostLoginCoordinator at launch so its
+    // NotificationCenter observers are registered before any sign-in event.
+    @MainActor private let postLoginCoordinator = PostLoginCoordinator.shared
 
     var body: some Scene {
         WindowGroup {

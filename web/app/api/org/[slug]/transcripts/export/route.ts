@@ -49,10 +49,14 @@ export async function GET(
     if (data?.user?.email) emailMap.set(uid, data.user.email)
   }
 
-  // Build CSV — RFC 4180-ish escaping
+  // Build CSV — RFC 4180-ish escaping + formula-injection prefix guard.
+  // Excel/Sheets execute cells starting with =, +, -, @, \t, \r as formulas,
+  // which lets a malicious title exfiltrate data on open. Prefix with a
+  // single quote to neutralise.
   function csvCell(v: unknown): string {
     if (v == null) return ''
-    const s = String(v)
+    let s = String(v)
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s
     if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
     return s
   }
