@@ -116,17 +116,17 @@ export default function BulkInviteUpload({ slug, onMembersAdded }: Props) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
       <h3 className="font-semibold text-gray-900 mb-1">Bulk Add via CSV</h3>
-      <p className="text-xs text-gray-500 mb-4">
+      <p className="text-xs text-gray-800 mb-4">
         Upload a CSV file with columns: <code className="bg-gray-100 px-1 rounded">email,role</code> (role is optional, defaults to student)
       </p>
 
       {rows.length === 0 ? (
         <div>
           <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
-            <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-8 h-8 text-gray-900 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
-            <span className="text-sm text-gray-500">Click to upload CSV</span>
+            <span className="text-sm text-gray-800">Click to upload CSV</span>
             <input
               ref={fileRef}
               type="file"
@@ -140,7 +140,7 @@ export default function BulkInviteUpload({ slug, onMembersAdded }: Props) {
         <div>
           {/* Summary */}
           <div className="flex items-center gap-4 mb-4">
-            <span className="text-sm text-gray-700">
+            <span className="text-sm text-gray-900">
               <span className="font-semibold text-green-600">{validCount}</span> valid
             </span>
             {invalidCount > 0 && (
@@ -150,7 +150,7 @@ export default function BulkInviteUpload({ slug, onMembersAdded }: Props) {
             )}
             <button
               onClick={handleClear}
-              className="text-xs text-gray-400 hover:text-gray-600 ml-auto"
+              className="text-xs text-gray-900 hover:text-gray-600 ml-auto"
             >
               Clear
             </button>
@@ -161,16 +161,16 @@ export default function BulkInviteUpload({ slug, onMembersAdded }: Props) {
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-gray-50">
                 <tr>
-                  <th className="text-left px-3 py-2 font-medium text-gray-500">Email</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-500">Role</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-500 w-16">Valid</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-800">Email</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-800">Role</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-800 w-16">Valid</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, i) => (
                   <tr key={i} className={`border-t border-gray-50 ${!row.valid ? 'bg-red-50' : ''}`}>
-                    <td className="px-3 py-1.5 text-gray-700">{row.email}</td>
-                    <td className="px-3 py-1.5 capitalize text-gray-500">{row.role}</td>
+                    <td className="px-3 py-1.5 text-gray-900">{row.email}</td>
+                    <td className="px-3 py-1.5 capitalize text-gray-800">{row.role}</td>
                     <td className="px-3 py-1.5">
                       {row.valid ? (
                         <span className="text-green-500">OK</span>
