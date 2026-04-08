@@ -153,7 +153,25 @@ async function handleCallback(request: NextRequest) {
         new URL('/login?error=' + encodeURIComponent('セッションの確立に失敗しました。もう一度お試しください。'), requestUrl.origin)
       )
     }
-    
+
+    // Activate any pending org memberships matching this user's email.
+    // Without this, an admin who added the user via Members page sees them
+    // stuck on "Pending" forever even after the user logs in via Web.
+    // (iOS does the same in PostLoginCoordinator.)
+    if (data.user.email) {
+      try {
+        const { error: activateErr } = await supabase.rpc(
+          'activate_pending_memberships',
+          { p_user_id: data.user.id, p_email: data.user.email.toLowerCase() }
+        )
+        if (activateErr) {
+          console.error('activate_pending_memberships failed:', activateErr)
+        }
+      } catch (e) {
+        console.error('activate_pending_memberships threw:', e)
+      }
+    }
+
     // 認証成功 - リダイレクト（クッキーを含む）
     const redirectResponse = NextResponse.redirect(new URL(next, requestUrl.origin))
     
