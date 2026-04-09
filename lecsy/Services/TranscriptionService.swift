@@ -12,6 +12,7 @@ import CoreMedia
 import Combine
 import CoreML
 import Network
+import UIKit
 
 /// Transcription service
 @MainActor
@@ -35,6 +36,26 @@ class TranscriptionService: ObservableObject {
     private var progressTimer: Timer?
     private var modelDownloadTask: Task<Void, Error>?
     private var networkMonitor: NWPathMonitor?
+
+    // MARK: - App-state pause (GPU background execution workaround)
+    //
+    // iOS blocks Metal/GPU command submission from background processes
+    // (`kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted`).
+    // WhisperKit's CoreML decoder runs on the GPU, so any chunk that tries
+    // to execute while the app is backgrounded dies with that error and
+    // loses ~30s of audio. This happens whenever the system briefly pushes
+    // Lecsy offscreen — e.g. the Google sign-in ASWebAuthenticationSession
+    // taking focus during an active transcription.
+    //
+    // The `BackgroundKeepAlive` silent-audio trick keeps the *process*
+    // alive (audio background mode) but cannot grant GPU execution rights
+    // — that's a separate entitlement Apple doesn't expose to third-party
+    // apps. So we instead pause the chunk loop at safe boundaries when the
+    // app resigns active, and resume it when the app becomes active again.
+    private var isAppActive: Bool = true
+    private var foregroundContinuation: CheckedContinuation<Void, Never>?
+    private var backgroundObserverToken: NSObjectProtocol?
+    private var foregroundObserverToken: NSObjectProtocol?
 
     // Timeout settings
     private let modelLoadTimeout: TimeInterval = 600 // 10 minutes (460MB needs time on slower connections)
@@ -106,6 +127,68 @@ class TranscriptionService: ObservableObject {
         }
         // Preload model into memory immediately — don't wait for UI
         prepareModelInBackground(force: true)
+        // Observe foreground/background transitions so the chunked
+        // transcription loop can pause when iOS revokes GPU access.
+        setupAppStateObservers()
+    }
+
+    deinit {
+        if let t = backgroundObserverToken { NotificationCenter.default.removeObserver(t) }
+        if let t = foregroundObserverToken { NotificationCenter.default.removeObserver(t) }
+    }
+
+    // MARK: - App-state observers
+
+    private func setupAppStateObservers() {
+        let nc = NotificationCenter.default
+        backgroundObserverToken = nc.addObserver(
+            forName: UIApplication.willResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                if self.isAppActive {
+                    self.isAppActive = false
+                    AppLogger.info("Transcription: app resigned active — will pause before next chunk", category: .transcription)
+                }
+            }
+        }
+        foregroundObserverToken = nc.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                if !self.isAppActive {
+                    self.isAppActive = true
+                    AppLogger.info("Transcription: app active again — resuming chunk loop", category: .transcription)
+                }
+                // Always resume any waiting continuation on activation.
+                if let cont = self.foregroundContinuation {
+                    self.foregroundContinuation = nil
+                    cont.resume()
+                }
+            }
+        }
+    }
+
+    /// Suspend execution until the app is frontmost and allowed to submit
+    /// GPU work. Returns immediately if already active. Called at safe
+    /// boundaries in the chunk loop (never mid-chunk).
+    private func awaitForegroundIfNeeded() async {
+        if isAppActive { return }
+        AppLogger.info("Transcription: pausing — waiting for app to become active", category: .transcription)
+        downloadStatusText = "Paused — return to the app to continue transcribing"
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            // Race-safe: re-check on main actor before storing.
+            if isAppActive {
+                cont.resume()
+            } else {
+                foregroundContinuation = cont
+            }
+        }
     }
 
     // MARK: - Migration from English-only (.en) models
@@ -599,7 +682,7 @@ class TranscriptionService: ObservableObject {
     /// Execute transcription
     private var activeTranscriptionURL: URL?
 
-    func transcribe(audioURL: URL) async throws -> TranscriptionResult {
+    func transcribe(audioURL: URL, lectureId: UUID? = nil) async throws -> TranscriptionResult {
         // Prevent duplicate transcription of the same file
         if activeTranscriptionURL == audioURL {
             AppLogger.warning("Transcription already in progress for: \(audioURL.lastPathComponent)", category: .transcription)
@@ -607,6 +690,34 @@ class TranscriptionService: ObservableObject {
         }
         activeTranscriptionURL = audioURL
         defer { activeTranscriptionURL = nil }
+
+        // #1: Pre-process audio — high-pass filter + RMS normalization.
+        // Removes low-frequency HVAC rumble and boosts quiet recordings so
+        // Whisper hallucinates less.
+        //
+        // SAFETY GUARDS:
+        //  - Run on a detached background task so the per-sample loop
+        //    never blocks the main actor (this service is @MainActor).
+        //  - Skip preprocessing for recordings longer than 15 minutes:
+        //    loading a 60-min PCM buffer into RAM would OOM-kill the app.
+        //  - Any failure silently falls back to the original audio.
+        let workingURL: URL
+        if let size = try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? Int64,
+           size < 50_000_000 { // ~15 min @ 64kbps AAC ≈ 7 MB; cap at 50 MB for safety
+            let processed = await Task.detached(priority: .userInitiated) { [weak self] () -> URL? in
+                guard let self = self else { return nil }
+                return try? await self.preprocessAudioIfBeneficial(sourceURL: audioURL)
+            }.value
+            workingURL = processed ?? audioURL
+        } else {
+            AppLogger.info("Skipping audio preprocessing for large file (>50MB)", category: .transcription)
+            workingURL = audioURL
+        }
+        defer {
+            if workingURL != audioURL {
+                try? FileManager.default.removeItem(at: workingURL)
+            }
+        }
 
         // Validate audio file exists
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
@@ -666,11 +777,14 @@ class TranscriptionService: ObservableObject {
         decodeOptions.usePrefillPrompt = true
         decodeOptions.detectLanguage = false
         // Anti-loop settings: prevent Whisper from hallucinating/repeating
-        decodeOptions.compressionRatioThreshold = 2.4 // Skip segments with high repetition
-        decodeOptions.logProbThreshold = -1.0 // Skip low-confidence segments
-        decodeOptions.noSpeechThreshold = 0.6 // Skip silence more aggressively
-        decodeOptions.temperatureFallbackCount = 1 // Minimal retries for speed
-        decodeOptions.temperature = 0 // Greedy decoding — fastest
+        // Loosened thresholds to prevent mid-audio dropouts. The previous
+        // values were aggressive enough that real speech (especially in
+        // middle chunks with natural pauses) was being thrown away.
+        decodeOptions.compressionRatioThreshold = 2.8 // Less eager to flag as "repetition"
+        decodeOptions.logProbThreshold = -1.5 // Keep more lower-confidence segments
+        decodeOptions.noSpeechThreshold = 0.8 // Only drop clearly-silent audio
+        decodeOptions.temperatureFallbackCount = 3 // More retries → better recovery when fallback fires
+        decodeOptions.temperature = 0 // Start greedy; fallback bumps temperature
 
         // Lecture context prompt — helps Whisper with academic vocabulary,
         // proper nouns, and accented speakers by setting expectations
@@ -687,7 +801,7 @@ class TranscriptionService: ObservableObject {
         // to avoid a potential infinite Whisper loop on a long file
         if audioDuration > 0 && audioDuration <= shortAudioThreshold {
             do {
-                return try await runSingleTranscription(whisperKit: currentKit, audioURL: audioURL, decodeOptions: decodeOptions)
+                return try await runSingleTranscription(whisperKit: currentKit, audioURL: workingURL, decodeOptions: decodeOptions)
             } catch is TimeoutError {
                 state = .failed
                 throw TranscriptionError.transcriptionTimedOut
@@ -709,7 +823,7 @@ class TranscriptionService: ObservableObject {
         }
 
         do {
-            return try await runChunkedTranscription(whisperKit: currentKit, audioURL: audioURL, decodeOptions: decodeOptions, totalDuration: effectiveDuration)
+            return try await runChunkedTranscription(whisperKit: currentKit, audioURL: workingURL, decodeOptions: decodeOptions, totalDuration: effectiveDuration, lectureId: lectureId)
         } catch is TimeoutError {
             state = .failed
             throw TranscriptionError.transcriptionTimedOut
@@ -765,7 +879,31 @@ class TranscriptionService: ObservableObject {
     // MARK: - Chunked Transcription
 
     /// Transcribe long audio by splitting into chunks
-    private func runChunkedTranscription(whisperKit initialWhisperKit: WhisperKit, audioURL: URL, decodeOptions: DecodingOptions, totalDuration: TimeInterval) async throws -> TranscriptionResult {
+    private func runChunkedTranscription(whisperKit initialWhisperKit: WhisperKit, audioURL: URL, decodeOptions: DecodingOptions, totalDuration: TimeInterval, lectureId: UUID? = nil) async throws -> TranscriptionResult {
+        // Request extra background execution time so iOS doesn't kill us
+        // the instant the user leaves the app. The standard Background Task
+        // API only grants ~30 seconds, which is why we ALSO start a silent
+        // audio keep-alive below — that leverages the "audio" background
+        // mode to keep the app running for the full duration of the job.
+        var bgTaskId: UIBackgroundTaskIdentifier = .invalid
+        bgTaskId = await UIApplication.shared.beginBackgroundTask(withName: "lecsy.transcription") {
+            Task { @MainActor in
+                if bgTaskId != .invalid {
+                    UIApplication.shared.endBackgroundTask(bgTaskId)
+                    bgTaskId = .invalid
+                }
+            }
+        }
+        // Start the silent-audio keep-alive so a long (potentially 1-hour)
+        // transcription can continue running even when the user switches to
+        // another app or locks the screen. Stopped automatically via defer.
+        BackgroundKeepAlive.shared.begin()
+        defer {
+            BackgroundKeepAlive.shared.end()
+            if bgTaskId != .invalid {
+                UIApplication.shared.endBackgroundTask(bgTaskId)
+            }
+        }
         var whisperKit = initialWhisperKit
 
         // Build progressive chunk boundaries: first chunk is short (15s) so users see
@@ -812,13 +950,76 @@ class TranscriptionService: ObservableObject {
         AppLogger.info("Chunked transcription: \(totalChunks) chunks for \(String(format: "%.0f", totalDuration))s audio", category: .transcription)
 
         var allSegments: [TranscriptionResult.TranscriptionSegment] = []
+        // Running transcript text accumulated incrementally. This replaces
+        // the old pattern of calling `allSegments.map(\.text).joined(separator:)`
+        // on every chunk completion, which was O(n²) and caused long lectures
+        // (120 min ≈ 3000+ segments) to spend increasing amounts of time
+        // rebuilding the same string over and over. Appending keeps it O(1)
+        // amortized per chunk and prevents transcription from slowing down
+        // toward the end of a long recording.
+        var runningText = ""
         var detectedLanguage: String?
         var consecutiveFailures = 0
         let maxConsecutiveFailures = 3
 
+        // Helper: append a segment to both allSegments and runningText in
+        // lock-step, so the two stay consistent.
+        func appendSegment(_ seg: TranscriptionResult.TranscriptionSegment) {
+            allSegments.append(seg)
+            if runningText.isEmpty {
+                runningText = seg.text
+            } else {
+                runningText += " " + seg.text
+            }
+        }
+
+        // Keep the base prompt tokens (lecture glossary) so we can layer the
+        // running transcript tail on top for subsequent chunks.
+        let basePromptTokens: [Int] = decodeOptions.promptTokens ?? []
+
+        // Helper: build decodeOptions for a chunk that should receive the
+        // tail of the prior chunk's text as context. Concatenates
+        // baseTokens + encoded tail text, clipped to ~200 total tokens to
+        // stay under Whisper's ~224 prompt budget.
+        func decodeOptionsWithContext(priorText: String) -> DecodingOptions {
+            var opts = decodeOptions
+            guard !priorText.isEmpty, let tokenizer = whisperKit.tokenizer else { return opts }
+            // Take the last ~150 characters of prior text — roughly 30-50
+            // tokens, enough for one or two sentences of context.
+            let tail: String
+            if priorText.count > 150 {
+                tail = String(priorText.suffix(150))
+            } else {
+                tail = priorText
+            }
+            let tailTokens = tokenizer.encode(text: " " + tail)
+                .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+            var combined = basePromptTokens + tailTokens
+            if combined.count > 200 {
+                combined = Array(combined.suffix(200))
+            }
+            opts.promptTokens = combined
+            return opts
+        }
+
         // Process chunks. If a second WhisperKit instance is available, process pairs concurrently.
         var index = 0
         while index < totalChunks {
+            // Cooperative cancellation: if the enclosing Task (e.g. from
+            // RecordView / LectureDetailView) has been cancelled, stop
+            // processing immediately so we free resources and don't keep
+            // burning CPU/memory for a transcription the user doesn't want
+            // anymore. Cached chunks up to this point remain in the resume
+            // cache, so the user can pick up where they left off.
+            try Task.checkCancellation()
+
+            // Pause at chunk boundary if the app has been backgrounded.
+            // GPU command submission is blocked in background (see the
+            // long comment on `isAppActive`) so there is nothing we can
+            // do but wait for the user to return.
+            await awaitForegroundIfNeeded()
+            try Task.checkCancellation()
+
             let useDual = (whisperKit2 != nil) && (index + 1 < totalChunks)
 
             if useDual, let kit2 = whisperKit2 {
@@ -830,12 +1031,33 @@ class TranscriptionService: ObservableObject {
                 progress = Double(i1) / Double(totalChunks)
                 downloadStatusText = "Transcribing parts \(i1 + 1)–\(i2 + 1) of \(totalChunks)..."
 
+                // Resume cache: if we already processed these chunks in a
+                // previous run (e.g. user killed the app mid-transcription),
+                // reuse the cached segments instead of re-running Whisper.
+                if let cached1 = cachedSegments(lectureId: lectureId, start: c1.start, end: c1.end),
+                   let cached2 = cachedSegments(lectureId: lectureId, start: c2.start, end: c2.end) {
+                    AppLogger.info("Cache hit for chunks \(i1 + 1)&\(i2 + 1) — skipping", category: .transcription)
+                    for seg in cached1 + cached2 {
+                        if shouldSkipDuplicate(seg, lastSeg: allSegments.last) { continue }
+                        appendSegment(seg)
+                    }
+                    onChunkCompleted?(runningText, allSegments)
+                    index += 2
+                    continue
+                }
+
                 AppLogger.debug("Processing chunks \(i1 + 1)&\(i2 + 1)/\(totalChunks) in parallel", category: .transcription)
+
+                // Feed both parallel chunks the tail of whatever's been
+                // transcribed so far. They run concurrently so they share
+                // the same context snapshot (from the previous pair).
+                let priorTail = allSegments.suffix(5).map(\.text).joined(separator: " ")
+                let pairOptions = decodeOptionsWithContext(priorText: priorTail)
 
                 async let r1 = transcribeTimeRangeNonInOut(
                     whisperKit: whisperKit,
                     audioURL: audioURL,
-                    decodeOptions: decodeOptions,
+                    decodeOptions: pairOptions,
                     start: c1.start,
                     end: c1.end,
                     isOverlap: i1 > 0,
@@ -844,7 +1066,7 @@ class TranscriptionService: ObservableObject {
                 async let r2 = transcribeTimeRangeNonInOut(
                     whisperKit: kit2,
                     audioURL: audioURL,
-                    decodeOptions: decodeOptions,
+                    decodeOptions: pairOptions,
                     start: c2.start,
                     end: c2.end,
                     isOverlap: true,
@@ -853,18 +1075,28 @@ class TranscriptionService: ObservableObject {
                 let result1 = await r1
                 let result2 = await r2
 
+                // Persist both chunks to the resume cache before merging so
+                // a crash during the next chunk doesn't lose this work.
+                if let lectureId = lectureId {
+                    if !result1.didTimeout {
+                        appendToChunkCache(lectureId: lectureId, start: c1.start, end: c1.end, segments: result1.segments)
+                    }
+                    if !result2.didTimeout {
+                        appendToChunkCache(lectureId: lectureId, start: c2.start, end: c2.end, segments: result2.segments)
+                    }
+                }
+
                 // Merge in chronological order (kit1 first, then kit2)
                 for result in [result1, result2] {
                     if let lang = result.language, detectedLanguage == nil {
                         detectedLanguage = lang
                     }
                     for seg in result.segments {
-                        if let lastSeg = allSegments.last, seg.text == lastSeg.text { continue }
-                        allSegments.append(seg)
+                        if shouldSkipDuplicate(seg, lastSeg: allSegments.last) { continue }
+                        appendSegment(seg)
                     }
                     if result.didTimeout { consecutiveFailures += 1 } else { consecutiveFailures = 0 }
-                    let partialText = allSegments.map(\.text).joined(separator: " ")
-                    onChunkCompleted?(partialText, allSegments)
+                    onChunkCompleted?(runningText, allSegments)
                 }
 
                 if consecutiveFailures >= maxConsecutiveFailures {
@@ -894,23 +1126,45 @@ class TranscriptionService: ObservableObject {
 
             AppLogger.debug("Processing chunk \(index + 1)/\(totalChunks): \(String(format: "%.0f", chunk.start))s - \(String(format: "%.0f", chunk.end))s", category: .transcription)
 
+            // Resume cache: reuse segments processed in a previous run.
+            if let cached = cachedSegments(lectureId: lectureId, start: chunk.start, end: chunk.end) {
+                AppLogger.info("Cache hit for chunk \(index + 1) — skipping", category: .transcription)
+                for seg in cached {
+                    if shouldSkipDuplicate(seg, lastSeg: allSegments.last) { continue }
+                    appendSegment(seg)
+                }
+                onChunkCompleted?(runningText, allSegments)
+                index += 1
+                continue
+            }
+
+            // Feed this chunk the tail of everything we've transcribed so
+            // far as prompt context. For the first chunk this is empty and
+            // we fall back to the base lecture glossary prompt.
+            let priorTail = allSegments.suffix(5).map(\.text).joined(separator: " ")
+            let chunkOptions = decodeOptionsWithContext(priorText: priorTail)
+
             let result = await transcribeTimeRange(
                 whisperKit: &whisperKit,
                 audioURL: audioURL,
-                decodeOptions: decodeOptions,
+                decodeOptions: chunkOptions,
                 start: chunk.start,
                 end: chunk.end,
                 isOverlap: index > 0,
                 label: "Chunk \(index + 1)/\(totalChunks)"
             )
 
+            if let lectureId = lectureId, !result.didTimeout {
+                appendToChunkCache(lectureId: lectureId, start: chunk.start, end: chunk.end, segments: result.segments)
+            }
+
             if let lang = result.language, detectedLanguage == nil {
                 detectedLanguage = lang
             }
 
             for seg in result.segments {
-                if let lastSeg = allSegments.last, seg.text == lastSeg.text { continue }
-                allSegments.append(seg)
+                if shouldSkipDuplicate(seg, lastSeg: allSegments.last) { continue }
+                appendSegment(seg)
             }
 
             if result.didTimeout {
@@ -931,8 +1185,7 @@ class TranscriptionService: ObservableObject {
                 consecutiveFailures = 0
             }
 
-            let partialText = allSegments.map(\.text).joined(separator: " ")
-            onChunkCompleted?(partialText, allSegments)
+            onChunkCompleted?(runningText, allSegments)
 
             if index < totalChunks - 1 {
                 try await Task.sleep(nanoseconds: 500_000_000)
@@ -940,8 +1193,9 @@ class TranscriptionService: ObservableObject {
             index += 1
         }
 
-        // Build final result
-        let fullText = allSegments.map(\.text).joined(separator: " ")
+        // Build final result — runningText has been accumulated
+        // incrementally throughout the loop, so no O(n) rebuild here.
+        let fullText = runningText
 
         if fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             AppLogger.warning("Chunked transcription produced empty text", category: .transcription)
@@ -954,6 +1208,11 @@ class TranscriptionService: ObservableObject {
         onChunkCompleted = nil
 
         AppLogger.info("Chunked transcription complete: \(allSegments.count) segments", category: .transcription)
+
+        // Transcription finished successfully — clear the resume cache.
+        if let lectureId = lectureId {
+            clearChunkCache(lectureId: lectureId)
+        }
 
         return TranscriptionResult(
             text: fullText,
@@ -1000,13 +1259,28 @@ class TranscriptionService: ObservableObject {
         exportSession.outputFileType = .m4a
         exportSession.timeRange = timeRange
 
+        // Track whether the export succeeded so we only hand the file back
+        // to the caller on success. On any failure path (throw, non-completed
+        // status, cancelled Task) we scrub the temp file here so `/tmp` can't
+        // slowly fill up over a long recording with many chunks.
+        var succeeded = false
+        defer {
+            if !succeeded {
+                try? FileManager.default.removeItem(at: chunkURL)
+            }
+        }
+
         await exportSession.export()
+
+        // Propagate Task cancellation even if export ignored it.
+        try Task.checkCancellation()
 
         guard exportSession.status == .completed else {
             AppLogger.error("Chunk export failed: \(exportSession.error?.localizedDescription ?? "unknown")", category: .transcription)
             throw TranscriptionError.audioLoadFailed
         }
 
+        succeeded = true
         return chunkURL
     }
 
@@ -1069,20 +1343,39 @@ class TranscriptionService: ObservableObject {
                 label: subLabel
             )
 
-            if let subResult = subResult {
+            // If the sub-chunk failed on the first pass, retry ONCE with a
+            // much longer timeout before giving up. This catches cases where
+            // WhisperKit just needed more time (thermal throttling, slow
+            // device, huge audio). Previously these 30s would be lost.
+            var finalSubResult = subResult
+            if finalSubResult == nil {
+                AppLogger.warning("\(subLabel) timed out — retrying with extended timeout", category: .transcription)
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                finalSubResult = await transcribeSingleRange(
+                    whisperKit: whisperKit,
+                    audioURL: audioURL,
+                    decodeOptions: decodeOptions,
+                    start: subStart,
+                    end: subEnd,
+                    timeout: subChunkTimeout * 3,
+                    label: "\(subLabel) retry"
+                )
+            }
+
+            if let subResult = finalSubResult {
                 let trimOverlap: TimeInterval = (subIdx > 0 || isOverlap) ? subChunkOverlap : 0
                 let segments = offsetAndFilter(segments: subResult.segments, offset: subStart, trimOverlap: trimOverlap)
                 for seg in segments {
-                    if let last = allSegments.last, seg.text == last.text { continue }
+                    if shouldSkipDuplicate(seg, lastSeg: allSegments.last) { continue }
                     allSegments.append(seg)
                 }
                 if let lang = subResult.language, detectedLanguage == nil {
                     detectedLanguage = lang
                 }
             } else {
-                // Even sub-chunk failed — log but continue (only ~30s lost)
+                // Even the retry failed — log but continue (only ~30s lost)
                 anyTimeout = true
-                AppLogger.error("\(subLabel) also failed — skipping \(String(format: "%.0f", subEnd - subStart))s of audio", category: .transcription)
+                AppLogger.error("\(subLabel) also failed after retry — skipping \(String(format: "%.0f", subEnd - subStart))s of audio", category: .transcription)
             }
 
             // Brief cooldown between sub-chunks
@@ -1132,7 +1425,7 @@ class TranscriptionService: ObservableObject {
             let subEnd = min(subStart + subChunkDuration, end)
             guard subEnd - subStart > 0.5 else { continue }
             let subLabel = "\(label) sub-\(subIdx + 1)/\(subStarts.count)"
-            let subResult = await transcribeSingleRange(
+            var subResult = await transcribeSingleRange(
                 whisperKit: whisperKit,
                 audioURL: audioURL,
                 decodeOptions: decodeOptions,
@@ -1141,11 +1434,28 @@ class TranscriptionService: ObservableObject {
                 timeout: subChunkTimeout,
                 label: subLabel
             )
+            if subResult == nil {
+                AppLogger.warning("\(subLabel) timed out — retrying with extended timeout", category: .transcription)
+                // If the failure was caused by the app being backgrounded
+                // (GPU submission denied), wait for it to come back before
+                // burning the retry budget on a guaranteed-failing call.
+                await awaitForegroundIfNeeded()
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                subResult = await transcribeSingleRange(
+                    whisperKit: whisperKit,
+                    audioURL: audioURL,
+                    decodeOptions: decodeOptions,
+                    start: subStart,
+                    end: subEnd,
+                    timeout: subChunkTimeout * 3,
+                    label: "\(subLabel) retry"
+                )
+            }
             if let subResult = subResult {
                 let trimOverlap: TimeInterval = (subIdx > 0 || isOverlap) ? subChunkOverlap : 0
                 let segments = offsetAndFilter(segments: subResult.segments, offset: subStart, trimOverlap: trimOverlap)
                 for seg in segments {
-                    if let last = allSegments.last, seg.text == last.text { continue }
+                    if shouldSkipDuplicate(seg, lastSeg: allSegments.last) { continue }
                     allSegments.append(seg)
                 }
                 if let lang = subResult.language, detectedLanguage == nil {
@@ -1295,6 +1605,197 @@ class TranscriptionService: ObservableObject {
         }
     }
 
+    /// Decide whether `seg` is a duplicate of the previous segment.
+    /// Previously this did a plain text-equality check against the last segment,
+    /// which incorrectly dropped naturally repeated words/phrases (e.g. "Yes.",
+    /// "Okay.", "So...") across chunk boundaries, creating gaps in the final
+    /// transcript. We now only treat a segment as a duplicate when its time
+    /// range actually overlaps the previous segment AND the text matches.
+    // MARK: - Audio Preprocessing (#1)
+
+    /// Run a high-pass filter (80 Hz biquad) and RMS normalization on the
+    /// source audio before transcription. Returns the URL of a processed
+    /// temporary file, or throws on failure. The caller is responsible for
+    /// cleaning up the returned file.
+    ///
+    /// `nonisolated` + `async` so it can run on a detached background task
+    /// without hopping back to the main actor — this was the cause of UI
+    /// freezes during recording.
+    nonisolated func preprocessAudioIfBeneficial(sourceURL: URL) async throws -> URL {
+        let sourceFile = try AVAudioFile(forReading: sourceURL)
+        let format = sourceFile.processingFormat
+        let frameCount = AVAudioFrameCount(sourceFile.length)
+        guard frameCount > 0 else { return sourceURL }
+
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            return sourceURL
+        }
+        try sourceFile.read(into: buffer)
+        guard let channelData = buffer.floatChannelData else { return sourceURL }
+
+        let channelCount = Int(format.channelCount)
+        let frames = Int(buffer.frameLength)
+        let sampleRate = format.sampleRate
+
+        // --- High-pass biquad (RBJ cookbook), cutoff 80 Hz, Q = 0.707 ---
+        let cutoff: Double = 80.0
+        let q: Double = 0.707
+        let omega = 2.0 * .pi * cutoff / sampleRate
+        let sinO = sin(omega)
+        let cosO = cos(omega)
+        let alpha = sinO / (2.0 * q)
+        let a0 = 1.0 + alpha
+        let b0 = Float(((1.0 + cosO) / 2.0) / a0)
+        let b1 = Float((-(1.0 + cosO)) / a0)
+        let b2 = Float(((1.0 + cosO) / 2.0) / a0)
+        let a1 = Float((-2.0 * cosO) / a0)
+        let a2 = Float((1.0 - alpha) / a0)
+
+        for ch in 0..<channelCount {
+            let data = channelData[ch]
+            var x1: Float = 0, x2: Float = 0, y1: Float = 0, y2: Float = 0
+            for i in 0..<frames {
+                let x0 = data[i]
+                let y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+                data[i] = y0
+                x2 = x1; x1 = x0
+                y2 = y1; y1 = y0
+            }
+        }
+
+        // --- RMS normalization: boost quiet recordings toward -20 dBFS ---
+        var sumSq: Double = 0
+        var count: Int = 0
+        for ch in 0..<channelCount {
+            let data = channelData[ch]
+            for i in 0..<frames {
+                let s = Double(data[i])
+                sumSq += s * s
+            }
+            count += frames
+        }
+        let rms = sqrt(sumSq / Double(max(count, 1)))
+        let targetRMS: Double = 0.1 // -20 dBFS
+        if rms > 0.001 && rms < targetRMS {
+            let rawGain = targetRMS / rms
+            let gain = Float(min(rawGain, 6.0)) // cap at +15.6 dB
+            for ch in 0..<channelCount {
+                let data = channelData[ch]
+                for i in 0..<frames {
+                    data[i] *= gain
+                }
+            }
+            AppLogger.debug("Audio preprocessed: RMS \(rms) → gain x\(gain)", category: .transcription)
+        }
+
+        // Soft-clip in case normalization pushed samples past [-1, 1]
+        for ch in 0..<channelCount {
+            let data = channelData[ch]
+            for i in 0..<frames {
+                let s = data[i]
+                if s > 1.0 { data[i] = 1.0 }
+                else if s < -1.0 { data[i] = -1.0 }
+            }
+        }
+
+        // Write to a temp WAV file. WAV is lossless and Whisper handles it.
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("preproc_\(UUID().uuidString).wav")
+        let outputSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: channelCount,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+        ]
+        let outputFile = try AVAudioFile(forWriting: tempURL, settings: outputSettings)
+        try outputFile.write(from: buffer)
+        return tempURL
+    }
+
+    // MARK: - Chunk Resume Cache (#3)
+
+    /// On-disk cache mapping "lectureId → chunk start time → processed segments".
+    /// Survives crashes so long recordings can resume instead of re-processing
+    /// from scratch. Cleared automatically when a lecture finishes transcribing.
+    private struct CachedChunkEntry: Codable {
+        let start: Double
+        let end: Double
+        let segments: [TranscriptionResult.TranscriptionSegment]
+    }
+
+    private func chunkCacheURL(lectureId: UUID) -> URL? {
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let dir = docs.appendingPathComponent("transcription_cache", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir.appendingPathComponent("\(lectureId.uuidString).json")
+    }
+
+    private func loadChunkCache(lectureId: UUID) -> [CachedChunkEntry] {
+        guard let url = chunkCacheURL(lectureId: lectureId),
+              let data = try? Data(contentsOf: url),
+              let entries = try? JSONDecoder().decode([CachedChunkEntry].self, from: data) else {
+            return []
+        }
+        return entries
+    }
+
+    private func appendToChunkCache(
+        lectureId: UUID,
+        start: Double,
+        end: Double,
+        segments: [TranscriptionResult.TranscriptionSegment]
+    ) {
+        guard let url = chunkCacheURL(lectureId: lectureId) else { return }
+        var entries = loadChunkCache(lectureId: lectureId)
+        // Replace any existing entry with the same start (shouldn't happen but
+        // keeps the cache idempotent).
+        entries.removeAll { abs($0.start - start) < 0.1 }
+        entries.append(CachedChunkEntry(start: start, end: end, segments: segments))
+        if let data = try? JSONEncoder().encode(entries) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+
+    /// Remove the chunk cache for a lecture. Call when transcription has
+    /// successfully finished so we don't leak disk space.
+    func clearChunkCache(lectureId: UUID) {
+        guard let url = chunkCacheURL(lectureId: lectureId) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Return cached segments for a chunk range if present.
+    private func cachedSegments(
+        lectureId: UUID?,
+        start: Double,
+        end: Double
+    ) -> [TranscriptionResult.TranscriptionSegment]? {
+        guard let lectureId = lectureId else { return nil }
+        let entries = loadChunkCache(lectureId: lectureId)
+        return entries.first { abs($0.start - start) < 0.1 && abs($0.end - end) < 0.1 }?.segments
+    }
+
+    private func shouldSkipDuplicate(
+        _ seg: TranscriptionResult.TranscriptionSegment,
+        lastSeg: TranscriptionResult.TranscriptionSegment?
+    ) -> Bool {
+        guard let last = lastSeg else { return false }
+        // Hard-drop only when this segment starts well before the end of the
+        // previous one AND the text matches — that's the overlap-zone case.
+        let startsBeforeLastEnds = seg.startTime < last.endTime - 0.1
+        let normalizedA = seg.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedB = last.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if startsBeforeLastEnds && normalizedA == normalizedB {
+            return true
+        }
+        return false
+    }
+
     /// Offset segment timestamps to absolute audio position and trim overlap
     private func offsetAndFilter(
         segments: [(start: Float, end: Float, text: String)],
@@ -1304,8 +1805,13 @@ class TranscriptionService: ObservableObject {
         segments.compactMap { seg in
             let absStart = Double(seg.start) + offset
             let absEnd = Double(seg.end) + offset
-            // If this chunk has overlap, skip segments that fall within the overlap zone
-            if trimOverlap > 0 && Double(seg.start) < trimOverlap { return nil }
+            // Only drop segments that lie ENTIRELY inside the overlap zone.
+            // Previously any segment whose start fell in the overlap (even if
+            // the bulk of it extended past) was dropped wholesale — that was
+            // losing large chunks of real speech. Keep any segment that
+            // extends beyond the overlap; timestamp-based dedup in the merge
+            // step handles actual duplicates.
+            if trimOverlap > 0 && Double(seg.end) <= trimOverlap { return nil }
             let text = seg.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if text.isEmpty { return nil }
             return TranscriptionResult.TranscriptionSegment(

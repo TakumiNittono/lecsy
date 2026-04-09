@@ -241,7 +241,24 @@ class AuthService: NSObject, ObservableObject {
                 }
             } catch {
                 AppLogger.warning("AuthService: セッション復元失敗 - \(error.localizedDescription)", category: .auth)
-                // セッション復元に失敗した場合でも、キャッシュされたトークンを使用する
+
+                // Before blindly trusting the cached access token (which may be
+                // expired/revoked and would 401-loop subsequent API calls), try
+                // to refresh the session via the refresh token. Only fall back
+                // to cached identity if the refresh also fails AND the cached
+                // access token is still within its JWT exp window.
+                let refreshed = await refreshSession()
+                let cachedTokenValid = isTokenValid(cachedAccessToken ?? "")
+
+                guard refreshed || cachedTokenValid else {
+                    AppLogger.warning("AuthService: リフレッシュ失敗 & キャッシュトークン無効 — 再ログインを要求", category: .auth)
+                    clearPersistedSession()
+                    cachedRefreshToken = nil
+                    isAuthenticated = false
+                    currentUser = nil
+                    return
+                }
+
                 let savedEmail = KeychainService.read(key: userEmailKey)
                 let savedUserIdString = KeychainService.read(key: userIdKey)
                 let savedName = KeychainService.read(key: userNameKey)
@@ -254,7 +271,7 @@ class AuthService: NSObject, ObservableObject {
                         name: savedName
                     )
                     isAuthenticated = true
-                    AppLogger.info("AuthService: キャッシュからユーザー情報復元成功", category: .auth)
+                    AppLogger.info("AuthService: キャッシュからユーザー情報復元成功 (refreshed=\(refreshed))", category: .auth)
                 }
             }
         } else {
@@ -262,29 +279,50 @@ class AuthService: NSObject, ObservableObject {
         }
     }
 
-    /// Migrate tokens from UserDefaults to Keychain (one-time)
+    /// Migrate tokens from UserDefaults to Keychain (one-time, idempotent).
+    ///
+    /// Safety properties (important for the 500-user update rollout):
+    ///  1. **Never overwrites good Keychain data.** If Keychain already has a
+    ///     value for a key, the migration skips it — even if stale data still
+    ///     exists in UserDefaults.
+    ///  2. **Always scrubs UserDefaults.** Once a key is in Keychain (either
+    ///     because migration wrote it or it was already there), the
+    ///     UserDefaults copy is removed so it cannot leak on next launch.
+    ///  3. **Idempotent.** Safe to call every launch; the flag is just an
+    ///     optimization.
     private func migrateTokensToKeychainIfNeeded() {
         let migrationKey = "lecsy.keychainMigrationDone"
-        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+        if UserDefaults.standard.bool(forKey: migrationKey) { return }
 
-        // Migrate each key: only delete from UserDefaults after confirming Keychain write succeeded
         let keysToMigrate = [accessTokenKey, refreshTokenKey, userIdKey, userEmailKey, userNameKey]
         var allSucceeded = true
 
         for key in keysToMigrate {
-            if let value = UserDefaults.standard.string(forKey: key) {
-                KeychainService.save(key: key, value: value)
-                // Verify the write succeeded by reading back
-                if KeychainService.read(key: key) != nil {
+            let keychainHas = KeychainService.read(key: key) != nil
+            let udValue = UserDefaults.standard.string(forKey: key)
+
+            if keychainHas {
+                // Keychain already authoritative — just scrub any UserDefaults copy.
+                if udValue != nil {
                     UserDefaults.standard.removeObject(forKey: key)
-                } else {
-                    AppLogger.error("AuthService: Keychain migration failed for key \(key) - keeping UserDefaults copy", category: .auth)
-                    allSucceeded = false
                 }
+                continue
+            }
+
+            guard let value = udValue else {
+                // Nothing to migrate for this key — fine.
+                continue
+            }
+
+            KeychainService.save(key: key, value: value)
+            if KeychainService.read(key: key) != nil {
+                UserDefaults.standard.removeObject(forKey: key)
+            } else {
+                AppLogger.error("AuthService: Keychain migration failed for key \(key) — keeping UserDefaults copy", category: .auth)
+                allSucceeded = false
             }
         }
 
-        // Only mark migration as done if all keys migrated successfully
         if allSucceeded {
             UserDefaults.standard.set(true, forKey: migrationKey)
         }
@@ -304,13 +342,16 @@ class AuthService: NSObject, ObservableObject {
         AppLogger.info("AuthService: セッションを永続化しました", category: .auth)
     }
 
-    /// 保存されたセッションをクリア
+    /// 保存されたセッションをクリア。
+    /// Keychain と UserDefaults の両方を scrub して、旧形式の残骸が
+    /// サインアウト後に悪さしないようにする (ゾンビトークン対策)。
     private func clearPersistedSession() {
-        KeychainService.delete(key: accessTokenKey)
-        KeychainService.delete(key: refreshTokenKey)
-        KeychainService.delete(key: userIdKey)
-        KeychainService.delete(key: userEmailKey)
-        KeychainService.delete(key: userNameKey)
+        let keys = [accessTokenKey, refreshTokenKey, userIdKey, userEmailKey, userNameKey]
+        for key in keys {
+            KeychainService.delete(key: key)
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        cachedAccessToken = nil
         AppLogger.info("AuthService: 保存されたセッションをクリアしました", category: .auth)
     }
     
@@ -1075,17 +1116,28 @@ class AuthService: NSObject, ObservableObject {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue(config.supabaseAnonKey, forHTTPHeaderField: "apikey")
             
-            let (data, response) = try await URLSession.shared.data(for: request)
-            
+            // Network call: any failure here MUST throw before we touch local data.
+            let data: Data
+            let response: URLResponse
+            do {
+                (data, response) = try await URLSession.shared.data(for: request)
+            } catch {
+                AppLogger.error("delete-account network error: \(error.localizedDescription)", category: .auth)
+                throw AuthError.deleteAccountFailed("Network error: \(error.localizedDescription). Local data was NOT deleted.")
+            }
+
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw AuthError.deleteAccountFailed("Invalid response")
+                throw AuthError.deleteAccountFailed("Invalid response from server. Local data was NOT deleted.")
             }
-            
-            guard httpResponse.statusCode == 200 else {
-                let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-                throw AuthError.deleteAccountFailed(errorMessage)
+
+            // Only treat 2xx as success. Anything else: throw and DO NOT wipe local data.
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                let body = String(data: data, encoding: .utf8) ?? "Unknown error"
+                AppLogger.error("delete-account server error \(httpResponse.statusCode): \(body)", category: .auth)
+                throw AuthError.deleteAccountServerError(httpResponse.statusCode, body)
             }
-            
+
+            // Server confirmed deletion. Now safe to wipe local data.
             // ローカルデータも削除
             let lectureStore = LectureStore.shared
             lectureStore.deleteAllData()
@@ -1099,6 +1151,10 @@ class AuthService: NSObject, ObservableObject {
             clearPersistedSession()
             
             isLoading = false
+        } catch let authError as AuthError {
+            isLoading = false
+            errorMessage = authError.errorDescription
+            throw authError
         } catch {
             isLoading = false
             errorMessage = error.localizedDescription
@@ -1685,6 +1741,7 @@ enum AuthError: LocalizedError {
     case signInFailed(String)
     case signOutFailed(String)
     case deleteAccountFailed(String)
+    case deleteAccountServerError(Int, String)
     case notAuthenticated
     
     var errorDescription: String? {
@@ -1695,6 +1752,8 @@ enum AuthError: LocalizedError {
             return "Sign out failed: \(message)"
         case .deleteAccountFailed(let message):
             return "Failed to delete account: \(message)"
+        case .deleteAccountServerError(let status, let body):
+            return "Account deletion failed on server (HTTP \(status)). Your local data was NOT deleted. Details: \(body)"
         case .notAuthenticated:
             return "User is not authenticated"
         }

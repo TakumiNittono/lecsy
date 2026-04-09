@@ -39,7 +39,13 @@ struct LibraryView: View {
         LectureSortOption(rawValue: sortOption) ?? .dateNewest
     }
 
-    var filteredLectures: [Lecture] {
+    // NOTE: These used to be computed properties read 3x per body render
+    // (isEmpty check, count label, and List). With 5 @StateObjects on this
+    // view, any @Published emission (transcription progress, sync, etc.)
+    // re-ran sort+group 3 times per tick — that's where the Library jank
+    // came from. They're now methods, called exactly once per body via a
+    // local `let` at the top of `body`.
+    private func computeFiltered() -> [Lecture] {
         let trimmedQuery = debouncedSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         var lectures: [Lecture]
         if trimmedQuery.isEmpty {
@@ -65,7 +71,7 @@ struct LibraryView: View {
         }
     }
 
-    var groupedLectures: [(String, [Lecture])] {
+    private func computeGrouped(from filtered: [Lecture]) -> [(String, [Lecture])] {
         let calendar = Calendar.current
         let now = Date()
         let startOfToday = calendar.startOfDay(for: now)
@@ -75,7 +81,7 @@ struct LibraryView: View {
         var groups: [String: [Lecture]] = [:]
         let order = ["Today", "Yesterday", "This Week", "Earlier"]
 
-        for lecture in filteredLectures {
+        for lecture in filtered {
             let key: String
             if lecture.createdAt >= startOfToday {
                 key = "Today"
@@ -104,7 +110,13 @@ struct LibraryView: View {
     @State private var showSignInSheet: Bool = false
 
     var body: some View {
-        NavigationView {
+        // Compute filter + group ONCE per body render. Reused below via the
+        // local `let`s instead of re-invoking computed properties.
+        let filtered = computeFiltered()
+        let grouped = computeGrouped(from: filtered)
+        let filteredCount = filtered.count
+        let filteredIsEmpty = filtered.isEmpty
+        return NavigationView {
             VStack(spacing: 0) {
                 // Cloud backup nudge for users who skipped login.
                 // Shown only when: not signed in, has at least one local
@@ -160,7 +172,7 @@ struct LibraryView: View {
                         Image(systemName: "building.2.fill")
                             .font(.system(size: 11))
                             .foregroundColor(.blue)
-                        Text("\(orgService.currentOrganization?.name ?? "") recordings are synced")
+                        Text("Recordings are synced")
                             .font(.system(.caption2, design: .rounded))
                             .foregroundColor(.secondary)
                         Spacer()
@@ -224,9 +236,9 @@ struct LibraryView: View {
                 .padding(.vertical, 8)
 
                 // Search result count
-                if isSearching && !filteredLectures.isEmpty {
+                if isSearching && !filteredIsEmpty {
                     HStack {
-                        Text("\(filteredLectures.count) result\(filteredLectures.count == 1 ? "" : "s")")
+                        Text("\(filteredCount) result\(filteredCount == 1 ? "" : "s")")
                             .font(.system(.caption, design: .rounded))
                             .foregroundColor(.secondary)
                         Spacer()
@@ -236,14 +248,26 @@ struct LibraryView: View {
                 }
 
                 // Main content
-                if filteredLectures.isEmpty {
+                if filteredIsEmpty {
                     emptyStateView
                 } else {
                     List {
-                        ForEach(groupedLectures, id: \.0) { sectionTitle, lectures in
+                        ForEach(grouped, id: \.0) { sectionTitle, lectures in
                             Section {
                                 ForEach(lectures) { lecture in
-                                    NavigationLink(destination: LectureDetailView(lecture: lecture)) {
+                                    // PERF: LazyView defers destination
+                                    // construction until the user actually
+                                    // navigates. Without this wrapper,
+                                    // `NavigationView` + `NavigationLink`
+                                    // eagerly inits every LectureDetailView
+                                    // in the list on every LibraryView
+                                    // render — which, with 5 observed
+                                    // @StateObjects firing, was the main
+                                    // reason opening a lecture felt
+                                    // 1–2 seconds laggy.
+                                    NavigationLink(
+                                        destination: LazyView(LectureDetailView(lecture: lecture))
+                                    ) {
                                         LectureRow(lecture: lecture, searchQuery: isSearching ? debouncedSearchText : "")
                                     }
                                 }
@@ -604,9 +628,16 @@ struct LectureRow: View {
                     .foregroundColor(.secondary.opacity(0.7))
             }
 
-            // Transcript preview
+            // Transcript preview.
+            // PERF: Previously this ran `stripWhisperTokens` (a regex scan) on
+            // the FULL transcript text — tens of thousands of chars per
+            // lecture — on every row render. With LibraryView re-rendering on
+            // every TranscriptionService @Published tick, this was the main
+            // "Library is sluggish" offender. We now slice a small prefix
+            // first, then strip, so the regex only sees ~400 chars max.
             if let transcriptText = lecture.transcriptText, !transcriptText.isEmpty {
-                let cleaned = TranscriptionResult.TranscriptionSegment.stripWhisperTokens(transcriptText)
+                let rawPrefix = String(transcriptText.prefix(400))
+                let cleaned = TranscriptionResult.TranscriptionSegment.stripWhisperTokens(rawPrefix)
                 let preview = String(cleaned.prefix(100)) + (cleaned.count > 100 ? "..." : "")
                 if !searchQuery.isEmpty {
                     HighlightedText(text: preview, query: searchQuery)
@@ -688,6 +719,17 @@ struct HighlightedText: View {
             return AnyView(Text(text))
         }
     }
+}
+
+/// Defers view construction until SwiftUI actually renders the wrapper.
+/// Used to neutralize NavigationLink's eager destination construction,
+/// which would otherwise instantiate every row's destination upfront.
+struct LazyView<Content: View>: View {
+    let build: () -> Content
+    init(_ build: @autoclosure @escaping () -> Content) {
+        self.build = build
+    }
+    var body: Content { build() }
 }
 
 #Preview {

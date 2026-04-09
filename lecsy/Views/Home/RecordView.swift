@@ -13,6 +13,8 @@ struct RecordView: View {
     @StateObject private var recordingService = RecordingService.shared
     @StateObject private var transcriptionService = TranscriptionService.shared
     @StateObject private var orgService = OrganizationService.shared
+    @StateObject private var authService = AuthService.shared
+    @State private var showLoginSheet = false
     @State private var currentLanguageDisplay: String = TranscriptionService.shared.transcriptionLanguage.displayName
     @AppStorage("lecsy.hasAcceptedAIConsent") private var hasAcceptedAIConsent = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -47,10 +49,15 @@ struct RecordView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Organization banner
-                if orgService.isInOrganization, !recordingService.isRecording {
-                    orgBanner
-                        .padding(.top, 8)
+                // Account chip (email when signed in, "Sign In" when not)
+                // + quiet trial pill alongside it so users see the free window
+                // on the home screen without cluttering the status bar area.
+                if !recordingService.isRecording {
+                    HStack(spacing: 8) {
+                        accountChip
+                        FreeCampaignBanner()
+                    }
+                    .padding(.top, 8)
                 }
 
                 Spacer()
@@ -149,6 +156,19 @@ struct RecordView: View {
         .onReceive(NotificationCenter.default.publisher(for: TranscriptionService.languageDidChangeNotification)) { _ in
             currentLanguageDisplay = TranscriptionService.shared.transcriptionLanguage.displayName
         }
+        .sheet(isPresented: $showLoginSheet) {
+            NavigationStack {
+                LoginView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Close") { showLoginSheet = false }
+                        }
+                    }
+            }
+        }
+        .onChange(of: authService.isAuthenticated) { _, isAuthed in
+            if isAuthed { showLoginSheet = false }
+        }
         .sheet(isPresented: $showLanguagePicker) {
             LanguagePickerSheet(
                 selectedLanguage: transcriptionService.transcriptionLanguage,
@@ -201,6 +221,44 @@ struct RecordView: View {
             recordingService.stoppedAtMaxDuration = false
             recordingService.unexpectedlySavedRecording = nil
             showRecoverySheet = true
+        }
+    }
+
+    // MARK: - Account Chip
+
+    @ViewBuilder
+    private var accountChip: some View {
+        if authService.isAuthenticated, let email = authService.currentUser?.email {
+            HStack(spacing: 8) {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.blue)
+                Text(email)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color.blue.opacity(0.06))
+            .clipShape(Capsule())
+        } else {
+            Button {
+                showLoginSheet = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 13))
+                    Text("Sign In")
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                }
+                .foregroundColor(.blue)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color.blue.opacity(0.08))
+                .clipShape(Capsule())
+            }
         }
     }
 
@@ -657,7 +715,7 @@ struct RecordView: View {
         }
 
         do {
-            let result = try await transcriptionService.transcribe(audioURL: audioURL)
+            let result = try await transcriptionService.transcribe(audioURL: audioURL, lectureId: lectureId)
 
             transcriptionService.onChunkCompleted = nil
             guard var latest = store.getLecture(by: lectureId) else { return }

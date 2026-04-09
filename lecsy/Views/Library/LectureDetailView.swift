@@ -14,6 +14,16 @@ struct LectureDetailView: View {
     @ObservedObject private var transcriptionStatus = TranscriptionService.shared
     @State private var title: String
     @State private var lecture: Lecture
+    // PERF: Cached, token-stripped transcript. `stripWhisperTokens` is a
+    // regex scan over the entire transcript (tens of thousands of chars),
+    // and the body used to call it on every re-render — including every
+    // audio-player tick during playback — which made both opening and
+    // playing a lecture visibly laggy. We now compute it once on appear
+    // and whenever the transcript actually changes.
+    @State private var cleanedTranscript: String = ""
+    // Two-stage render gate. Header paints first, heavy transcript/summary
+    // section shows a spinner until the navigation push settles.
+    @State private var heavyContentReady: Bool = false
     @State private var showErrorAlert = false
     @State private var errorMessage = ""
     @State private var isRetrying = false
@@ -23,10 +33,11 @@ struct LectureDetailView: View {
     @State private var shareItems: [Any] = []
     @State private var editingBookmark: LectureBookmark?
     @State private var editingBookmarkLabel: String = ""
-    // AI summary state (in-memory; not persisted to local store yet)
+    // AI summary state is owned by SummaryGenerationStore so that navigating
+    // away does not cancel generation. The view only holds the displayed
+    // result; loading/streaming/error state is read from the store.
+    @StateObject private var summaryStore = SummaryGenerationStore.shared
     @State private var summaryResult: SummaryService.SummaryResult?
-    @State private var summaryLoading = false
-    @State private var summaryError: String?
     @AppStorage("summaryOutputLanguage") private var summaryOutputLanguage: String = "ja"
 
     private let summaryLanguages: [(code: String, label: String)] = [
@@ -43,6 +54,26 @@ struct LectureDetailView: View {
     init(lecture: Lecture) {
         _lecture = State(initialValue: lecture)
         _title = State(initialValue: lecture.title)
+        // IMPORTANT: Keep init CHEAP. LibraryView uses the legacy
+        // `NavigationView` + `NavigationLink(destination:)` API, which
+        // eagerly constructs *every* destination for every row in the
+        // ForEach. If we ran `stripWhisperTokens` on the full transcript
+        // here, opening the Library with 50 long lectures would burn
+        // seconds on the main thread. The clean transcript is populated
+        // asynchronously in `.task` once this specific view actually
+        // appears.
+        _cleanedTranscript = State(initialValue: "")
+    }
+
+    // MARK: - Derived summary state (from SummaryGenerationStore)
+    private var summaryGenerationState: SummaryGenerationStore.State {
+        summaryStore.state(for: lecture.id)
+    }
+    private var summaryLoading: Bool { summaryGenerationState.loading }
+    private var summaryError: String? { summaryGenerationState.error }
+    /// Prefer live-streaming partial result, then final cached result.
+    private var displayedSummary: SummaryService.SummaryResult? {
+        summaryGenerationState.partialResult ?? summaryResult
     }
 
     var body: some View {
@@ -106,9 +137,22 @@ struct LectureDetailView: View {
 
                 Divider()
 
+                if !heavyContentReady {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .scaleEffect(0.9)
+                        Spacer()
+                    }
+                    .padding(.vertical, 40)
+                } else {
+
                 // Copy & Share buttons
                 if let transcript = lecture.transcriptText, !transcript.isEmpty {
-                    let cleanTranscript = TranscriptionResult.TranscriptionSegment.stripWhisperTokens(transcript)
+                    // Use cached clean transcript instead of re-running regex
+                    // on every body re-render (audio player ticks would
+                    // otherwise burn CPU on a full-document regex scan).
+                    let cleanTranscript = cleanedTranscript
                     HStack(spacing: 10) {
                         Spacer()
                         CopyButton(text: cleanTranscript)
@@ -129,6 +173,11 @@ struct LectureDetailView: View {
                             } label: {
                                 Label("Export PDF", systemImage: "doc.richtext")
                             }
+                            Button {
+                                exportWithAudio()
+                            } label: {
+                                Label("Export Audio + Transcript", systemImage: "waveform.badge.plus")
+                            }
                         } label: {
                             HStack(spacing: 5) {
                                 Image(systemName: "square.and.arrow.up")
@@ -146,8 +195,8 @@ struct LectureDetailView: View {
                     }
                     .padding(.bottom, 4)
 
-                    // AI Summary — Web 経由で組織登録した B2B メンバーのみ
-                    if authService.isOrgMember {
+                    // AI Summary — B2C 無料モデル: 認証済みユーザー全員に開放 (2026-04-08)
+                    if authService.isAuthenticated {
                         summarySection(transcript: cleanTranscript)
                     }
                 }
@@ -210,8 +259,8 @@ struct LectureDetailView: View {
                                 }
                             )
                             .frame(minHeight: 200)
-                        } else if let transcript = lecture.transcriptText, !transcript.isEmpty {
-                            Text(TranscriptionResult.TranscriptionSegment.stripWhisperTokens(transcript))
+                        } else if !cleanedTranscript.isEmpty {
+                            Text(cleanedTranscript)
                                 .font(.body)
                                 .foregroundColor(.secondary)
                         }
@@ -245,6 +294,8 @@ struct LectureDetailView: View {
                         .foregroundColor(.secondary)
                 }
 
+                } // end two-stage gate
+
             }
             .padding()
             .frame(maxWidth: 720)
@@ -267,8 +318,45 @@ struct LectureDetailView: View {
             }
             audioPlayer.stop()
         }
+        .task(id: lecture.transcriptText) {
+            // Compute the token-stripped transcript off the main thread,
+            // once per distinct raw text. Runs after the view has actually
+            // appeared, so navigation push is never blocked.
+            let raw = lecture.transcriptText ?? ""
+            if raw.isEmpty {
+                cleanedTranscript = ""
+            } else {
+                let cleaned = await Task.detached(priority: .userInitiated) {
+                    TranscriptionResult.TranscriptionSegment.stripWhisperTokens(raw)
+                }.value
+                if !Task.isCancelled {
+                    cleanedTranscript = cleaned
+                }
+            }
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            if !Task.isCancelled {
+                heavyContentReady = true
+            }
+        }
         .onAppear {
             loadAudio()
+            // Restore any cached AI summary so the user doesn't have to
+            // regenerate it. If a different output language was saved, keep
+            // the cached one visible and honor its language setting.
+            if summaryResult == nil, let cached = lecture.cachedSummary {
+                summaryResult = cached
+                if let lang = lecture.cachedSummaryLanguage {
+                    summaryOutputLanguage = lang
+                }
+            }
+            // If we navigated away mid-generation and came back after the
+            // store finished, pick up the newly-saved result from LectureStore.
+            if let latest = LectureStore.shared.lectures.first(where: { $0.id == lecture.id }),
+               let cached = latest.cachedSummary {
+                summaryResult = cached
+                lecture.cachedSummary = cached
+                lecture.cachedSummaryLanguage = latest.cachedSummaryLanguage
+            }
         }
         .onChange(of: store.lectures) { _, newLectures in
             // Sync transcript updates from external sources (e.g. RecordView's onChunkCompleted)
@@ -281,6 +369,19 @@ struct LectureDetailView: View {
                 lecture.transcriptSegments = stored.transcriptSegments
                 lecture.transcriptStatus = stored.transcriptStatus
                 lecture.language = stored.language
+                // Refresh the cached clean transcript since raw text changed.
+                cleanedTranscript = stored.transcriptText.map {
+                    TranscriptionResult.TranscriptionSegment.stripWhisperTokens($0)
+                } ?? ""
+            }
+            // Pick up AI summary saved by SummaryGenerationStore (e.g. when
+            // generation finished while the user was on another screen).
+            if stored.cachedSummary != lecture.cachedSummary {
+                lecture.cachedSummary = stored.cachedSummary
+                lecture.cachedSummaryLanguage = stored.cachedSummaryLanguage
+                if let cached = stored.cachedSummary {
+                    summaryResult = cached
+                }
             }
         }
         .alert("Error", isPresented: $showErrorAlert) {
@@ -546,35 +647,43 @@ struct LectureDetailView: View {
 
                 Spacer()
                 let tooShort = lecture.duration < 60
+                let transcriptInProgress = lecture.transcriptStatus != .completed
+                let disabledReason = tooShort || transcriptInProgress
                 if summaryLoading {
                     ProgressView().scaleEffect(0.8)
-                } else if summaryResult == nil {
+                } else if displayedSummary == nil {
                     Button {
-                        Task { await runSummary(content: transcript) }
+                        startSummary(content: transcript)
                     } label: {
                         Text("Generate")
                             .font(.system(.subheadline, design: .rounded, weight: .medium))
                             .foregroundColor(.white)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 6)
-                            .background(tooShort ? Color.gray : Color.blue)
+                            .background(disabledReason ? Color.gray : Color.blue)
                             .clipShape(Capsule())
                     }
-                    .disabled(tooShort)
+                    .disabled(disabledReason)
                 } else {
                     Button {
-                        Task { await runSummary(content: transcript) }
+                        startSummary(content: transcript)
                     } label: {
                         Text("Regenerate")
                             .font(.system(.caption, design: .rounded, weight: .medium))
-                            .foregroundColor(tooShort ? .gray : .blue)
+                            .foregroundColor(disabledReason ? .gray : .blue)
                     }
-                    .disabled(tooShort)
+                    .disabled(disabledReason)
                 }
             }
 
-            if lecture.duration < 60 && summaryResult == nil {
+            if lecture.duration < 60 && displayedSummary == nil {
                 Text("Recordings under 1 minute can't be summarized.")
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundColor(.secondary)
+            }
+
+            if lecture.transcriptStatus != .completed && displayedSummary == nil {
+                Text("Wait until transcription finishes before generating a summary.")
                     .font(.system(.caption, design: .rounded))
                     .foregroundColor(.secondary)
             }
@@ -585,7 +694,7 @@ struct LectureDetailView: View {
                     .foregroundColor(.red)
             }
 
-            if let result = summaryResult {
+            if let result = displayedSummary {
                 summaryBlock(
                     result: result,
                     languageLabel: nil
@@ -598,22 +707,18 @@ struct LectureDetailView: View {
         .padding(.bottom, 4)
     }
 
-    private func runSummary(content: String) async {
-        summaryError = nil
-        summaryLoading = true
-        defer { summaryLoading = false }
-        do {
-            let result = try await SummaryService.shared.generateSummary(
-                title: lecture.title,
-                content: content,
-                durationSeconds: lecture.duration,
-                language: lecture.language.rawValue,
-                outputLanguage: summaryOutputLanguage
-            )
-            summaryResult = result
-        } catch {
-            summaryError = error.localizedDescription
-        }
+    /// Kick off summary generation via the shared store. The task lives in
+    /// SummaryGenerationStore, so navigating away from this view keeps the
+    /// generation alive and auto-saves the result to LectureStore on finish.
+    private func startSummary(content: String) {
+        // Clear any locally-cached result so `displayedSummary` falls back
+        // to the live partial result emitted by the store.
+        summaryResult = nil
+        summaryStore.start(
+            lecture: lecture,
+            content: content,
+            outputLanguage: summaryOutputLanguage
+        )
     }
 
     private func languageDisplay(for code: String) -> String {
@@ -688,16 +793,22 @@ struct LectureDetailView: View {
 
     private func loadAudio() {
         guard let audioURL = lecture.audioPath else { return }
-        do {
-            try audioPlayer.load(url: audioURL)
-            audioLoadError = nil
-            // Restore saved playback position
-            if let savedPosition = lecture.lastPlaybackPosition,
-               savedPosition > 0 && savedPosition < audioPlayer.duration {
-                audioPlayer.seek(to: savedPosition)
+        // PERF: Run AVFoundation init off main so navigation push isn't
+        // blocked by audio session + file parsing (was the "2 seconds to
+        // open a lecture" culprit). audioPlayer is @MainActor so the task
+        // comes back on main before touching @Published state.
+        let savedPosition = lecture.lastPlaybackPosition
+        Task {
+            do {
+                try await audioPlayer.loadAsync(url: audioURL)
+                audioLoadError = nil
+                if let savedPosition, savedPosition > 0,
+                   savedPosition < audioPlayer.duration {
+                    audioPlayer.seek(to: savedPosition)
+                }
+            } catch {
+                audioLoadError = error.localizedDescription
             }
-        } catch {
-            audioLoadError = error.localizedDescription
         }
     }
 
@@ -733,7 +844,7 @@ struct LectureDetailView: View {
         }
 
         do {
-            let result = try await transcriptionService.transcribe(audioURL: audioURL)
+            let result = try await transcriptionService.transcribe(audioURL: audioURL, lectureId: lectureId)
 
             transcriptionService.onChunkCompleted = nil
             guard var latest = store.getLecture(by: lectureId) else { return }
@@ -988,6 +1099,45 @@ struct LectureDetailView: View {
             errorMessage = "Failed to export PDF: \(error.localizedDescription)"
             showErrorAlert = true
         }
+    }
+
+    /// Export audio file (if present) plus a .txt with title, transcript, and
+    /// any in-memory AI summary. Items are passed to the existing share sheet.
+    private func exportWithAudio() {
+        var items: [Any] = []
+
+        // Build text payload
+        var text = "\(lecture.displayTitle)\n\n"
+        if let transcript = lecture.transcriptText, !transcript.isEmpty {
+            text += "[Transcript]\n"
+            text += TranscriptionResult.TranscriptionSegment.stripWhisperTokens(transcript)
+            text += "\n\n"
+        }
+        if let summary = summaryResult?.summary, !summary.isEmpty {
+            text += "[Summary]\n"
+            text += summary
+            text += "\n"
+        }
+
+        let safeTitle = lecture.displayTitle.replacingOccurrences(of: "/", with: "-")
+        let txtURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(safeTitle).txt")
+        do {
+            try text.write(to: txtURL, atomically: true, encoding: .utf8)
+            items.append(txtURL)
+        } catch {
+            errorMessage = "Failed to prepare export: \(error.localizedDescription)"
+            showErrorAlert = true
+            return
+        }
+
+        // Audio file (if it exists on disk)
+        if let audioPath = lecture.audioPath,
+           FileManager.default.fileExists(atPath: audioPath.path) {
+            items.append(audioPath)
+        }
+
+        shareItems = items
+        showShareSheet = true
     }
 }
 

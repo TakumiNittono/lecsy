@@ -19,12 +19,29 @@ class LectureStore: ObservableObject {
     private let backupStorageURL: URL
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+
+    /// Apply file protection (completeUntilFirstUserAuth — safe for background recording)
+    /// and exclude from iCloud/iTunes backup. Best-effort; failures are non-fatal.
+    private func applyProtectionAndBackupExclusion(_ url: URL) {
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: url.path
+        )
+        var u = url
+        var rv = URLResourceValues()
+        rv.isExcludedFromBackup = true
+        try? u.setResourceValues(rv)
+    }
     
     private init() {
-        // Storage URL
-        guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            preconditionFailure("Documents directory not found")
-        }
+        // Storage URL.
+        // On iOS the Documents directory is guaranteed to exist, but we
+        // fall back to the app's tmp directory instead of crashing on
+        // launch if something truly bizarre happens. Crashing 500
+        // production users at startup would be worse than degraded mode.
+        let documentsPath = FileManager.default
+            .urls(for: .documentDirectory, in: .userDomainMask)
+            .first ?? FileManager.default.temporaryDirectory
         storageURL = documentsPath.appendingPathComponent("lectures.json")
         backupStorageURL = documentsPath.appendingPathComponent("lectures_backup.json")
         
@@ -81,12 +98,14 @@ class LectureStore: ObservableObject {
             do {
                 try data.write(to: tempURL, options: .atomic)
                 _ = try FileManager.default.replaceItemAt(storageURL, withItemAt: tempURL)
+                applyProtectionAndBackupExclusion(storageURL)
                 return true
             } catch {
                 try? FileManager.default.removeItem(at: tempURL)
                 AppLogger.error("Failed to save lectures to primary location: \(error)", category: .storage)
                 do {
                     try data.write(to: backupStorageURL, options: .atomic)
+                    applyProtectionAndBackupExclusion(backupStorageURL)
                     AppLogger.warning("Lectures saved to backup location: \(backupStorageURL.path)", category: .storage)
                     return true
                 } catch {
@@ -100,33 +119,52 @@ class LectureStore: ObservableObject {
         }
     }
 
-    /// Save lecture data (atomic write to prevent corruption)
+    /// Save lecture data (atomic write to prevent corruption).
+    ///
+    /// Snapshots the in-memory `lectures` on the main actor, then hands encode
+    /// + disk write off to a detached background task so large libraries don't
+    /// block the UI thread. This is fire-and-forget; callers that need to know
+    /// whether the write succeeded (e.g. `updateLecture` rollback path) must
+    /// use `saveLecturesReturningSuccess()` instead, which remains synchronous.
     func saveLectures() {
-        do {
-            let data = try encoder.encode(lectures)
-
-            // Write to a temporary file first, then atomically move into place.
-            // This prevents corruption if the app crashes mid-write.
-            let tempURL = storageURL.deletingLastPathComponent()
-                .appendingPathComponent("lectures_temp_\(UUID().uuidString).json")
+        let snapshot = lectures
+        let storageURL = self.storageURL
+        let backupStorageURL = self.backupStorageURL
+        Task.detached(priority: .utility) {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
             do {
-                try data.write(to: tempURL, options: .atomic)
-                // Atomic move: replace the primary file only after temp is fully written
-                _ = try FileManager.default.replaceItemAt(storageURL, withItemAt: tempURL)
-            } catch {
-                // Clean up temp file if it exists
-                try? FileManager.default.removeItem(at: tempURL)
-                AppLogger.error("Failed to save lectures to primary location: \(error)", category: .storage)
-                // Attempt direct write to backup location
+                let data = try encoder.encode(snapshot)
+
+                // Write to a temporary file first, then atomically move into place.
+                // This prevents corruption if the app crashes mid-write.
+                let tempURL = storageURL.deletingLastPathComponent()
+                    .appendingPathComponent("lectures_temp_\(UUID().uuidString).json")
                 do {
-                    try data.write(to: backupStorageURL, options: .atomic)
-                    AppLogger.warning("Lectures saved to backup location: \(backupStorageURL.path)", category: .storage)
+                    try data.write(to: tempURL, options: .atomic)
+                    // Atomic move: replace the primary file only after temp is fully written
+                    _ = try FileManager.default.replaceItemAt(storageURL, withItemAt: tempURL)
+                    await MainActor.run { [weak self] in
+                        self?.applyProtectionAndBackupExclusion(storageURL)
+                    }
                 } catch {
-                    AppLogger.error("Failed to save lectures to backup location: \(error). Data may be out of sync with disk.", category: .storage)
+                    // Clean up temp file if it exists
+                    try? FileManager.default.removeItem(at: tempURL)
+                    AppLogger.error("Failed to save lectures to primary location: \(error)", category: .storage)
+                    // Attempt direct write to backup location
+                    do {
+                        try data.write(to: backupStorageURL, options: .atomic)
+                        await MainActor.run { [weak self] in
+                            self?.applyProtectionAndBackupExclusion(backupStorageURL)
+                        }
+                        AppLogger.warning("Lectures saved to backup location: \(backupStorageURL.path)", category: .storage)
+                    } catch {
+                        AppLogger.error("Failed to save lectures to backup location: \(error). Data may be out of sync with disk.", category: .storage)
+                    }
                 }
+            } catch {
+                AppLogger.error("Failed to encode lectures: \(error)", category: .storage)
             }
-        } catch {
-            AppLogger.error("Failed to encode lectures: \(error)", category: .storage)
         }
     }
     

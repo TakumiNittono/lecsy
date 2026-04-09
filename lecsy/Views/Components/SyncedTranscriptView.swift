@@ -38,7 +38,13 @@ struct SyncedTranscriptView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
+                    // PERF: Iterate indices directly instead of
+                    // `Array(segments.enumerated())` — the latter allocates
+                    // a new array on every body re-render (once per audio
+                    // player tick during playback), which for long lectures
+                    // meant thousands of allocations per second.
+                    ForEach(segments.indices, id: \.self) { index in
+                        let segment = segments[index]
                         let isActive = isPlaying && currentTime >= segment.startTime && currentTime < segment.endTime
                         let isBookmarked = hasBookmark(for: segment)
 

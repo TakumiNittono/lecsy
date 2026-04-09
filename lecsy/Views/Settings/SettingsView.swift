@@ -12,6 +12,7 @@ struct SettingsView: View {
     @StateObject private var transcriptionService = TranscriptionService.shared
 
     @State private var showSignInSheet = false
+    @State private var showSignOutDialog = false
     @State private var showDeleteAccountAlert = false
     @State private var showDeleteAccountErrorAlert = false
     @State private var deleteAccountErrorMessage = ""
@@ -98,23 +99,54 @@ struct SettingsView: View {
                 Section("Account") {
                     if authService.isAuthenticated {
                         if let user = authService.currentUser {
-                            HStack {
+                            HStack(spacing: 6) {
                                 Text("Signed in as:")
                                 Spacer()
                                 Text(user.email ?? "Unknown")
                                     .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                // Quiet trial-period pill, placed next to the
+                                // account email so it never collides with the
+                                // status bar on iPad.
+                                FreeCampaignBanner()
                             }
                         }
 
                         Button("Sign Out", role: .destructive) {
-                            Task {
-                                do {
-                                    try await authService.signOut()
-                                } catch {
-                                    deleteAccountErrorMessage = error.localizedDescription
-                                    showDeleteAccountErrorAlert = true
+                            showSignOutDialog = true
+                        }
+                        .confirmationDialog(
+                            "Sign Out?",
+                            isPresented: $showSignOutDialog,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Sign Out", role: .destructive) {
+                                Task {
+                                    do {
+                                        try await authService.signOut()
+                                    } catch {
+                                        deleteAccountErrorMessage = error.localizedDescription
+                                        showDeleteAccountErrorAlert = true
+                                    }
                                 }
                             }
+                            Button("Sign Out & Delete Data on This Device", role: .destructive) {
+                                Task {
+                                    do {
+                                        try await authService.signOut()
+                                        await MainActor.run {
+                                            LectureStore.shared.deleteAllData()
+                                        }
+                                    } catch {
+                                        deleteAccountErrorMessage = error.localizedDescription
+                                        showDeleteAccountErrorAlert = true
+                                    }
+                                }
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("Choose whether to keep your local lectures on this device after signing out.")
                         }
 
                         Button(action: {
@@ -131,8 +163,12 @@ struct SettingsView: View {
                         .foregroundColor(.red)
                         .disabled(isDeletingAccount)
                     } else {
-                        Button("Sign In") {
-                            showSignInSheet = true
+                        HStack(spacing: 6) {
+                            Button("Sign In") {
+                                showSignInSheet = true
+                            }
+                            Spacer()
+                            FreeCampaignBanner()
                         }
                     }
                 }

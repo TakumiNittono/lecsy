@@ -28,7 +28,12 @@ class AudioPlayerService: NSObject, ObservableObject {
         super.init()
     }
 
-    /// Load an audio file for playback
+    /// Load an audio file for playback (synchronous — kept for API compat).
+    ///
+    /// PERF WARNING: prefer `loadAsync(url:)` for UI call-sites. The
+    /// underlying AVFoundation calls (`AVAudioSession.setActive`,
+    /// `AVAudioPlayer(contentsOf:)`, `prepareToPlay`) each take tens to
+    /// hundreds of ms on long files and block the main thread.
     func load(url: URL) throws {
         stop()
 
@@ -51,6 +56,45 @@ class AudioPlayerService: NSObject, ObservableObject {
         } catch {
             throw AudioPlayerError.loadFailed
         }
+    }
+
+    /// Async load — runs AVFoundation init off the main thread so the
+    /// navigation push animation into LectureDetailView stays smooth even for
+    /// 100-minute M4A files. The `@Published` updates happen back on main.
+    func loadAsync(url: URL) async throws {
+        stop()
+
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw AudioPlayerError.fileNotFound
+        }
+
+        // Capture primitives needed off-actor.
+        let rate = playbackRate
+
+        // Do the expensive work on a background queue.
+        let prepared: (AVAudioPlayer, TimeInterval) = try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let audioSession = AVAudioSession.sharedInstance()
+                    try audioSession.setCategory(.playback, mode: .default)
+                    try audioSession.setActive(true)
+
+                    let player = try AVAudioPlayer(contentsOf: url)
+                    player.enableRate = true
+                    player.rate = rate
+                    player.prepareToPlay()
+                    continuation.resume(returning: (player, player.duration))
+                } catch {
+                    continuation.resume(throwing: AudioPlayerError.loadFailed)
+                }
+            }
+        }
+
+        // Back on the main actor: assign and publish.
+        audioPlayer = prepared.0
+        audioPlayer?.delegate = self
+        duration = prepared.1
+        currentTime = 0
     }
 
     /// Set playback rate
