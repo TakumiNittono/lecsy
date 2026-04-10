@@ -93,7 +93,7 @@ export default async function AppPage() {
     : `${totalSeconds}s`
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gray-50" data-dashboard>
       {/* Toast Provider */}
       <Suspense fallback={null}>
         <ToastProvider />

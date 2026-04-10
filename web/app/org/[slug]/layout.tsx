@@ -30,7 +30,7 @@ export default async function OrgLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50" data-dashboard>
       {/* Header */}
       <header className="border-b border-gray-200 bg-white sticky top-0 z-50">
         <div className="px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">

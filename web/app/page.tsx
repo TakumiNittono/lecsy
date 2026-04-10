@@ -9,9 +9,9 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Lecsy | Free Lecture Recording & AI Transcription App for Students",
+  title: "Lecsy | Free Lecture Recording & AI Notes App for Students",
   description:
-    "Record lectures on iPhone, transcribe with AI 100% offline. Free unlimited recording. Save $204/year vs Otter.ai. Privacy-first — your voice never leaves your device.",
+    "Record lectures on iPhone, transcribe offline with WhisperKit, get AI summaries & exam prep in 12 languages. Free through June 1, 2026. Privacy-first — audio never leaves your device.",
   alternates: {
     canonical: "https://www.lecsy.app/",
   },
@@ -74,14 +74,14 @@ export default function Home() {
             "@context": "https://schema.org",
             "@type": "FAQPage",
             mainEntity: [
-              { "@type": "Question", name: "Is my data safe with Lecsy?", acceptedAnswer: { "@type": "Answer", text: "Yes. All audio recording and transcription happens entirely on your iPhone. Your voice never leaves your device. Only text is saved to the cloud when you choose to sync." } },
-              { "@type": "Question", name: "Do I need internet to record and transcribe?", acceptedAnswer: { "@type": "Answer", text: "No. Recording and AI transcription work 100% offline. Perfect for lecture halls with poor WiFi." } },
-              { "@type": "Question", name: "What languages does Lecsy support?", acceptedAnswer: { "@type": "Answer", text: "Lecsy currently supports English transcription, optimized for lectures and academic content. More languages are planned for future updates." } },
-              { "@type": "Question", name: "How does Lecsy compare to Otter.ai?", acceptedAnswer: { "@type": "Answer", text: "Lecsy offers unlimited free recording (Otter limits to 300min/month), works completely offline (Otter requires internet), costs $0 vs $16.99/month, and keeps your data private on-device." } },
-              { "@type": "Question", name: "Is it legal to record lectures?", acceptedAnswer: { "@type": "Answer", text: "In most universities, recording lectures for personal study is permitted. Check your university's policy. Many schools encourage it as an accessibility accommodation." } },
-              { "@type": "Question", name: "How accurate is the transcription?", acceptedAnswer: { "@type": "Answer", text: "Lecsy uses OpenAI's Whisper AI model running locally on your device. Accuracy is comparable to cloud-based services, typically 85-95% for clear audio." } },
-              { "@type": "Question", name: "Will there be a Pro version?", acceptedAnswer: { "@type": "Answer", text: "We're considering a Pro plan with AI summaries and exam prep features. The core app — recording, transcription, export, and sync — will always be free." } },
-              { "@type": "Question", name: "What iPhones are supported?", acceptedAnswer: { "@type": "Answer", text: "Lecsy requires iOS 17.6 or later. iPhone 12 and newer recommended for best transcription speed." } },
+              { "@type": "Question", name: "Is my data safe with Lecsy?", acceptedAnswer: { "@type": "Answer", text: "Yes. All audio recording and transcription happens entirely on your iPhone using WhisperKit. Your voice never leaves your device. Only transcript text is synced to the cloud when you choose to sign in, and you can turn that off anytime." } },
+              { "@type": "Question", name: "Do I need internet to record and transcribe?", acceptedAnswer: { "@type": "Answer", text: "No. Recording and transcription work 100% offline using on-device AI. You only need internet for the one-time model download (~150MB), cloud sync, AI summaries, and Exam Mode." } },
+              { "@type": "Question", name: "What languages does Lecsy support?", acceptedAnswer: { "@type": "Answer", text: "Lecsy supports 12 languages for transcription: English, Japanese, Spanish, French, German, Chinese, Korean, and more. AI summaries can be generated in a different language than the recording." } },
+              { "@type": "Question", name: "How does Lecsy compare to Otter.ai?", acceptedAnswer: { "@type": "Answer", text: "Lecsy offers unlimited free recording (Otter limits to 300min/month), works offline (Otter requires internet), costs $0 vs $16.99/month, and keeps audio on-device (Otter uploads to cloud). Save over $200/year." } },
+              { "@type": "Question", name: "Is it legal to record lectures?", acceptedAnswer: { "@type": "Answer", text: "In most universities, recording lectures for personal study is permitted. Many schools encourage it as an accessibility accommodation. Check your university's policy." } },
+              { "@type": "Question", name: "How accurate is the transcription?", acceptedAnswer: { "@type": "Answer", text: "Lecsy uses OpenAI's Whisper model running locally on your device via WhisperKit. Accuracy is typically 85-95% for clear audio, comparable to cloud-based services." } },
+              { "@type": "Question", name: "Is Lecsy really free?", acceptedAnswer: { "@type": "Answer", text: "Yes — every feature (recording, transcription, AI summaries, Exam Mode, 12 languages, web sync) is completely free through June 1, 2026. No ads, no subscription, no credit card. After June 1, pricing will be decided based on user feedback. Features that are free today will stay free for existing users." } },
+              { "@type": "Question", name: "What about AI summaries — does my data go to a server?", acceptedAnswer: { "@type": "Answer", text: "When you tap AI Summary or Exam Mode, only the transcript text (never audio) is sent to OpenAI's GPT-4o-mini to generate the summary. OpenAI does not use API content to train its models. Audio always stays on your iPhone." } },
             ],
           }),
         }}
@@ -96,11 +96,10 @@ export default function Home() {
             operatingSystem: "iOS 17.6+",
             applicationCategory: "EducationApplication",
             offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-            description: "Free lecture recording and AI transcription app. Record unlimited lectures, transcribe offline with AI, review on any device.",
+            description: "Free lecture recording and AI study app. Record unlimited lectures, transcribe offline, get AI summaries and exam prep in 12 languages.",
             url: "https://www.lecsy.app/",
             downloadUrl: APP_STORE_URL,
             author: { "@type": "Person", name: "Takumi Nittono" },
-            aggregateRating: { "@type": "AggregateRating", ratingValue: "5.0", ratingCount: "1" },
           }),
         }}
       />
@@ -116,8 +115,8 @@ export default function Home() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-8 text-[13px] text-gray-500">
+            <Link href="#features" className="hover:text-gray-900 transition-colors">Features</Link>
             <Link href="#compare" className="hover:text-gray-900 transition-colors">Compare</Link>
-            <Link href="#how-it-works" className="hover:text-gray-900 transition-colors">How it works</Link>
             <Link href="#pricing" className="hover:text-gray-900 transition-colors">Pricing</Link>
             <Link href="#faq" className="hover:text-gray-900 transition-colors">FAQ</Link>
           </nav>
@@ -144,35 +143,29 @@ export default function Home() {
 
       {/* ━━━ HERO ━━━ */}
       <section className="relative pt-32 pb-20 lg:pt-44 lg:pb-32 overflow-hidden">
-        {/* Background decoration */}
         <div className="absolute inset-0 bg-gradient-to-b from-blue-50/80 via-white to-white pointer-events-none" />
         <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[900px] h-[600px] bg-blue-400/[0.08] rounded-full blur-[120px] pointer-events-none" />
 
         <div className="relative max-w-6xl mx-auto px-5">
           <div className="max-w-3xl animate-fade-in-up">
-            {/* Badge */}
             <div className="inline-flex items-center gap-2 mb-8 px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
               <span className="text-xs font-medium text-blue-600 tracking-wide">
-                100% Free &middot; Unlimited Recording &middot; No Account Required
+                Free through June 1, 2026 &middot; No ads &middot; No account required
               </span>
             </div>
 
-            {/* Headline */}
             <h1 className="font-[family-name:var(--font-display)] text-[clamp(2.5rem,7vw,5.5rem)] font-bold leading-[0.95] tracking-tight text-gray-900 mb-6">
               Your lectures,
               <br />
               <span className="text-blue-600">transcribed.</span>
             </h1>
 
-            {/* Subtitle */}
             <p className="text-lg lg:text-xl text-gray-500 leading-relaxed max-w-xl mb-10">
-              AI transcription that runs entirely on your iPhone.
-              <br className="hidden sm:block" />
-              Offline. Private. Unlimited. <span className="text-gray-900 font-semibold">$0.</span>
+              Record on iPhone. Transcribe offline. Get AI summaries and exam
+              prep in 12 languages. <span className="text-gray-900 font-semibold">$0.</span>
             </p>
 
-            {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-3">
               <a
                 href={APP_STORE_URL}
@@ -231,9 +224,9 @@ export default function Home() {
       <section className="border-y border-gray-100 bg-gray-50/50">
         <div className="max-w-6xl mx-auto px-5 py-10 grid grid-cols-2 md:grid-cols-4 gap-8">
           {[
-            { value: "$0", label: "Forever free", accent: true },
+            { value: "$0", label: "Through June 1, 2026", accent: true },
             { value: "\u221E", label: "Recording minutes" },
-            { value: "7", label: "Summary languages" },
+            { value: "12", label: "Languages supported" },
             { value: "0", label: "Audio sent to cloud", suffix: "bytes" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
@@ -271,7 +264,7 @@ export default function Home() {
           {/* Bilingual notes mockup */}
           <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-12">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-              <div className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-3">日本語</div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-3">日本語 AI Summary</div>
               <p className="text-sm text-gray-800 leading-relaxed mb-4">
                 今回の講義では、細胞分裂のメカニズムと、それが多細胞生物の発達においてどう機能するかを説明しました。特に有糸分裂と減数分裂の違いがポイントです。
               </p>
@@ -283,7 +276,7 @@ export default function Home() {
               </ul>
             </div>
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-              <div className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-3">English</div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-3">English Transcript</div>
               <p className="text-sm text-gray-800 leading-relaxed mb-4">
                 This lecture covered the mechanism of cell division and how it functions in the development of multicellular organisms, with particular focus on the difference between mitosis and meiosis.
               </p>
@@ -300,24 +293,24 @@ export default function Home() {
           <div className="grid md:grid-cols-3 gap-6 mb-12">
             <div className="text-center">
               <div className="w-12 h-12 mx-auto mb-3 bg-blue-100 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
               </div>
               <h3 className="font-bold text-gray-900 mb-1">Built for iPhone</h3>
-              <p className="text-sm text-gray-600">Native iOS recording quality. No browser, no extension, no laptop.</p>
+              <p className="text-sm text-gray-600">Native iOS recording. No browser, no extension, no laptop needed.</p>
             </div>
             <div className="text-center">
               <div className="w-12 h-12 mx-auto mb-3 bg-blue-100 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
               </div>
               <h3 className="font-bold text-gray-900 mb-1">Audio never leaves your phone</h3>
-              <p className="text-sm text-gray-600">We never store your audio. Only the text. Unlike Otter.ai (currently in a class-action lawsuit on this).</p>
+              <p className="text-sm text-gray-600">Your .m4a file stays on your iPhone. Not in our cloud, not anywhere else. Ever.</p>
             </div>
             <div className="text-center">
               <div className="w-12 h-12 mx-auto mb-3 bg-blue-100 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
               </div>
               <h3 className="font-bold text-gray-900 mb-1">Never trained on your data</h3>
-              <p className="text-sm text-gray-600">Your lectures are private. We do not feed them into any AI training pipeline. Period.</p>
+              <p className="text-sm text-gray-600">Not by us, not by OpenAI. Your lectures are private. Period.</p>
             </div>
           </div>
 
@@ -329,8 +322,8 @@ export default function Home() {
             <h3 className="font-[family-name:var(--font-display)] text-2xl lg:text-3xl font-bold text-white mb-3">
               Help your international students keep up
             </h3>
-            <p className="text-gray-300 max-w-xl mx-auto mb-6">
-              Free pilot for one semester. No SOC2 box-check required. We don&apos;t store audio. We don&apos;t train on student data. FERPA-aligned.
+            <p className="text-gray-400 max-w-xl mx-auto mb-6">
+              Free pilot for one semester. We don&apos;t store audio. We don&apos;t train on student data. FERPA-aligned.
             </p>
             <a
               href="mailto:hello@lecsy.app?subject=ESL%20pilot%20program%20inquiry"
@@ -379,8 +372,10 @@ export default function Home() {
                     { feature: "Price", lecsy: "FREE", otter: "$16.99/mo", notta: "$13.99/mo", highlight: true },
                     { feature: "Monthly minutes", lecsy: "Unlimited", otter: "300 min", notta: "120 min" },
                     { feature: "Works offline", lecsy: true, otter: false, notta: false },
-                    { feature: "On-device AI", lecsy: true, otter: false, notta: false },
-                    { feature: "Privacy (on-device)", lecsy: true, otter: false, notta: false },
+                    { feature: "On-device transcription", lecsy: true, otter: false, notta: false },
+                    { feature: "Audio stays on device", lecsy: true, otter: false, notta: false },
+                    { feature: "AI summaries", lecsy: true, otter: true, notta: true },
+                    { feature: "Exam prep mode", lecsy: true, otter: false, notta: false },
                     { feature: "Annual cost", lecsy: "$0", otter: "$203.88", notta: "$167.88", strikeOthers: true },
                   ].map((row, i) => (
                     <tr key={row.feature} className={`border-b border-gray-50 ${i % 2 === 0 ? "bg-blue-50/20" : ""}`}>
@@ -396,7 +391,7 @@ export default function Home() {
                       </td>
                       <td className="p-4 text-center">
                         {typeof row.otter === "boolean" ? (
-                          row.otter ? <CheckIcon /> : <XIcon />
+                          row.otter ? <CheckIcon className="w-5 h-5 text-gray-400" /> : <XIcon />
                         ) : (
                           <span className={row.strikeOthers ? "line-through text-gray-300" : "text-gray-500"}>
                             {row.otter}
@@ -405,7 +400,7 @@ export default function Home() {
                       </td>
                       <td className="p-4 text-center">
                         {typeof row.notta === "boolean" ? (
-                          row.notta ? <CheckIcon /> : <XIcon />
+                          row.notta ? <CheckIcon className="w-5 h-5 text-gray-400" /> : <XIcon />
                         ) : (
                           <span className={row.strikeOthers ? "line-through text-gray-300" : "text-gray-500"}>
                             {row.notta}
@@ -449,13 +444,13 @@ export default function Home() {
               {
                 step: "02",
                 title: "Transcribe",
-                desc: "AI converts speech to text on your device. No internet. No upload. Powered by OpenAI Whisper.",
+                desc: "WhisperKit converts speech to text on your device. No internet. No upload. 12 languages.",
                 icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
               },
               {
                 step: "03",
-                title: "Review",
-                desc: "Search, bookmark, export. Read on your phone or laptop. Ace your exams.",
+                title: "Study",
+                desc: "Get AI summaries and exam questions. Read in your language. Review on your phone or laptop.",
                 icon: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z",
               },
             ].map((item) => (
@@ -482,7 +477,7 @@ export default function Home() {
       </section>
 
       {/* ━━━ FEATURES BENTO ━━━ */}
-      <section className="bg-white py-20 lg:py-28">
+      <section id="features" className="bg-white py-20 lg:py-28">
         <div className="max-w-5xl mx-auto px-5">
           <div className="mb-16">
             <h2 className="font-[family-name:var(--font-display)] text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight mb-3">
@@ -501,59 +496,73 @@ export default function Home() {
                   </svg>
                 </div>
                 <h3 className="font-[family-name:var(--font-display)] text-xl font-bold mb-2">
-                  100% Private
+                  Audio stays on your iPhone
                 </h3>
                 <p className="text-blue-100 text-sm leading-relaxed max-w-sm">
-                  Audio never leaves your device. All AI processing happens locally on your
-                  iPhone&apos;s neural engine. No cloud. No data mining. Ever.
+                  Transcription runs entirely on your device via WhisperKit. Your .m4a file is never uploaded anywhere — not to our servers, not to any AI provider. No ads, no trackers, no IDFA.
                 </p>
               </div>
             </div>
 
-            {/* Small card - Speed */}
+            {/* Small card - AI Summaries */}
             <div className="md:col-span-2 p-6 rounded-2xl border border-gray-200 bg-gray-50 flex flex-col justify-between">
               <svg className="w-5 h-5 text-blue-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
               <div>
                 <h3 className="font-[family-name:var(--font-display)] font-bold text-gray-900 mb-1">
-                  Instant Transcription
+                  AI Summaries
                 </h3>
                 <p className="text-gray-500 text-xs leading-relaxed">
-                  Stop recording, get your text. Powered by Whisper on-device.
+                  Key points, section outlines, and definitions — generated from your transcript text via GPT-4o-mini.
                 </p>
               </div>
             </div>
 
-            {/* Small card - Bookmarks */}
+            {/* Small card - Exam Mode */}
             <div className="md:col-span-2 p-6 rounded-2xl border border-gray-200 bg-gray-50 flex flex-col justify-between">
               <svg className="w-5 h-5 text-blue-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
               </svg>
               <div>
                 <h3 className="font-[family-name:var(--font-display)] font-bold text-gray-900 mb-1">
-                  Bookmarks & Search
+                  Exam Mode
                 </h3>
                 <p className="text-gray-500 text-xs leading-relaxed">
-                  Mark key moments. Full-text search across all lectures.
+                  AI generates likely test questions with model answers from your lecture. Ace your exams.
                 </p>
               </div>
             </div>
 
-            {/* Medium card - Export */}
+            {/* Small card - Offline */}
+            <div className="md:col-span-2 p-6 rounded-2xl border border-gray-200 bg-gray-50 flex flex-col justify-between">
+              <svg className="w-5 h-5 text-blue-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 5.636a9 9 0 11-12.728 0M12 3v9" />
+              </svg>
+              <div>
+                <h3 className="font-[family-name:var(--font-display)] font-bold text-gray-900 mb-1">
+                  Works Offline
+                </h3>
+                <p className="text-gray-500 text-xs leading-relaxed">
+                  Recording and transcription work without internet. Perfect for lecture halls with zero Wi-Fi.
+                </p>
+              </div>
+            </div>
+
+            {/* Medium card - 12 Languages */}
             <div className="md:col-span-2 p-6 rounded-2xl border border-gray-200 bg-gray-50">
               <svg className="w-5 h-5 text-blue-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
               </svg>
               <h3 className="font-[family-name:var(--font-display)] font-bold text-gray-900 mb-1">
-                Export Anywhere
+                12 Languages
               </h3>
               <p className="text-gray-500 text-xs leading-relaxed">
-                PDF with timestamps. Markdown for notes apps. Share links with classmates.
+                English, Japanese, Chinese, Korean, Spanish, French, German, and more. Record in one language, read the summary in another.
               </p>
             </div>
 
-            {/* Medium card - Synced */}
+            {/* Medium card - Synced Playback */}
             <div className="md:col-span-2 p-6 rounded-2xl border border-gray-200 bg-gray-50">
               <svg className="w-5 h-5 text-blue-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -576,68 +585,66 @@ export default function Home() {
               </h3>
               <p className="text-gray-500 text-sm leading-relaxed max-w-md">
                 Sync transcripts to the web with one tap. Review on your laptop before exams.
-                Search across your entire lecture library.
+                Search across your entire lecture library at lecsy.app.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ━━━ TESTIMONIALS ━━━ */}
+      {/* ━━━ DATA TRANSPARENCY ━━━ */}
       <section className="bg-gray-50 py-20 lg:py-28">
-        <div className="max-w-5xl mx-auto px-5">
+        <div className="max-w-4xl mx-auto px-5">
           <div className="mb-12">
             <h2 className="font-[family-name:var(--font-display)] text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight mb-3">
-              Students love Lecsy
+              What actually happens to your data
             </h2>
-            <p className="text-gray-500">Made by a student, for students.</p>
+            <p className="text-gray-500 text-lg">No fine print. Here&apos;s the honest version.</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="space-y-4">
             {[
               {
-                quote:
-                  "I used to pay $17/month for Otter and it didn\u2019t even work in our lecture hall because of bad WiFi. Lecsy works offline and it\u2019s free. No-brainer.",
-                name: "Sarah K.",
-                role: "Computer Science, UCLA",
+                icon: "M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z",
+                title: "Audio (.m4a)",
+                status: "NEVER leaves your iPhone",
+                statusColor: "text-green-600",
+                desc: "There is no code path in Lecsy that uploads your audio file. Not to our servers, not to OpenAI, not anywhere.",
               },
               {
-                quote:
-                  "As an international student, being able to record and re-read lectures at my own pace is a game changer. I finally understand everything.",
-                name: "Yuki T.",
-                role: "Business, University of Melbourne",
+                icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
+                title: "Transcript text",
+                status: "Synced if signed in (can turn off)",
+                statusColor: "text-amber-600",
+                desc: "When you're signed in, transcript text backs up to our server (Supabase) so you can recover it if you lose your phone. Turn off anytime: Settings \u2192 Privacy \u2192 Cloud Sync.",
               },
               {
-                quote:
-                  "The privacy aspect sold me. My lecture recordings stay on my phone, not on some company\u2019s servers. And the transcription quality is surprisingly good.",
-                name: "Marcus R.",
-                role: "Pre-Med, NYU",
+                icon: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z",
+                title: "AI Summary & Exam Mode",
+                status: "Text sent to OpenAI when you tap the button",
+                statusColor: "text-amber-600",
+                desc: "Only the transcript text (never audio) goes to OpenAI\u2019s GPT-4o-mini to generate your summary. OpenAI does not use API content to train its models.",
               },
-            ].map((t) => (
-              <div
-                key={t.name}
-                className="p-6 rounded-2xl bg-white border border-gray-200 flex flex-col justify-between shadow-sm"
-              >
-                <div>
-                  <div className="flex gap-0.5 mb-4">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <svg key={i} className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                      </svg>
-                    ))}
-                  </div>
-                  <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                    &ldquo;{t.quote}&rdquo;
-                  </p>
+              {
+                icon: "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636",
+                title: "Ads, trackers, IDFA",
+                status: "None",
+                statusColor: "text-green-600",
+                desc: "No ad SDKs. No third-party analytics. No IDFA tracking. We don\u2019t sell your data.",
+              },
+            ].map((item) => (
+              <div key={item.title} className="bg-white rounded-2xl p-6 border border-gray-200 flex gap-4">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
+                  </svg>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-600">
-                    {t.name.charAt(0)}
+                <div>
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <h3 className="font-bold text-gray-900">{item.title}</h3>
+                    <span className={`text-xs font-semibold ${item.statusColor}`}>{item.status}</span>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{t.name}</p>
-                    <p className="text-xs text-gray-400">{t.role}</p>
-                  </div>
+                  <p className="text-sm text-gray-500 leading-relaxed">{item.desc}</p>
                 </div>
               </div>
             ))}
@@ -647,83 +654,57 @@ export default function Home() {
 
       {/* ━━━ PRICING ━━━ */}
       <section id="pricing" className="bg-white py-20 lg:py-28">
-        <div className="max-w-4xl mx-auto px-5">
-          <div className="mb-12">
+        <div className="max-w-3xl mx-auto px-5">
+          <div className="mb-12 text-center">
             <h2 className="font-[family-name:var(--font-display)] text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight mb-3">
-              Student-friendly pricing
+              Every feature. Free.
             </h2>
-            <p className="text-gray-500 text-lg">Everything you need is free. No catch.</p>
+            <p className="text-gray-500 text-lg">No paywall. No catch. No credit card.</p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Free */}
-            <div className="p-8 rounded-2xl border-2 border-blue-600 bg-white relative shadow-lg shadow-blue-600/[0.06]">
-              <div className="absolute -top-3 left-6 px-3 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full uppercase tracking-wider">
-                Current
-              </div>
-              <h3 className="font-[family-name:var(--font-display)] text-2xl font-bold text-gray-900 mb-1">
-                Free
-              </h3>
-              <div className="flex items-baseline gap-1 mb-1">
-                <span className="font-[family-name:var(--font-display)] text-5xl font-bold text-gray-900">$0</span>
-              </div>
-              <p className="text-sm text-gray-400 mb-8">Forever. No credit card.</p>
-              <ul className="space-y-3 mb-8">
-                {[
-                  "Unlimited recording",
-                  "Offline AI transcription",
-                  "English optimized",
-                  "Synced audio playback",
-                  "Bookmarks & search",
-                  "PDF & Markdown export",
-                  "Web sync",
-                  "Study streak tracking",
-                ].map((f) => (
-                  <li key={f} className="flex items-center gap-3 text-sm text-gray-700">
-                    <CheckIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <a
-                href={APP_STORE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full text-center h-11 leading-[2.75rem] rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
-              >
-                Download Free
-              </a>
+          <div className="p-8 lg:p-10 rounded-2xl border-2 border-blue-600 bg-white relative shadow-lg shadow-blue-600/[0.06]">
+            <div className="absolute -top-3 left-6 px-3 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full uppercase tracking-wider">
+              Free through June 1, 2026
             </div>
 
-            {/* Pro */}
-            <div className="p-8 rounded-2xl bg-gray-50 border border-gray-200 relative">
-              <div className="absolute -top-3 left-6 px-3 py-0.5 bg-amber-400 text-amber-900 text-xs font-bold rounded-full uppercase tracking-wider">
-                Coming Soon
-              </div>
-              <h3 className="font-[family-name:var(--font-display)] text-2xl font-bold text-gray-900 mb-1">
-                Pro
-              </h3>
-              <div className="flex items-baseline gap-1 mb-1">
-                <span className="font-[family-name:var(--font-display)] text-5xl font-bold text-gray-300">TBD</span>
-              </div>
-              <p className="text-sm text-gray-400 mb-8">We&apos;re working on it</p>
-              <ul className="space-y-3 mb-8">
-                {[
-                  "Everything in Free",
-                  "AI-powered summaries",
-                  "Key points extraction",
-                  "Exam prep mode (Q&A)",
-                  "Section breakdown",
-                ].map((f) => (
-                  <li key={f} className="flex items-center gap-3 text-sm text-gray-400">
-                    <CheckIcon className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <div className="block w-full text-center h-11 leading-[2.75rem] rounded-xl bg-gray-200 text-gray-400 text-sm font-semibold cursor-default">
-                Coming Soon
-              </div>
+            <div className="flex items-baseline gap-2 mb-1">
+              <span className="font-[family-name:var(--font-display)] text-5xl font-bold text-gray-900">$0</span>
+            </div>
+            <p className="text-sm text-gray-400 mb-8">No ads. No subscription. Every feature included.</p>
+
+            <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3 mb-8">
+              {[
+                "Unlimited recording",
+                "Offline AI transcription",
+                "AI-powered summaries",
+                "Exam prep mode (Q&A)",
+                "12 languages",
+                "Multilingual AI summaries",
+                "Synced audio playback",
+                "Bookmarks & search",
+                "PDF & Markdown export",
+                "Web sync at lecsy.app",
+              ].map((f) => (
+                <div key={f} className="flex items-center gap-3 text-sm text-gray-700">
+                  <CheckIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                  {f}
+                </div>
+              ))}
+            </div>
+
+            <a
+              href={APP_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full text-center h-12 leading-[3rem] rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+            >
+              Download Free
+            </a>
+
+            <div className="mt-8 pt-6 border-t border-gray-100">
+              <p className="text-sm text-gray-500 leading-relaxed">
+                <strong className="text-gray-700">After June 1, 2026:</strong> We&apos;ll decide pricing based on what students actually ask for. Our promise is simple — every feature that is free today will stay free for users who already have it. We will not paywall features you already rely on.
+              </p>
             </div>
           </div>
         </div>
@@ -737,14 +718,42 @@ export default function Home() {
           </h2>
           <div className="space-y-3">
             {[
-              { q: "Is my data safe?", a: "Yes. All audio recording and transcription happens entirely on your iPhone. Your voice never leaves your device. Only text is saved to the cloud when you explicitly choose to sync." },
-              { q: "Do I need internet to record and transcribe?", a: "No. Recording and AI transcription work 100% offline. You only need internet for the initial one-time AI model download (~150MB) and for syncing transcripts to the web." },
-              { q: "What languages are supported?", a: "Lecsy currently supports English, optimized for lectures and academic content. We\u2019re exploring adding more languages in future updates." },
-              { q: "How does this compare to Otter.ai?", a: "Lecsy offers unlimited free recording (vs 300 min/month), works 100% offline (vs internet required), costs $0 (vs $16.99/month), and keeps all data on your device (vs cloud processing). You save over $200/year." },
-              { q: "Is it legal to record lectures?", a: "In most US and UK universities, recording lectures for personal study is permitted. Many schools actively encourage it as an accessibility tool. Always check your specific university\u2019s policy." },
-              { q: "How accurate is the transcription?", a: "Lecsy uses OpenAI\u2019s Whisper model running locally. Accuracy is typically 85-95% for clear English audio, comparable to cloud services. Quality depends on recording conditions \u2014 sitting closer to the speaker helps." },
-              { q: "What iPhones are supported?", a: "Any iPhone running iOS 17.6 or later. iPhone 12 and newer are recommended for the best transcription speed. Older models work but transcription may take longer." },
-              { q: "Will there be a paid version?", a: "We\u2019re considering a Pro plan with AI summaries and exam prep features. The core app \u2014 unlimited recording, transcription, export, and sync \u2014 will always be free." },
+              {
+                q: "Is my data safe?",
+                a: "Yes. Audio recording and transcription happen entirely on your iPhone. Your voice never leaves your device. Transcript text is synced to the cloud only if you sign in (you can turn this off). When you use AI summaries or Exam Mode, only the transcript text (not audio) is sent to OpenAI."
+              },
+              {
+                q: "Do I need internet to record and transcribe?",
+                a: "No. Recording and transcription work 100% offline via WhisperKit on your device. You only need internet for the initial one-time model download (~150MB), cloud sync, AI summaries, and Exam Mode."
+              },
+              {
+                q: "What languages are supported?",
+                a: "Lecsy supports 12 languages including English, Japanese, Spanish, French, German, Chinese, Korean, and more. You can also get AI summaries in a different language than the recording \u2014 record in English, read the summary in Japanese."
+              },
+              {
+                q: "How does this compare to Otter.ai?",
+                a: "Lecsy offers unlimited free recording (vs 300 min/month), works offline (vs internet required), costs $0 (vs $16.99/month), and keeps audio on your device (vs cloud upload). You save over $200/year."
+              },
+              {
+                q: "Is it legal to record lectures?",
+                a: "In most US and UK universities, recording lectures for personal study is permitted. Many schools actively encourage it as an accessibility tool. Always check your specific university\u2019s policy."
+              },
+              {
+                q: "How accurate is the transcription?",
+                a: "Lecsy uses OpenAI\u2019s Whisper model running locally via WhisperKit. Accuracy is typically 85\u201395% for clear audio, comparable to cloud services. Sitting closer to the speaker helps."
+              },
+              {
+                q: "What iPhones are supported?",
+                a: "Any iPhone running iOS 17.6 or later. iPhone 12 and newer recommended for best transcription speed."
+              },
+              {
+                q: "Is Lecsy really free?",
+                a: "Yes \u2014 every feature (recording, transcription, AI summaries, Exam Mode, 12 languages, web sync) is free through June 1, 2026. No ads, no subscription, no credit card. After that, we\u2019ll decide pricing based on user feedback. Features that are free today will stay free for existing users."
+              },
+              {
+                q: "What data goes to OpenAI?",
+                a: "Only your transcript text, and only when you tap the AI Summary or Exam Mode button. Audio is never sent. OpenAI does not use API content to train its models. We don\u2019t train on your data either."
+              },
             ].map((item) => (
               <details key={item.q} className="group bg-white rounded-xl border border-gray-200">
                 <summary className="flex items-center justify-between p-5 cursor-pointer select-none">
@@ -775,7 +784,7 @@ export default function Home() {
             Never miss a word again
           </h2>
           <p className="text-blue-100 text-lg mb-10 max-w-lg mx-auto">
-            Join students who record, transcribe, and ace their exams — completely free.
+            Join students who record, transcribe, and ace their exams — completely free through June 1, 2026.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
             <a
@@ -811,7 +820,7 @@ export default function Home() {
               <p className="text-gray-400 text-sm leading-relaxed">
                 Free lecture recording & AI transcription.
                 <br />
-                Built by a student, for students.
+                Built by an independent developer, for students.
               </p>
             </div>
             <div>
@@ -861,6 +870,11 @@ export default function Home() {
                   <Link href="/terms" className="hover:text-gray-900 transition-colors">
                     Terms of Service
                   </Link>
+                </li>
+                <li>
+                  <a href="mailto:support@lecsy.app" className="hover:text-gray-900 transition-colors">
+                    Contact
+                  </a>
                 </li>
               </ul>
             </div>

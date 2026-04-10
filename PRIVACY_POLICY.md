@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last Updated: April 7, 2026**
+**Last Updated: April 9, 2026**
 
 ---
 
@@ -27,6 +27,7 @@ We may collect the following types of information:
 - Text generated from on-device speech recognition
 - When you are signed in, completed transcript text is automatically synced to our servers so you don't lose your notes if your device is lost, broken, or replaced
 - Cloud sync can be turned **off** at any time from Settings → Privacy → Cloud Sync
+- When you tap the AI Summary or Exam Prep buttons, the transcript **text** (not audio) is sent to OpenAI's GPT-4o-mini model via a secure server function to generate the summary. OpenAI does not retain this content for training.
 - We **do not** use your transcript text or audio to train AI models
 
 ### Usage Data
@@ -54,7 +55,9 @@ We use the collected information for the following purposes:
 
 lecsy does **not** send your audio data to any server, ever. All speech recognition (transcription) is performed locally on your device using offline technology. The recorded audio file (`.m4a`) stays on your iPhone and is never transmitted.
 
-After transcription completes, the resulting **text** (and only the text — never the audio) is uploaded to our servers when you are signed in. This allows you to recover your notes if your device is lost or replaced, and — for users who are members of an organization (school) — allows your school's administrators to see your activity per the organization's data policy.
+After transcription completes, the resulting **text** (and only the text — never the audio) is uploaded to our servers when you are signed in. This allows you to recover your notes if your device is lost or replaced.
+
+When you explicitly request an AI Summary or Exam Prep mode, the transcript text is forwarded from our server to OpenAI's GPT-4o-mini API solely to generate the summary. Audio is never sent. OpenAI does not use API content to train its models.
 
 You can disable this transcript upload at any time from Settings → Privacy → Cloud Sync. When disabled, transcripts remain only on your device.
 
@@ -74,7 +77,7 @@ Your data is stored in the following locations:
 ### In the Cloud (Supabase)
 - Account information
 - Transcription text (when saved to web)
-- Subscription information
+- Usage data (rate-limit tracking)
 
 ### Security Measures
 - All data is transferred over encrypted connections (HTTPS/TLS)
@@ -92,10 +95,9 @@ We use the following third-party services:
 | **Supabase** | Database and authentication | [supabase.com/privacy](https://supabase.com/privacy) |
 | **Apple Sign In** | User authentication | [apple.com/privacy](https://www.apple.com/privacy/) |
 | **Google Sign In** | User authentication | [policies.google.com/privacy](https://policies.google.com/privacy) |
-| **Stripe** | Payment processing (Pro subscription) | [stripe.com/privacy](https://stripe.com/privacy) |
-| **OpenAI** | AI summarization (Pro only) | [openai.com/privacy](https://openai.com/privacy) |
+| **OpenAI** | AI summarization | [openai.com/privacy](https://openai.com/privacy) |
 
-**Note**: OpenAI processes only your transcription text (not audio) and only when you use the AI Summary feature (Pro plan only).
+**Note**: OpenAI processes only your transcription text (not audio) and only when you tap the AI Summary or Exam Mode button. OpenAI does not use API content to train its models.
 
 ---
 
@@ -217,7 +219,7 @@ If you are in the European Economic Area (EEA), you have rights under the Genera
 
 If you have any questions, concerns, or requests regarding this Privacy Policy, please contact us:
 
-**Email**: nittonotakumi@gmail.com
+**Email**: support@lecsy.app
 
 ---
 
@@ -238,4 +240,4 @@ If you have any questions, concerns, or requests regarding this Privacy Policy, 
 
 ---
 
-*This Privacy Policy is effective as of January 28, 2026.*
+*This Privacy Policy is effective as of April 9, 2026.*

@@ -39,12 +39,12 @@ select option {
   color: #111827;
 }
 
-/* Sledgehammer: any low-contrast Tailwind gray utility on the org admin
-   pages was painful on white. Force them to gray-900 globally. */
-.text-gray-300,
-.text-gray-400,
-.text-gray-500,
-.text-gray-600 {
+/* Dashboard/admin pages: boost low-contrast grays for readability on white.
+   Scoped via data-dashboard so marketing pages keep their visual hierarchy. */
+[data-dashboard] .text-gray-300,
+[data-dashboard] .text-gray-400,
+[data-dashboard] .text-gray-500,
+[data-dashboard] .text-gray-600 {
   color: #111827 !important;
 }
 
