@@ -34,6 +34,10 @@ struct Lecture: Identifiable, Codable, Equatable {
     var bookmarks: [LectureBookmark]
     var courseName: String?
     var lastPlaybackPosition: TimeInterval?
+    /// Cached AI summary so it persists after the user generates it once.
+    /// Keyed by language so switching language still re-generates.
+    var cachedSummary: SummaryService.SummaryResult?
+    var cachedSummaryLanguage: String?
 
     /// Resolved audio file URL (reconstructed from filename + Documents directory)
     var audioPath: URL? {
@@ -55,7 +59,9 @@ struct Lecture: Identifiable, Codable, Equatable {
         language: TranscriptionLanguage = .english,
         bookmarks: [LectureBookmark] = [],
         courseName: String? = nil,
-        lastPlaybackPosition: TimeInterval? = nil
+        lastPlaybackPosition: TimeInterval? = nil,
+        cachedSummary: SummaryService.SummaryResult? = nil,
+        cachedSummaryLanguage: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -69,6 +75,8 @@ struct Lecture: Identifiable, Codable, Equatable {
         self.bookmarks = bookmarks
         self.courseName = courseName
         self.lastPlaybackPosition = lastPlaybackPosition
+        self.cachedSummary = cachedSummary
+        self.cachedSummaryLanguage = cachedSummaryLanguage
     }
 
     // MARK: - Custom Codable (handles migration from old audioPath URL to new audioFileName)
@@ -80,6 +88,7 @@ struct Lecture: Identifiable, Codable, Equatable {
         case transcriptText, transcriptSegments, transcriptStatus
         case language, bookmarks, courseName
         case lastPlaybackPosition
+        case cachedSummary, cachedSummaryLanguage
     }
 
     init(from decoder: Decoder) throws {
@@ -106,6 +115,8 @@ struct Lecture: Identifiable, Codable, Equatable {
         bookmarks = try container.decodeIfPresent([LectureBookmark].self, forKey: .bookmarks) ?? []
         courseName = try container.decodeIfPresent(String.self, forKey: .courseName)
         lastPlaybackPosition = try container.decodeIfPresent(TimeInterval.self, forKey: .lastPlaybackPosition)
+        cachedSummary = try container.decodeIfPresent(SummaryService.SummaryResult.self, forKey: .cachedSummary)
+        cachedSummaryLanguage = try container.decodeIfPresent(String.self, forKey: .cachedSummaryLanguage)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -123,6 +134,8 @@ struct Lecture: Identifiable, Codable, Equatable {
         try container.encode(bookmarks, forKey: .bookmarks)
         try container.encodeIfPresent(courseName, forKey: .courseName)
         try container.encodeIfPresent(lastPlaybackPosition, forKey: .lastPlaybackPosition)
+        try container.encodeIfPresent(cachedSummary, forKey: .cachedSummary)
+        try container.encodeIfPresent(cachedSummaryLanguage, forKey: .cachedSummaryLanguage)
     }
 
     // MARK: - Computed properties

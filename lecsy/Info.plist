@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Microphone access is required to record and transcribe your lectures.</string>
+	<string>Lecsy uses the microphone to record your lectures. Audio is transcribed on your device by default. If your organization has enabled cloud transcription, audio may be processed transiently by our subprocessor Deepgram and is never stored by Lecsy. You can stop recording at any time.</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>SUPABASE_URL</key>

@@ -1,0 +1,2 @@
+-- Placeholder: この migration はSupabase Dashboardから直接適用されたため、ローカルファイルは空。
+-- 履歴整合のためだけに存在。

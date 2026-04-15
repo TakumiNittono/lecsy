@@ -195,9 +195,19 @@ struct LectureDetailView: View {
                     }
                     .padding(.bottom, 4)
 
-                    // AI Summary — B2C 無料モデル: 認証済みユーザー全員に開放 (2026-04-08)
+                    // AI Summary — 認証済みユーザーのみ利用可。未サインインには静かなヒント。
                     if authService.isAuthenticated {
                         summarySection(transcript: cleanTranscript)
+                    } else if !cleanTranscript.isEmpty {
+                        HStack(spacing: 8) {
+                            Image(systemName: "sparkles")
+                                .foregroundColor(.secondary)
+                            Text("Sign in to generate an AI summary of this lecture.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.vertical, 6)
                     }
                 }
 
@@ -739,19 +749,19 @@ struct LectureDetailView: View {
             }
             if let overall = result.summary, !overall.isEmpty {
                 Text(overall)
-                    .font(.system(.subheadline, design: .rounded))
+                    .font(.system(.body, design: .rounded))
                     .foregroundColor(.primary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let points = result.key_points, !points.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Key Points")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .font(.system(.body, design: .rounded, weight: .semibold))
                         .foregroundColor(.secondary)
                     ForEach(points, id: \.self) { p in
                         HStack(alignment: .top, spacing: 6) {
                             Text("•").foregroundColor(.blue)
-                            Text(p).font(.system(.caption, design: .rounded))
+                            Text(p).font(.system(.body, design: .rounded))
                         }
                     }
                 }
@@ -761,9 +771,9 @@ struct LectureDetailView: View {
                     ForEach(sections) { section in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(section.heading)
-                                .font(.system(.caption, design: .rounded, weight: .semibold))
+                                .font(.system(.body, design: .rounded, weight: .semibold))
                             Text(section.content)
-                                .font(.system(.caption, design: .rounded))
+                                .font(.system(.body, design: .rounded))
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -807,7 +817,7 @@ struct LectureDetailView: View {
                     audioPlayer.seek(to: savedPosition)
                 }
             } catch {
-                audioLoadError = error.localizedDescription
+                audioLoadError = ErrorMessages.friendly(error)
             }
         }
     }
@@ -862,7 +872,7 @@ struct LectureDetailView: View {
                 lecture = latest
             }
 
-            errorMessage = error.localizedDescription
+            errorMessage = ErrorMessages.friendly(error)
             showErrorAlert = true
         }
 
@@ -986,7 +996,7 @@ struct LectureDetailView: View {
             shareItems = [tempURL]
             showShareSheet = true
         } catch {
-            errorMessage = "Failed to export Markdown: \(error.localizedDescription)"
+            errorMessage = "Failed to export Markdown. Please try again."
             showErrorAlert = true
         }
     }
@@ -1096,7 +1106,7 @@ struct LectureDetailView: View {
             shareItems = [tempURL]
             showShareSheet = true
         } catch {
-            errorMessage = "Failed to export PDF: \(error.localizedDescription)"
+            errorMessage = "Failed to export PDF. Please try again."
             showErrorAlert = true
         }
     }
@@ -1125,7 +1135,7 @@ struct LectureDetailView: View {
             try text.write(to: txtURL, atomically: true, encoding: .utf8)
             items.append(txtURL)
         } catch {
-            errorMessage = "Failed to prepare export: \(error.localizedDescription)"
+            errorMessage = "Failed to prepare export. Please try again."
             showErrorAlert = true
             return
         }

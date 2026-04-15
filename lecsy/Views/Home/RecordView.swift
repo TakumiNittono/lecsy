@@ -14,6 +14,7 @@ struct RecordView: View {
     @StateObject private var transcriptionService = TranscriptionService.shared
     @StateObject private var orgService = OrganizationService.shared
     @StateObject private var authService = AuthService.shared
+    @StateObject private var liveCoordinator = TranscriptionCoordinator.shared
     @State private var showLoginSheet = false
     @State private var currentLanguageDisplay: String = TranscriptionService.shared.transcriptionLanguage.displayName
     @AppStorage("lecsy.hasAcceptedAIConsent") private var hasAcceptedAIConsent = false
@@ -49,9 +50,7 @@ struct RecordView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Account chip (email when signed in, "Sign In" when not)
-                // + quiet trial pill alongside it so users see the free window
-                // on the home screen without cluttering the status bar area.
+                // Top bar: account chip (非録音時のみ)
                 if !recordingService.isRecording {
                     HStack(spacing: 8) {
                         accountChip
@@ -60,19 +59,33 @@ struct RecordView: View {
                     .padding(.top, 8)
                 }
 
+                // Timer を一番上に配置（録音中の視認性優先）
+                timerDisplay
+                    .padding(.top, recordingService.isRecording ? 16 : 12)
+                    .padding(.bottom, 8)
+
+                // Status（Timer直下）
+                statusIndicator
+                    .padding(.bottom, 12)
+
                 Spacer()
 
-                // Timer
-                timerDisplay
-                    .padding(.bottom, 16)
+                // 中央: リアルタイム字幕
+                if recordingService.isRecording && liveCoordinator.isLiveActive {
+                    LiveCaptionView(coordinator: liveCoordinator)
+                        .padding(.horizontal, 16)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
 
-                // Waveform
+                Spacer()
+
+                // Waveform（録音ボタンの上、視覚フィードバック）
                 waveformDisplay
                     .padding(.bottom, 8)
 
-                // Status
-                statusIndicator
-                    .padding(.bottom, 6)
+                // Max duration warning (shows 5 min before auto-stop)
+                maxDurationWarning
+                    .padding(.bottom, 4)
 
                 // Low audio warning
                 lowAudioWarning
@@ -199,6 +212,9 @@ struct RecordView: View {
         }
         .onAppear {
             recordingService.prepareAudioSession()
+
+            // プラン判定を最新化（JWT更新直後 / 長時間放置後など）
+            Task { await PlanService.shared.refresh() }
 
             if !hasCheckedRecovery {
                 hasCheckedRecovery = true
@@ -333,43 +349,85 @@ struct RecordView: View {
 
     @ViewBuilder
     private var statusIndicator: some View {
-        if recordingService.isRecording {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(recordingService.isPaused ? Color.orange : Color.red)
-                    .frame(width: 8, height: 8)
-                    .opacity(recordingService.isPaused ? 0.5 : recordingDotOpacity)
+        Group {
+            if recordingService.isRecording {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(recordingService.isPaused ? Color.orange : Color.red)
+                        .frame(width: 8, height: 8)
+                        .opacity(recordingService.isPaused ? 0.5 : recordingDotOpacity)
 
-                Text(recordingService.isPaused ? "PAUSED" : "REC")
-                    .font(.system(.caption2, design: .rounded, weight: .bold))
-                    .foregroundColor(recordingService.isPaused ? .orange : .red)
-                    .kerning(1.5)
+                    Text(recordingService.isPaused ? "PAUSED" : "REC")
+                        .font(.system(.caption2, design: .rounded, weight: .bold))
+                        .foregroundColor(recordingService.isPaused ? .orange : .red)
+                        .kerning(1.5)
 
-                Text("\u{2022}")
-                    .font(.caption2)
-                    .foregroundColor(.secondary.opacity(0.3))
+                    Text("\u{2022}")
+                        .font(.caption2)
+                        .foregroundColor(.secondary.opacity(0.3))
 
-                Text(estimatedFileSize(recordingService.recordingDuration))
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundColor(.secondary.opacity(0.6))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(recordingService.isPaused
-                        ? Color.orange.opacity(0.08)
-                        : Color.red.opacity(0.08))
-            )
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                    recordingDotOpacity = 0.2
+                    Text(estimatedFileSize(recordingService.recordingDuration))
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundColor(.secondary.opacity(0.6))
                 }
-            }
-            .onDisappear {
-                recordingDotOpacity = 1.0
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(recordingService.isPaused
+                            ? Color.orange.opacity(0.08)
+                            : Color.red.opacity(0.08))
+                )
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                        recordingDotOpacity = 0.2
+                    }
+                }
+                .onDisappear {
+                    recordingDotOpacity = 1.0
+                }
+            } else if liveCoordinator.isPreparing {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                    Text("Preparing transcription…")
+                        .font(.system(.caption2, design: .rounded, weight: .semibold))
+                        .foregroundColor(.blue)
+                        .kerning(0.5)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(Color.blue.opacity(0.08))
+                )
+                .transition(.opacity)
             }
         }
+    }
+
+    @ViewBuilder
+    private var maxDurationWarning: some View {
+        if recordingService.showMaxDurationWarning && recordingService.isRecording {
+            HStack(spacing: 8) {
+                Image(systemName: "clock.badge.exclamationmark")
+                    .font(.system(size: 16, weight: .semibold))
+                Text("Auto-stop in \(formatCountdown(recordingService.remainingSecondsBeforeAutoStop))")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            }
+            .foregroundColor(.red)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color.red.opacity(0.1))
+            .clipShape(Capsule())
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+        }
+    }
+
+    private func formatCountdown(_ seconds: Int) -> String {
+        let m = seconds / 60
+        let s = seconds % 60
+        return String(format: "%d:%02d", m, s)
     }
 
     @ViewBuilder
@@ -437,6 +495,7 @@ struct RecordView: View {
 
             // Main record/stop button
             Button(action: {
+                if liveCoordinator.isPreparing { return } // 準備中は二重起動防止
                 if recordingService.isRecording {
                     stopRecording()
                 } else {
@@ -463,12 +522,16 @@ struct RecordView: View {
 
                     // Main button
                     Circle()
-                        .fill(recordingService.isRecording ? Color.red : Color.blue)
+                        .fill(recordingService.isRecording ? Color.red : (liveCoordinator.isPreparing ? Color.blue.opacity(0.6) : Color.blue))
                         .frame(width: isIPad ? 80 : 64, height: isIPad ? 80 : 64)
 
                     // Icon
                     Group {
-                        if recordingService.isRecording {
+                        if liveCoordinator.isPreparing {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(isIPad ? 1.3 : 1.1)
+                        } else if recordingService.isRecording {
                             RoundedRectangle(cornerRadius: 4)
                                 .fill(Color.white)
                                 .frame(width: isIPad ? 24 : 20, height: isIPad ? 24 : 20)
@@ -602,6 +665,12 @@ struct RecordView: View {
                 return
             }
 
+            // Pro (org member): 録音開始前に Deepgram websocket を先行接続して
+            // 最初の発話から字幕が出るようにする。接続失敗しても録音自体は続行（WhisperKit fallback）。
+            if PlanService.shared.isPaid {
+                await liveCoordinator.prepare()
+            }
+
             do {
                 try await recordingService.startRecording()
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -631,16 +700,24 @@ struct RecordView: View {
     private func saveLecture(title: String, courseName: String?) {
         guard let audioURL = pendingAudioURL else { return }
 
-        let lecture = Lecture(
+        // Live字幕で文字起こし済みなら、Deepgramの結果をそのまま採用してWhisperKit処理を省略
+        let liveResult = liveCoordinator.consumeFinalizedTranscript()
+
+        var lecture = Lecture(
             title: title,
             createdAt: Date(),
             duration: pendingDuration,
             audioPath: audioURL,
-            transcriptStatus: .notStarted,
+            transcriptStatus: liveResult != nil ? .completed : .notStarted,
             language: transcriptionService.transcriptionLanguage,
             bookmarks: pendingBookmarks,
             courseName: courseName
         )
+
+        if let live = liveResult {
+            lecture.transcriptText = live.text
+            lecture.transcriptSegments = live.segments
+        }
 
         let store = LectureStore.shared
         store.addLecture(lecture)
@@ -651,8 +728,11 @@ struct RecordView: View {
 
         NotificationCenter.default.post(name: .lectureRecordingCompleted, object: nil)
 
-        Task {
-            await startTranscription(for: lecture)
+        // Live結果が無いときだけWhisperKit fallback
+        if liveResult == nil {
+            Task {
+                await startTranscription(for: lecture)
+            }
         }
     }
 
@@ -707,6 +787,39 @@ struct RecordView: View {
         updatedLecture.transcriptStatus = .processing
         store.updateLecture(updatedLecture)
 
+        // Primary: Deepgram Prerecorded（有料プラン + オンライン + 認証済の時のみ）
+        // Free プランは WhisperKit にフォールバック（= 旧フロー完全復元）
+        if AuthService.shared.isAuthenticated && PlanService.shared.isPaid {
+            do {
+                let dgResult = try await DeepgramBatchService.shared.transcribe(audioURL: audioURL)
+                guard var latest = store.getLecture(by: lectureId) else { return }
+                latest.transcriptText = dgResult.text
+                latest.transcriptSegments = dgResult.segments
+                latest.transcriptStatus = .completed
+                if let lang = dgResult.language {
+                    // Deepgramが検出した言語が既存設定と違っても、設定は触らない（UIから手動変更可）
+                    AppLogger.info("Deepgram detected language: \(lang)", category: .transcription)
+                }
+                store.updateLecture(latest)
+
+                Task {
+                    await CloudSyncService.shared.uploadTranscriptIfEnabled(
+                        clientId: latest.id,
+                        title: latest.title,
+                        content: dgResult.text,
+                        createdAt: latest.createdAt,
+                        durationSeconds: latest.duration,
+                        language: transcriptionService.transcriptionLanguage.rawValue
+                    )
+                }
+                return
+            } catch {
+                AppLogger.warning("Deepgram batch failed (\(error.localizedDescription)) — falling back to WhisperKit", category: .transcription)
+                // continue to WhisperKit fallback below
+            }
+        }
+
+        // Fallback: WhisperKit (offline or Deepgram失敗時)
         transcriptionService.onChunkCompleted = { partialText, partialSegments in
             guard var latest = store.getLecture(by: lectureId) else { return }
             latest.transcriptText = partialText
@@ -824,7 +937,7 @@ private struct RecoverySheet: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 500)
 
-                    TextField("Course (optional)", text: $courseName)
+                    TextField("Subject (optional)", text: $courseName)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 500)
                 }

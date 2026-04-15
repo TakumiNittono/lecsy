@@ -26,6 +26,8 @@ class RecordingService: NSObject, ObservableObject {
     @Published var showLowAudioWarning = false
     @Published var unexpectedlySavedRecording: SavedRecording?
     @Published var stoppedAtMaxDuration = false
+    @Published var showMaxDurationWarning = false
+    @Published var remainingSecondsBeforeAutoStop: Int = 0
 
     /// Current duration computed from wall clock (for use outside UI)
     var currentDuration: TimeInterval {
@@ -53,8 +55,11 @@ class RecordingService: NSObject, ObservableObject {
     private var currentLectureTitle: String = "New Recording"
     private var pauseStartTime: Date? // Pause start time
 
-    // Support up to 100 minutes (6000 seconds) of recording
-    private let maxRecordingDuration: TimeInterval = 6000 // 100 minutes
+    // Support up to 180 minutes (10800 seconds = 3 hours) of recording.
+    // Covers the longest common university lecture format.
+    private let maxRecordingDuration: TimeInterval = 10800 // 180 minutes
+    // Show a warning banner 5 minutes before auto-stop
+    private let warningBeforeMax: TimeInterval = 300 // 5 minutes
 
     private var isAudioSessionPrepared = false
     private var recorderRestartCount = 0
@@ -89,6 +94,23 @@ class RecordingService: NSObject, ObservableObject {
             guard let self = self, self.isRecording else { return }
             // Only re-activate (don't setCategory — it causes audio glitches)
             try? AVAudioSession.sharedInstance().setActive(true, options: [])
+
+            // Wall-clock check: Timer is suspended in background, so the max-duration
+            // check may have been skipped. Catch it immediately on foreground return.
+            let elapsed = self.currentDuration
+            if elapsed >= self.maxRecordingDuration {
+                AppLogger.info("Foreground return: recording exceeded max duration (\(Int(elapsed))s), auto-saving", category: .recording)
+                self.stoppedAtMaxDuration = true
+                self.autoSaveAndNotify()
+                return
+            }
+            // Update warning state if approaching limit
+            let remaining = self.maxRecordingDuration - elapsed
+            if remaining <= self.warningBeforeMax {
+                self.showMaxDurationWarning = true
+                self.remainingSecondsBeforeAutoStop = Int(remaining)
+            }
+
             self.ensureRecorderIsRunning()
             self.restartMeteringTimerIfNeeded()
         }
@@ -106,18 +128,74 @@ class RecordingService: NSObject, ObservableObject {
                 self.persistRecordingState()
             } else if type == .ended {
                 AppLogger.debug("Audio interruption ended, attempting resume", category: .recording)
-                // Re-activate session after interruption (category is still correct)
-                try? AVAudioSession.sharedInstance().setActive(true, options: [])
-                if !self.isPaused {
-                    self.audioRecorder?.record()
+                // If mic permission was revoked during the interruption, bail out safely.
+                if AVAudioSession.sharedInstance().recordPermission != .granted {
+                    AppLogger.error("Mic permission revoked during interruption — auto-saving", category: .recording)
+                    self.autoSaveAndNotify()
+                    return
                 }
+                // Re-activate session after interruption (category is still correct)
+                self.restoreAudioSessionIfNeeded()
+                if !self.isPaused {
+                    let remaining = max(1, self.maxRecordingDuration - self.recordingDuration)
+                    self.audioRecorder?.record(forDuration: remaining)
+                }
+                // Hard-verify the recorder actually came back; restart if not.
+                self.ensureRecorderIsRunning()
+                self.persistRecordingState()
             }
         }
 
-        // NOTE: routeChangeNotification is intentionally NOT handled here.
-        // Calling setCategory/setActive during an active recording causes audio glitches.
-        // AVAudioRecorder handles route changes internally (e.g. switches to built-in mic
-        // when Bluetooth disconnects). We don't need to intervene.
+        // Route changes (headphone unplug, Bluetooth disconnect): don't touch the
+        // session, but verify the recorder is still producing data. If iOS paused
+        // us, kick it back on.
+        nc.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, self.isRecording, !self.isPaused else { return }
+            self.ensureRecorderIsRunning()
+            self.persistRecordingState()
+        }
+
+        // Media services reset (rare but fatal): iOS has torn down the audio stack.
+        // We must re-prepare the session and recreate the recorder pointing at the
+        // *same* file so existing audio is preserved — AVAudioRecorder will append.
+        nc.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, self.isRecording else { return }
+            AppLogger.error("mediaServicesWereReset — persisting & attempting recovery", category: .recording)
+            self.persistRecordingState()
+            self.isAudioSessionPrepared = false
+            self.restoreAudioSessionIfNeeded()
+            // Last-resort: auto-save whatever we have so the user never loses the take.
+            // A fresh recording can be started manually — partial data is safe on disk.
+            self.autoSaveAndNotify()
+        }
+
+        // Thermal state: on serious/critical, checkpoint aggressively so a forced
+        // shutdown by the OS still leaves a recoverable file.
+        nc.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, self.isRecording else { return }
+            let state = ProcessInfo.processInfo.thermalState
+            AppLogger.warning("Thermal state changed: \(state.rawValue)", category: .recording)
+            if state == .serious || state == .critical {
+                // Drop metering overhead and checkpoint immediately.
+                self.meteringTimer?.invalidate()
+                self.meteringTimer = nil
+                self.audioLevelHistory = []
+                self.audioLevel = 0
+                self.persistRecordingState()
+            }
+        }
+
+        // Device locked with "Require Password Immediately" — file protection may
+        // pull the rug out. Checkpoint so recoverOrphanedRecording() can save us.
+        nc.addObserver(forName: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, self.isRecording else { return }
+            AppLogger.warning("Protected data becoming unavailable — checkpointing", category: .recording)
+            self.persistRecordingState()
+        }
+        nc.addObserver(forName: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, self.isRecording else { return }
+            self.ensureRecorderIsRunning()
+        }
 
         // Handle memory warnings — reduce non-essential work but keep recording
         nc.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
@@ -265,6 +343,8 @@ class RecordingService: NSObject, ObservableObject {
         pausedDuration = 0
         audioLevel = 0
         audioLevelHistory = Array(repeating: 0, count: 30)
+        showMaxDurationWarning = false
+        remainingSecondsBeforeAutoStop = 0
 
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         isAudioSessionPrepared = false
@@ -306,7 +386,8 @@ class RecordingService: NSObject, ObservableObject {
         if !recorder.isRecording {
             if recorderRestartCount < maxRecorderRestarts {
                 AppLogger.warning("Recorder stopped unexpectedly, attempting restart (\(recorderRestartCount + 1)/\(maxRecorderRestarts))", category: .recording)
-                recorder.record()
+                let remaining = max(1, maxRecordingDuration - recordingDuration)
+                recorder.record(forDuration: remaining)
                 recorderRestartCount += 1
             }
         }
@@ -389,8 +470,8 @@ class RecordingService: NSObject, ObservableObject {
             throw RecordingError.permissionDenied
         }
         
-        // Check disk space (approximately 50-100MB needed for 100 minutes of recording)
-        let requiredSpace: Int64 = 100 * 1024 * 1024 // 100MB
+        // Check disk space (approximately 90-180MB needed for 180 minutes at 64kbps)
+        let requiredSpace: Int64 = 200 * 1024 * 1024 // 200MB
         if let availableSpace = getAvailableDiskSpace(), availableSpace < requiredSpace {
             AppLogger.debug("Insufficient disk space: Available \(availableSpace / 1024 / 1024)MB, Required \(requiredSpace / 1024 / 1024)MB", category: .recording)
             throw RecordingError.insufficientStorage
@@ -437,7 +518,7 @@ class RecordingService: NSObject, ObservableObject {
             AVSampleRateKey: 44100.0,
             AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue, // Changed to medium for long recording
-            AVEncoderBitRateKey: 64000 // 64kbps (approximately 50MB for 100 minutes)
+            AVEncoderBitRateKey: 64000 // 64kbps (~50MB/100min, ~90MB/180min)
         ]
         
         // Start recording
@@ -447,13 +528,28 @@ class RecordingService: NSObject, ObservableObject {
             audioRecorder?.delegate = self
             audioRecorder?.isMeteringEnabled = true
 
-            let recordingStarted = audioRecorder?.record() ?? false
+            // Use record(forDuration:) as a hard backstop — AVAudioRecorder
+            // enforces this in the audio system, even when the app is suspended
+            // in background. The Timer-based check is a soft fallback only.
+            let recordingStarted = audioRecorder?.record(forDuration: maxRecordingDuration) ?? false
             AppLogger.debug("Recording started: \(recordingStarted)", category: .recording)
             
             if !recordingStarted {
                 AppLogger.error("Failed to start recording", category: .recording)
                 throw RecordingError.recordingFailed
             }
+
+            // Protect audio file: completeUntilFirstUserAuthentication is safe for
+            // background recording (does NOT lock when device locks). Also exclude
+            // from iCloud/iTunes backup so audio stays on-device only.
+            try? FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                ofItemAtPath: url.path
+            )
+            var protectedURL = url
+            var rv = URLResourceValues()
+            rv.isExcludedFromBackup = true
+            try? protectedURL.setResourceValues(rv)
         } catch {
             AppLogger.error("AVAudioRecorder creation/start error: \(error)", category: .recording)
             throw RecordingError.recordingFailed
@@ -487,6 +583,17 @@ class RecordingService: NSObject, ObservableObject {
             if Int(self.recordingDuration) % 10 == 0 {
                 self.persistRecordingState()
             }
+            // Show warning banner when approaching the limit
+            let remaining = self.maxRecordingDuration - self.recordingDuration
+            if remaining <= self.warningBeforeMax && remaining > 0 {
+                if !self.showMaxDurationWarning {
+                    AppLogger.info("Recording approaching max duration — \(Int(remaining))s remaining", category: .recording)
+                }
+                self.showMaxDurationWarning = true
+                self.remainingSecondsBeforeAutoStop = Int(remaining)
+            }
+            // Soft check (belt): Timer may not fire reliably in background,
+            // but record(forDuration:) is the hard backstop.
             if self.recordingDuration >= self.maxRecordingDuration {
                 AppLogger.info("Max recording duration reached (\(Int(self.maxRecordingDuration))s), auto-saving", category: .recording)
                 self.stoppedAtMaxDuration = true
@@ -561,7 +668,9 @@ class RecordingService: NSObject, ObservableObject {
             pauseStartTime = nil
         }
 
-        audioRecorder?.record()
+        // Re-start with remaining duration so the hard backstop stays active
+        let remaining = max(1, maxRecordingDuration - recordingDuration)
+        audioRecorder?.record(forDuration: remaining)
         isPaused = false
 
         // Persist state immediately
@@ -591,6 +700,8 @@ class RecordingService: NSObject, ObservableObject {
         pauseStartTime = nil
         audioLevel = 0
         audioLevelHistory = Array(repeating: 0, count: 30)
+        showMaxDurationWarning = false
+        remainingSecondsBeforeAutoStop = 0
 
         // Clear crash-recovery state (recording completed normally)
         clearPersistedRecordingState()
@@ -809,7 +920,7 @@ class RecordingService: NSObject, ObservableObject {
             case .recordingFailed:
                 return "Recording failed"
             case .insufficientStorage:
-                return "Insufficient storage space. At least 100MB of free space is required."
+                return "Insufficient storage space. At least 200MB of free space is required."
             }
         }
     }
@@ -825,11 +936,20 @@ extension RecordingService: AVAudioRecorderDelegate {
                 return
             }
             guard recorder === audioRecorder else { return }
+            guard isRecording else { return }
 
-            if !flag && isRecording {
-                // Recording failed unexpectedly — persist state for recovery
-                AppLogger.warning("Recorder finished unexpectedly (success=false)", category: .recording)
+            if flag {
+                // Recorder stopped on its own with success — this means
+                // record(forDuration:) hit the time limit. Auto-save.
+                AppLogger.info("Recorder finished (forDuration limit reached in \(flag ? "background" : "foreground")), auto-saving", category: .recording)
+                stoppedAtMaxDuration = true
+                autoSaveAndNotify()
+            } else {
+                // Recording failed unexpectedly — auto-save whatever we have.
+                // Partial data is better than losing the entire session.
+                AppLogger.warning("Recorder finished unexpectedly (success=false), auto-saving", category: .recording)
                 persistRecordingState()
+                autoSaveAndNotify()
             }
         }
     }
@@ -837,7 +957,11 @@ extension RecordingService: AVAudioRecorderDelegate {
     nonisolated func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
         Task { @MainActor in
             AppLogger.error("Recording encode error: \(error?.localizedDescription ?? "Unknown error")", category: .recording)
+            // Checkpoint first so whatever is on disk is safe, then auto-save the
+            // take as a Lecture. Better to give the user a slightly shorter file
+            // than to keep a dead recorder running and lose the whole session.
             persistRecordingState()
+            autoSaveAndNotify()
         }
     }
 
@@ -851,9 +975,13 @@ extension RecordingService: AVAudioRecorderDelegate {
     nonisolated func audioRecorderEndInterruption(_ recorder: AVAudioRecorder, withOptions flags: Int) {
         Task { @MainActor in
             AppLogger.debug("Recording interruption ended", category: .recording)
+            restoreAudioSessionIfNeeded()
             if isRecording && !isPaused {
-                audioRecorder?.record()
+                let remaining = max(1, maxRecordingDuration - recordingDuration)
+                audioRecorder?.record(forDuration: remaining)
             }
+            ensureRecorderIsRunning()
+            persistRecordingState()
         }
     }
 }
