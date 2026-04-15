@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 
 interface AISummaryButtonProps {
   transcriptId: string
-  isPro: boolean
+  /** Retained for backwards compatibility. Ignored during the "Free Until June 1" campaign. */
+  isPro?: boolean
 }
 
 interface SummaryResponse {
@@ -28,32 +29,13 @@ const LANGUAGES = [
   { code: 'de', label: 'Deutsch', name: 'German' },
 ]
 
-export default function AISummaryButton({ transcriptId, isPro }: AISummaryButtonProps) {
+export default function AISummaryButton({ transcriptId }: AISummaryButtonProps) {
   const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState<SummaryResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedLanguage, setSelectedLanguage] = useState('ja')
   const router = useRouter()
-
-  if (!isPro) {
-    return (
-      <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-semibold text-gray-900">AI Summary</span>
-          <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-full font-semibold">Pro</span>
-        </div>
-        <p className="text-xs text-gray-600 mb-3">
-          Upgrade to Pro to unlock AI-powered summaries
-        </p>
-        <button
-          onClick={() => router.push('/app#subscription')}
-          className="w-full text-sm py-2 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
-        >
-          Upgrade to Pro — $2.99/mo
-        </button>
-      </div>
-    )
-  }
+  void router
 
   const handleSummarize = async () => {
     setLoading(true)

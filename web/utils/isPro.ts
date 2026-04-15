@@ -1,22 +1,25 @@
 // Centralized "is this user Pro?" check.
 //
-// A user is considered Pro if ANY of:
-//   1) Their email is in WHITELIST_EMAILS env var (developer/comp access)
-//   2) They have an individual Stripe subscription with status='active'
-//   3) They are an active member of any organization on the 'pro' plan
+// Access policy (memo.md フェーズ1, 2026-04-15〜):
+//   Free が default。Stripe sub / Beta org member (lecsy-beta) のみ Pro 扱い。
+//   キャンペーン全員Pro昇格は撤廃。
 //
-// Use this everywhere that gates Pro features instead of hand-rolling
-// the same predicate, otherwise B2B users will be shown "Upgrade" UIs
-// even though their school already paid.
+// Edge Function側 (deepgram-token, translate-realtime) と一致させる必要あり。
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-const PAID_PLANS = ['pro'] as const
+/** レガシー: キャンペーン終了日時 (まだ参照してる箇所の互換用。実機能は死んでる) */
+export const CAMPAIGN_END_ISO = '2026-06-01T00:00:00+09:00'
+
+export function isCampaignActive(_now: Date = new Date()): boolean {
+  // 撤廃済 — 常に false
+  return false
+}
 
 export interface ProStatus {
   isPro: boolean
-  /** Specific source so the UI can show "Free / Personal Pro / via [School Name]" etc. */
-  source: 'whitelist' | 'individual' | 'organization' | 'none'
+  /** Source of Pro status */
+  source: 'free-for-all' | 'whitelist' | 'individual' | 'organization' | 'none'
   /** When source = 'organization', the org's name (for the badge in the UI). */
   orgName?: string
   /** Raw individual subscription, if any (kept for currentPeriodEnd display). */
@@ -25,55 +28,62 @@ export interface ProStatus {
     current_period_end: string | null
     cancel_at_period_end: boolean | null
   } | null
+  /** Deprecated: always false */
+  campaignActive?: boolean
+  campaignEndsAt?: string
 }
 
 export async function getProStatus(
   supabase: SupabaseClient,
   user: { id: string; email?: string | null }
 ): Promise<ProStatus> {
-  // 1. Whitelist
-  const whitelist = (process.env.WHITELIST_EMAILS ?? '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
-  if (user.email && whitelist.includes(user.email.toLowerCase())) {
-    return { isPro: true, source: 'whitelist' }
-  }
-
-  // 2. Individual Stripe subscription
+  // 個人 Stripe サブスク
   const { data: subscription } = await supabase
     .from('subscriptions')
     .select('status, current_period_end, cancel_at_period_end')
     .eq('user_id', user.id)
     .maybeSingle()
 
-  if (subscription?.status === 'active') {
-    return { isPro: true, source: 'individual', subscription }
-  }
+  const hasActiveSub =
+    subscription?.status === 'active' || subscription?.status === 'trialing'
 
-  // 3. Organization membership in a paid plan
-  // Note: this query goes through RLS — the user can only see orgs they're
-  // a member of, which is exactly what we want.
-  const { data: orgMemberships } = await supabase
-    .from('organization_members')
-    .select('role, status, organizations(name, plan)')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-
-  if (orgMemberships) {
-    for (const m of orgMemberships) {
-      // Supabase typing for joined relations is loose; defensively coerce.
-      const org = (m as { organizations?: { name?: string; plan?: string } | null }).organizations
-      if (org?.plan && (PAID_PLANS as readonly string[]).includes(org.plan)) {
-        return {
-          isPro: true,
-          source: 'organization',
-          orgName: org.name,
-          subscription,
-        }
-      }
+  if (hasActiveSub) {
+    return {
+      isPro: true,
+      source: 'individual',
+      subscription,
+      campaignActive: false,
+      campaignEndsAt: CAMPAIGN_END_ISO,
     }
   }
 
-  return { isPro: false, source: 'none', subscription }
+  // Beta / B2B org member チェック
+  const { data: orgMember } = await supabase
+    .from('organization_members')
+    .select('organizations!inner(plan, name)')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .limit(1)
+    .maybeSingle()
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const org = (orgMember as any)?.organizations
+  if (org?.plan === 'pro') {
+    return {
+      isPro: true,
+      source: 'organization',
+      orgName: org.name as string | undefined,
+      subscription,
+      campaignActive: false,
+      campaignEndsAt: CAMPAIGN_END_ISO,
+    }
+  }
+
+  return {
+    isPro: false,
+    source: 'none',
+    subscription,
+    campaignActive: false,
+    campaignEndsAt: CAMPAIGN_END_ISO,
+  }
 }

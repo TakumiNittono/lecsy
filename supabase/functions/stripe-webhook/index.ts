@@ -190,7 +190,13 @@ serve(async (req) => {
         }
 
         try {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+            expand: ["items.data.price"],
+          });
+
+          // price_lookup_key を取り出して保存 (plan判定用)
+          const item = subscription.items?.data?.[0];
+          const lookupKey = (item?.price as Stripe.Price | undefined)?.lookup_key ?? null;
 
           const { error: upsertError } = await supabase.from("subscriptions").upsert({
             user_id: userId,
@@ -198,6 +204,7 @@ serve(async (req) => {
             provider: "stripe",
             stripe_customer_id: session.customer as string,
             stripe_subscription_id: subscriptionId,
+            price_lookup_key: lookupKey,
             current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
             current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
           });
@@ -229,10 +236,15 @@ serve(async (req) => {
           break;
         }
 
+        // price_lookup_key もここで更新 (プラン変更・upgrade時に反映)
+        const item = subscription.items?.data?.[0];
+        const lookupKey = (item?.price as Stripe.Price | undefined)?.lookup_key ?? null;
+
         const { error: updateError } = await supabase
           .from("subscriptions")
           .update({
             status: subscription.status === "active" ? "active" : subscription.status,
+            price_lookup_key: lookupKey,
             current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
             cancel_at_period_end: subscription.cancel_at_period_end,
           })

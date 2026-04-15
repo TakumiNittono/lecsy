@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 
 interface ExamModeButtonProps {
   transcriptId: string
-  isPro: boolean
+  /** Retained for backwards compatibility. Ignored during the "Free Until June 1" campaign. */
+  isPro?: boolean
 }
 
 interface ExamResponse {
@@ -31,33 +32,14 @@ const LANGUAGES = [
   { code: 'de', label: 'Deutsch', name: 'German' },
 ]
 
-export default function ExamModeButton({ transcriptId, isPro }: ExamModeButtonProps) {
+export default function ExamModeButton({ transcriptId }: ExamModeButtonProps) {
   const [loading, setLoading] = useState(false)
   const [examData, setExamData] = useState<ExamResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showAnswers, setShowAnswers] = useState<Record<number, boolean>>({})
   const [selectedLanguage, setSelectedLanguage] = useState('ja')
   const router = useRouter()
-
-  if (!isPro) {
-    return (
-      <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-semibold text-gray-900">Exam Prep Mode</span>
-          <span className="px-2 py-1 bg-purple-600 text-white text-xs rounded-full font-semibold">Pro</span>
-        </div>
-        <p className="text-xs text-gray-600 mb-3">
-          Upgrade to Pro to unlock exam preparation tools
-        </p>
-        <button
-          onClick={() => router.push('/app#subscription')}
-          className="w-full text-sm py-2 px-4 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
-        >
-          Upgrade to Pro — $2.99/mo
-        </button>
-      </div>
-    )
-  }
+  void router
 
   const handleGenerateExam = async () => {
     setLoading(true)
