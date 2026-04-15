@@ -1,0 +1,428 @@
+name,email,title,school,department,tier,category,expected_value
+Patrick C. Kennell,pkennell@admin.fsu.edu,Director,Florida State University,Center for Intensive English Studies,Tier1,ESL Director,Decision maker for IEP program adoption
+Felicia Ciappetta,fac5828@fsu.edu,Instructor,Florida State University,Center for Intensive English Studies,Tier4,ESL Faculty,Internal champion for classroom tools
+Ryan Flemming,rflemming@fsu.edu,Instructor - Computer Lab Coordinator,Florida State University,Center for Intensive English Studies,Tier4,ESL Faculty,EdTech evaluator + instructor
+Olivia James,ojames@fsu.edu,Instructor - Academic Liaison,Florida State University,Center for Intensive English Studies,Tier2,Academic Coordinator,Bridge to FSU admissions + student referral
+Angel Rios,arios@fsu.edu,Instructor and Academic Coordinator,Florida State University,Center for Intensive English Studies,Tier2,Academic Coordinator,Curriculum integration + testing
+Maria Beatriz Mendoza,mmendoza@admin.fsu.edu,EAP Instructor/Coordinator,Florida State University,Center for Intensive English Studies,Tier4,ESL Faculty,EAP curriculum + writing tools
+Jenny Grill,jgrill@fsu.edu,EAP Instructor,Florida State University,Center for Intensive English Studies,Tier4,ESL Faculty,EAP classroom adoption
+Ah-Young Kim,ayk03@fsu.edu,CIES-TEFL Program Instructor,Florida State University,Center for Intensive English Studies,Tier4,ESL Faculty,Teacher training + student referral
+Megan Forbes,,Director,University of Florida,English Language Institute,Tier1,ESL Director,Decision maker for ELI program adoption
+Patricia Moon,,Associate Director,University of Florida,English Language Institute,Tier2,ESL Admin,Co-decision maker for ELI
+Daryl Bish,,Assistant Director,University of Florida,English Language Institute,Tier2,ESL Admin,Tool evaluation + implementation
+Lia Brenneman,,Assistant Director,University of Florida,English Language Institute,Tier2,ESL Admin,Tool evaluation + implementation
+Jolee Gibbs,,Administrative Specialist,University of Florida,English Language Institute,Tier4,ESL Staff,Operations + scheduling
+Minsang Kim,,Academic Assistant,University of Florida,English Language Institute,Tier4,ESL Staff,Academic support
+Tate Quinones,,Cultural Immersion Coordinator,University of Florida,English Language Institute,Tier4,ESL Staff,Student engagement + cultural programs
+Christine Voigt,,Student Life Coordinator,University of Florida,English Language Institute,Tier4,ESL Staff,Student life + referral
+Todd Allen,,Instructor,University of Florida,English Language Institute,Tier4,ESL Faculty,Classroom adoption
+Lynne Clark,,Instructor,University of Florida,English Language Institute,Tier4,ESL Faculty,Classroom adoption
+Thomas Dolce,,Instructor,University of Florida,English Language Institute,Tier4,ESL Faculty,Classroom adoption
+Patrick Klager,,Instructor,University of Florida,English Language Institute,Tier4,ESL Faculty,Classroom adoption
+Olga Moody,,Instructor,University of Florida,English Language Institute,Tier4,ESL Faculty,Classroom adoption
+Jen Ramos,,Instructor,University of Florida,English Language Institute,Tier4,ESL Faculty,Classroom adoption
+Maya Shastri,,Instructor,University of Florida,English Language Institute,Tier4,ESL Faculty,Classroom adoption
+Jenna Gonzalez,drc@ufsa.ufl.edu,Director,University of Florida,Disability Resource Center,Tier3,DRC Director,ADA compliance budget holder - key buyer
+Rita Inman,accommodations@ufsa.ufl.edu,Associate Director,University of Florida,Disability Resource Center,Tier3,DRC Admin,Accommodations decision maker
+Lisa Diekow,DRCTesting@ufsa.ufl.edu,Associate Director for Testing Services,University of Florida,Disability Resource Center,Tier3,DRC Admin,Testing accommodations
+Kelley Hoover,accommodations@ufsa.ufl.edu,Assistant Director for Access,University of Florida,Disability Resource Center,Tier3,DRC Staff,Access accommodations
+Katherine Morgan,accommodations@ufsa.ufl.edu,Assistant Director Health Science,University of Florida,Disability Resource Center,Tier3,DRC Staff,Health science accommodations
+Cassie Vale,DRCTesting@ufsa.ufl.edu,Assistant Director for Testing Services,University of Florida,Disability Resource Center,Tier3,DRC Staff,Testing services
+Monica Bennett,drc@ufsa.ufl.edu,Office Manager,University of Florida,Disability Resource Center,Tier4,DRC Staff,Office operations
+Dayna Brooker,accommodations@ufsa.ufl.edu,Accessibility Specialist,University of Florida,Disability Resource Center,Tier4,DRC Staff,Individual student accommodations
+Kathy Barnes,accommodations@ufsa.ufl.edu,Accessibility Specialist,University of Florida,Disability Resource Center,Tier4,DRC Staff,Individual student accommodations
+Nicole Campanella,accommodations@ufsa.ufl.edu,Assistive Technology Specialist,University of Florida,Disability Resource Center,Tier3,DRC Tech,Assistive tech evaluator - key contact
+Drew Dees,accommodations@ufsa.ufl.edu,Accessibility Specialist,University of Florida,Disability Resource Center,Tier4,DRC Staff,Individual student accommodations
+Kristina Keene,accommodations@ufsa.ufl.edu,Accessibility Specialist,University of Florida,Disability Resource Center,Tier4,DRC Staff,Individual student accommodations
+Parker Schilling,accommodations@ufsa.ufl.edu,Housing Accessibility Specialist,University of Florida,Disability Resource Center,Tier4,DRC Staff,Housing accommodations
+Kayla Smith,accommodations@ufsa.ufl.edu,Accessibility Specialist,University of Florida,Disability Resource Center,Tier4,DRC Staff,Individual student accommodations
+David Herman,,Clinical Assistant Professor,University of Florida,ESOL/Bilingual Education,Tier4,TESOL Faculty,Teacher training + research
+Mark Pacheco,,Assistant Professor,University of Florida,ESOL/Bilingual Education,Tier4,TESOL Faculty,Research + teacher training
+Sara Smith,,Associate Professor,University of Florida,ESOL/Bilingual Education,Tier4,TESOL Faculty,Research + industry connections
+Timothy Vetere,,Clinical Assistant Professor,University of Florida,ESOL/Bilingual Education,Tier4,TESOL Faculty,Teacher training
+Amanda Niguidula,xniguidu@fiu.edu,Director,Florida International University,Disability Resource Center,Tier3,DRC Director,ADA compliance budget holder
+Martha Betancourt Wong,mwong@fiu.edu,Associate Director,Florida International University,Disability Resource Center,Tier3,DRC Admin,Admin services decision maker
+Kim Hunter,khunter@fiu.edu,Assistant Director,Florida International University,Disability Resource Center,Tier3,DRC Admin,Academic support services
+Ashley Pozos Romero,apozosro@fiu.edu,Assistive Technology Manager,Florida International University,Disability Resource Center,Tier3,DRC Tech,Assistive tech evaluator - key contact
+Joanna Lindsay,lindsayj@fiu.edu,Access Consultant,Florida International University,Disability Resource Center,Tier4,DRC Staff,Student accommodations
+Laura Rodriguez Morejon,lbrodrig@fiu.edu,Access Consultant,Florida International University,Disability Resource Center,Tier4,DRC Staff,Student accommodations
+Fernanda Penalba,fpenalba@fiu.edu,Access Consultant,Florida International University,Disability Resource Center,Tier4,DRC Staff,Student accommodations
+Yesenis De La Paz,yesegarc@fiu.edu,Access Consultant,Florida International University,Disability Resource Center,Tier4,DRC Staff,Student accommodations
+Adam Meyer,Adam.Meyer@ucf.edu,Director,University of Central Florida,Student Accessibility Services,Tier3,DRC Director,ADA compliance budget holder
+Johanna Huerta,Johanna.Huerta@ucf.edu,Assistant Director - Communication Access,University of Central Florida,Student Accessibility Services,Tier3,DRC Admin,Communication access - captioning
+Kiela Sims,Kiela.Sims@ucf.edu,Assistant Director - Testing,University of Central Florida,Student Accessibility Services,Tier3,DRC Admin,Testing accommodations
+Alison Keefe,Alison.Keefe@ucf.edu,Communication Access Coordinator,University of Central Florida,Student Accessibility Services,Tier3,DRC Staff,Captioning coordination
+Don Pirozzoli,Donald.Pirozzoli@ucf.edu,Accessibility Consultant,University of Central Florida,Student Accessibility Services,Tier4,DRC Staff,Student accommodations
+Elise Dellinger,Elise.Dellinger@ucf.edu,Accessibility Consultant,University of Central Florida,Student Accessibility Services,Tier4,DRC Staff,Student accommodations
+Joshua Levins,Joshua.Levins@ucf.edu,Testing Coordinator,University of Central Florida,Student Accessibility Services,Tier4,DRC Staff,Testing accommodations
+Katherine Virella,Katherine.Virella@ucf.edu,Accessibility Consultant,University of Central Florida,Student Accessibility Services,Tier4,DRC Staff,Student accommodations
+Missy Lesnewski,Melissa.Lesnewski@ucf.edu,Accessibility Consultant,University of Central Florida,Student Accessibility Services,Tier4,DRC Staff,Student accommodations
+Teah Ruiz,Teah.Ruiz@ucf.edu,Accessibility Consultant,University of Central Florida,Student Accessibility Services,Tier4,DRC Staff,Student accommodations
+Amanda Carbonneau,Amanda.Carbonneau@ucf.edu,Office Assistant,University of Central Florida,Student Accessibility Services,Tier4,DRC Staff,Office operations
+Ana Guerra,Ana.Guerra@ucf.edu,Testing Specialist,University of Central Florida,Student Accessibility Services,Tier4,DRC Staff,Testing
+Kisha Campos,Laquisha.Campos@ucf.edu,Testing Specialist,University of Central Florida,Student Accessibility Services,Tier4,DRC Staff,Testing
+Angelia Smith,Angelia@ucf.edu,UCF Connect Director,University of Central Florida,Student Accessibility Services,Tier3,DRC Admin,Multi-campus accessibility
+Tanya Armstrong,Tanya.Armstrong@ucf.edu,SAS Connect - Valencia West,University of Central Florida,Student Accessibility Services,Tier4,DRC Staff,Valencia West campus
+Georgia Kent,Georgia.Kent@ucf.edu,Success Coach Manager,University of Central Florida,Student Accessibility Services,Tier4,DRC Staff,Student success coaching
+Kerry Lynn Purmensky,Kerry.Purmensky@ucf.edu,Professor - TESOL,University of Central Florida,Modern Languages and Literatures,Tier4,TESOL Faculty,TESOL program lead + research
+Dr. Mihaela N. Metianu,mmetianu@fau.edu,AVP Global Engagement,Florida Atlantic University,International Services,Tier0,Senior Admin,Top decision maker for international programs
+Edyta Mika-Klimczak,eklimcza@fau.edu,Senior Director,Florida Atlantic University,International Services,Tier1,ISS Director,International services leader
+Jennifer Szekeres,jszekere@fau.edu,Associate Director,Florida Atlantic University,International Services,Tier2,ISS Admin,International admissions + compliance
+Maggie Ng,kakeing@fau.edu,Assistant Director,Florida Atlantic University,International Services,Tier2,ISS Admin,F-1 advising
+Myrtha Senat,msenat@fau.edu,Administrative Paraprofessional,Florida Atlantic University,International Services,Tier5,ISS Staff,Admin support
+Nhi Truong,ntruong2014@fau.edu,Coordinator Foreign Credential,Florida Atlantic University,International Services,Tier5,ISS Staff,Credential evaluation
+Melinda Avila,avilam2018@fau.edu,Coordinator,Florida Atlantic University,International Services,Tier5,ISS Staff,Student services coordination
+Niurka Leon,,Department Chairperson,Miami Dade College - Padron,World Languages / ESL,Tier1,ESL Director,Department budget holder
+Heidi Calderon,hcalder1@mdc.edu,Assistant to the Chair,Miami Dade College - Padron,World Languages / ESL,Tier4,ESL Staff,Admin support
+Mabel Rodriguez Hernandez,mrodri91@mdc.edu,Secretary,Miami Dade College - Padron,World Languages / ESL,Tier4,ESL Staff,Office operations
+Dr. Ricardo Bardo-Portilla,rbardopo@mdc.edu,Faculty,Miami Dade College - Padron,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+James Couper,jcouper@mdc.edu,Faculty,Miami Dade College - Padron,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Frank Elsea,felsea@mdc.edu,Faculty,Miami Dade College - Padron,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Raquel Fundora,rfundora@mdc.edu,Faculty,Miami Dade College - Padron,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Rosalie M. Kolesar,rkolesar@mdc.edu,Faculty,Miami Dade College - Padron,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Frederick Richmond,frichmon@mdc.edu,Faculty,Miami Dade College - Padron,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Diana Tang,dtang@mdc.edu,Faculty,Miami Dade College - Padron,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Dr. Adrianne Aiko Thompson,athompso@mdc.edu,Faculty,Miami Dade College - Padron,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Margaret Shippey,mshippey@mdc.edu,Faculty,Miami Dade College - Padron,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Xuejun (Jim) Yu,xyu@mdc.edu,Chairperson,Miami Dade College - Wolfson,World Languages / ESL,Tier1,ESL Director,Department budget holder
+Erika Balladares,eballada@mdc.edu,Assistant to the Chair,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Staff,Admin support
+Sergio Leon,sleon@mdc.edu,Academic Lab Manager,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Staff,Lab technology
+Dorothy Avondstondt,davondst@mdc.edu,Faculty,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Pradel Frank,pfrank@mdc.edu,Faculty,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Daphnee Gilles,dgilles@mdc.edu,Faculty,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Maria Jofre,mjofre@mdc.edu,Faculty,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Carol Krech,ckrechr@mdc.edu,Faculty,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Corey Mass,cmass@mdc.edu,Faculty,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Maureen McCarthy,mmccarth@mdc.edu,Faculty,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Patricia Nation,pnation@mdc.edu,Faculty,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Elizabeth Ramsay,eramsay@mdc.edu,Faculty,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Norma Riccio,nriccio@mdc.edu,Faculty,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Angela Tavares-Sogocio,atavares@mdc.edu,Faculty,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Mary Ramirez Sanguino,mramir1@mdc.edu,Part-Time Clerk,Miami Dade College - Wolfson,World Languages / ESL,Tier4,ESL Staff,Admin support
+Allison Dinsmore,adinsmore1@usf.edu,Student Accessibility Services,University of South Florida - St. Petersburg,Student Accessibility,Tier3,DRC Staff,SAS contact St. Pete campus
+Alyssa Burns,aburns4@usf.edu,Assistant Director SAS,University of South Florida - Sarasota,Student Accessibility,Tier3,DRC Admin,SAS contact Sarasota campus
+Dr. Rhonda Bobb,rbobb@broward.edu,Associate Dean - Academic Affairs,Broward College,EAP Program,Tier1,ESL Director,Academic affairs decision maker
+Michael Newman,mnewman@broward.edu,Associate Professor,Broward College,EAP Program,Tier4,ESL Faculty,Classroom adoption
+Dr. Maria Bernal,mbernald@broward.edu,Associate Professor,Broward College,EAP Program,Tier4,ESL Faculty,Classroom adoption
+Dr. Renata Pavanelli,rpavanel@broward.edu,Associate Professor,Broward College,EAP Program,Tier4,ESL Faculty,Classroom adoption
+Ariana Bianchi,abianchi@broward.edu,Associate Dean - Academic Affairs,Broward College,EAP Program,Tier1,ESL Director,Academic affairs decision maker
+Victoria Noorzai,vnoorzai@broward.edu,Associate Professor,Broward College,EAP Program,Tier4,ESL Faculty,Classroom adoption
+Alexandra Mason,amason@broward.edu,Associate Professor,Broward College,EAP Program,Tier4,ESL Faculty,Classroom adoption
+Dr. Caroline Webb,cwebb1@broward.edu,Associate Professor,Broward College,EAP Program,Tier4,ESL Faculty,Classroom adoption
+Zakiya Odoi,zodoi@broward.edu,Interim Associate Dean,Broward College,EAP Program,Tier1,ESL Director,Interim academic affairs lead
+Elisa Albo,ealbo@broward.edu,Associate Professor,Broward College,EAP Program,Tier4,ESL Faculty,Classroom adoption
+Darenda Borgers,dborgers@broward.edu,Assistant Professor,Broward College,EAP Program,Tier4,ESL Faculty,Classroom adoption
+Dr. Andrea Apa,aapa@broward.edu,Senior Professor,Broward College,EAP Program,Tier4,ESL Faculty,Senior faculty - influence
+Maureen Forbes,mforbes@broward.edu,Associate Professor,Broward College,EAP Program,Tier4,ESL Faculty,Classroom adoption
+Sanjeev Agrawal,sagrawal@broward.edu,Assistant Professor,Broward College,EAP Program,Tier4,ESL Faculty,Classroom adoption
+Dr. Heather Perez,hperez3@broward.edu,Associate Dean - Academic Affairs,Broward College,EAP Program,Tier1,ESL Director,Academic affairs decision maker
+Joseph Sarrubbo,jsarrubbo@valenciacollege.edu,AVP Enrollment Services,Valencia College,International Student Services,Tier0,Senior Admin,Enrollment decision maker
+Michelle Torres,mtorres45@valenciacollege.edu,Director ISS,Valencia College,International Student Services,Tier1,ISS Director,International student services lead
+Holly Bouma,hbouma1@valenciacollege.edu,Assistant Director Intl Admissions,Valencia College,International Student Services,Tier2,ISS Admin,International admissions
+Ivy Cortes,mcortes16@valenciacollege.edu,Intl Admissions Specialist West,Valencia College,International Student Services,Tier5,ISS Staff,West campus admissions
+Nathaly Munoz Iguaran,nmunoz8@valenciacollege.edu,Intl Admissions Specialist East,Valencia College,International Student Services,Tier5,ISS Staff,East campus admissions
+Josue Guedes,jguedes@valenciacollege.edu,Intl Admissions Specialist,Valencia College,International Student Services,Tier5,ISS Staff,Admissions processing
+Angela Otero,aotero29@valenciacollege.edu,Intl Admissions Specialist West,Valencia College,International Student Services,Tier5,ISS Staff,West campus admissions
+Anderson Perez,aperez158@valenciacollege.edu,Assistant Director Intl Student Success,Valencia College,International Student Services,Tier2,ISS Admin,Student success programs
+William Westlake,dwestlake@valenciacollege.edu,Coordinator Intl Student Success West,Valencia College,International Student Services,Tier5,ISS Staff,West campus success
+Anthony Massey,amassey16@valenciacollege.edu,Coordinator Intl Student Success Downtown,Valencia College,International Student Services,Tier5,ISS Staff,Downtown campus success
+Elise De-Wolf Ott,edewolfott@valenciacollege.edu,Coordinator Intl Student Success West,Valencia College,International Student Services,Tier5,ISS Staff,West campus success
+Zulines Garcia,zgarcia8@valenciacollege.edu,ISS Representative West,Valencia College,International Student Services,Tier5,ISS Staff,Student services
+Tom Pratt,prattomm@gm.sbac.edu,Special Education Director,Alachua County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL program director
+James Mead,meadjf@gm.sbac.edu,Administrator,Alachua County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL administrator
+Susan Voorhees,susan.voorhees@bakerk12.org,Administrator,Baker County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Rita Gentis,gentisr@bay.k12.fl.us,Administrator,Bay District Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+La Stafford,staffla@bay.k12.fl.us,Administrator,Bay District Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Drew Andrews,andrews.drew@mybradford.us,Administrator,Bradford County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Judith Magloire,magloire.judith@brevardschools.org,Administrator,Brevard County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Victoria Saldala,victoria.saldala@browardschools.com,Director ESOL,Broward County Schools,ESOL K-12,K12,K-12 ESOL Director,Major county ESOL director
+Kay Tipton,kay.tipton@calhounflschools.org,Administrator,Calhoun County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Vicki Davis,vicki.davis@calhounflschools.org,Administrator,Calhoun County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Carmel Kisiday,carmel.kisiday@yourcharlotteschools.net,Administrator,Charlotte County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Maryann Morehouse,maryann.morehouse@yourcharlotteschools.net,Administrator,Charlotte County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Kathy Manning,manningk@citrus.k12.fl.us,Administrator,Citrus County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Susan Heberts,heberts@citrus.k12.f.us,Administrator,Citrus County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Linda Swiggett,swiggettl@citrus.k12.fl.us,Administrator,Citrus County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+T. Doliver,tdoliver@OneClay.net,Administrator,Clay County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+S. Herndon,sherndon@OneClay.net,Administrator,Clay County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+P. Robbins,probbins@oneclay.net,Administrator,Collier County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Marilu Brito,mbrito@dadeschools.net,Administrator,Miami-Dade County Schools,ESOL K-12,K12,K-12 ESOL Admin,Largest FL district ESOL contact
+D. Rugalde,rugalde@dadeschools.net,Administrator,Miami-Dade County Schools,ESOL K-12,K12,K-12 ESOL Admin,Largest FL district ESOL contact
+Andi Canaday,andi.canaday@desoto.k12.fl.us,Administrator,DeSoto County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Sarah Perera,sarah.perera@desoto.k12.fl.us,Administrator,DeSoto County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Kim Aument,kim.aument@desoto.k12.fl.us,Administrator,DeSoto County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Christina Britton,christina.britton@desoto.k12.fl.us,Administrator,DeSoto County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Faith Hill,faithhill@dixie.k12.fl.us,Administrator,Dixie County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+C. Dahnke,dahnkec@duvalschools.org,Administrator,Duval County Schools,ESOL K-12,K12,K-12 ESOL Admin,Jacksonville area ESOL contact
+R. Wright,rwright2@escambia.k12.fl.us,Administrator,Escambia County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+D. Wilson,dwilson2@escambia.k12.fl.us,Administrator,Escambia County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+A. Costello,acostello@escambia.k12.fl.us,Administrator,Escambia County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+E. Yorket,yorket@flaglerschools.com,Administrator,Flagler County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Sandra Rosario,sandra.rosario@sdhc.k12.fl.us,Administrator,Hillsborough County Schools,ESOL K-12,K12,K-12 ESOL Admin,Tampa area ESOL contact
+Susan Maxwell,susan.maxwell@sdhc.k12.fl.us,Administrator,Hillsborough County Schools,ESOL K-12,K12,K-12 ESOL Admin,Tampa area ESOL contact
+Alice Blanco,alice.blanco@indianriverschools.org,Administrator,Indian River County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Karen Malits,karen.malits@indianriverschools.org,Administrator,Indian River County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Andrew Rynberg,andrew.rynberg@indianriverschools.org,Administrator,Indian River County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Valerie Martinez,valerie.martinez@ocps.net,Administrator,Orange County Schools,ESOL K-12,K12,K-12 ESOL Admin,Orlando area ESOL director
+Rose Santiago,rose.santiago@ocps.net,Administrator,Orange County Schools,ESOL K-12,K12,K-12 ESOL Admin,Orlando area ESOL contact
+Arlene Peters,arlene.peters@ocps.net,Administrator,Orange County Schools,ESOL K-12,K12,K-12 ESOL Admin,Orlando area ESOL contact
+D. Medina,medinad@osceola.k12.fl.us,Administrator,Osceola County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Noel Elvir,noel.elvir@palmbeachschools.org,Administrator,Palm Beach County Schools,ESOL K-12,K12,K-12 ESOL Admin,Major county ESOL contact
+Kim Thomasson,kim.thomasson@palmbeachschools.org,Administrator,Palm Beach County Schools,ESOL K-12,K12,K-12 ESOL Admin,Major county ESOL contact
+M. Sabella,msabella@pasco.k12.fl.us,Administrator,Pasco County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+K. Zielinski,kzielins@pasco.k12.fl.us,Administrator,Pasco County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Kara C.,karacn@pcsb.org,Administrator,Pinellas County Schools,ESOL K-12,K12,K-12 ESOL Admin,St. Pete area ESOL contact
+Juan Seda,juan.seda@polk-fl.net,Administrator,Polk County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Alfredo Gonzalez,alfredo.gonzalez@polk-fl.net,Administrator,Polk County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Minnie Cardona,minnie_cardona@scps.k12.fl.us,Administrator,Seminole County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+G. Ilyars,gilyars@stjohns.k12.fl.us,Administrator,St. Johns County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Lorna Kirkham,lorna.kirkham@stjohns.k12.fl.us,Administrator,St. Johns County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Clarissa Duskin,clarissa.duskin@stlucieschools.org,Administrator,St. Lucie County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Katherine Dustin,katherine.dustin@sumter.k12.fl.us,Administrator,Sumter County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Evelyn Robinson,evelynri@leeschools.net,Administrator,Lee County Schools,ESOL K-12,K12,K-12 ESOL Admin,Fort Myers area ESOL contact
+Jeanne Johnson,jeannejl@leeschools.net,Administrator,Lee County Schools,ESOL K-12,K12,K-12 ESOL Admin,Fort Myers area ESOL contact
+E. Garcia,garcia3e@manateeschools.net,Administrator,Manatee County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+D. Estes,estesd@manateeschools.net,Administrator,Manatee County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Caron Reid,caron.reid@marion.k12.fl.us,Administrator,Marion County Schools,ESOL K-12,K12,K-12 ESOL Admin,Ocala area ESOL contact
+Anna DeWese,anna.dewese@marion.k12.fl.us,Administrator,Marion County Schools,ESOL K-12,K12,K-12 ESOL Admin,Ocala area ESOL contact
+Michelle Guzman,michelle.guzman@sarasotacountyschools.net,Administrator,Sarasota County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Esther Delgado-Lago,esther.delgado-lago@sarasotacountyschools.net,Administrator,Sarasota County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Jamie Rodriguez,jamie.rodriguez@sarasotacountyschools.net,Administrator,Sarasota County Schools,ESOL K-12,K12,K-12 ESOL Admin,County ESOL contact
+Patricia Hodge,patricia.hodge@famu.edu,Administrator,FAMU,ESOL,Tier4,University ESOL,HBCU ESOL contact
+C. McDade,cmcdade1@fau.edu,Administrator,Florida Atlantic University,ESOL,Tier4,University ESOL,FAU ESOL contact
+T. Olerton,tolerton@fau.edu,Administrator,Florida Atlantic University,ESOL,Tier4,University ESOL,FAU ESOL contact
+M. Ellis,mellis27@fau.edu,Administrator,Florida Atlantic University,ESOL,Tier4,University ESOL,FAU ESOL contact
+Noor Akhras,,EAP Instructor,Hillsborough Community College,English for Academic Purposes,Tier4,ESL Faculty,Classroom adoption
+Adianez Garcia Campos,a.garciacampos@unf.edu,Director Intl Students and Scholars,University of North Florida,International Center,Tier1,ISS Director,ISS decision maker Jacksonville
+Luisa Martinez Joyce,luisa.martinez@unf.edu,Director Study Abroad and Compliance,University of North Florida,International Center,Tier1,ISS Director,Study abroad + SAILS compliance
+Maria Ribeiro,m.ribeiro@unf.edu,Office Manager,University of North Florida,International Center,Tier4,ISS Staff,Office operations
+Brigid Fitzpatrick,brigid.fitzpatrick@unf.edu,Senior Intl Student Advisor F-1/J-1,University of North Florida,International Center,Tier5,ISS Advisor,F-1/J-1 immigration advising
+Gabriel Volz,g.volz@unf.edu,Intl Student Advisor F-1/J-1,University of North Florida,International Center,Tier5,ISS Advisor,F-1/J-1 immigration advising
+Stacey Templeton,stacey.templeton@unf.edu,Exchange Student Advisor J-1,University of North Florida,International Center,Tier5,ISS Advisor,J-1 exchange compliance
+Aracely Gallegos,aracely.g@unf.edu,Study Abroad Coordinator,University of North Florida,International Center,Tier5,ISS Staff,Study abroad coordination
+Kaitlyn Richards,kaitlyn.richards@unf.edu,Senior Study Abroad Coordinator,University of North Florida,International Center,Tier5,ISS Staff,Faculty-led study abroad
+Catherine Politano,c.politano@unf.edu,Study Abroad Coordinator,University of North Florida,International Center,Tier5,ISS Staff,Study abroad coordination
+Michael McDonald,mmcdonal@fgcu.edu,Faculty Advisor Fulbright,Florida Gulf Coast University,Global Engagement,Tier4,Faculty,Fulbright advisor + international connections
+Frank Jurkovic,Jurkovic.Frank@spcollege.edu,Director Center for Intl Programs,St. Petersburg College,International Programs,Tier1,ISS Director,International programs decision maker
+Angela Cole,Cole.Angela@spcollege.edu,Intl Students PDSO,St. Petersburg College,International Programs,Tier5,ISS Advisor,PDSO immigration compliance
+Irene Chitikov,Chitikov.Irene@spcollege.edu,Intl Students DSO,St. Petersburg College,International Programs,Tier5,ISS Advisor,DSO immigration compliance
+Ralph Regnier,Regnier.Ralph@spcollege.edu,Intl Students DSO,St. Petersburg College,International Programs,Tier5,ISS Advisor,DSO immigration compliance
+Jeanna Ojeda,ojeda.jeanna@spcollege.edu,EAP Coordinator,St. Petersburg College,English for Academic Purposes,Tier2,ESL Coordinator,EAP program coordination
+Mila Ivanova,livanova@polk.edu,Professor ESL,Polk State College,World Connect Center,Tier4,ESL Faculty,ESL classroom adoption
+Trent Berning,Trent.Berning@DaytonaState.edu,Chair English Language Institute,Daytona State College,English Language Institute,Tier1,ESL Director,ELI decision maker Daytona
+Kathleen Thompson,Kathleen.Thompson@DaytonaState.edu,Administrative Assistant,Daytona State College,English Language Institute,Tier4,ESL Staff,Admin support
+Teresa Lucas,lucast@fiu.edu,Teaching Professor TESOL,Florida International University,TESOL/Foreign Language Education,Tier4,TESOL Faculty,TESOL teacher training + research
+Aixa Perez-Prado,pereza@fiu.edu,Associate Teaching Professor TESOL,Florida International University,TESOL/Foreign Language Education,Tier4,TESOL Faculty,TESOL teaching + research
+Ryan Pontier,rpontier@fiu.edu,Associate Professor TESOL,Florida International University,TESOL/Foreign Language Education,Tier4,TESOL Faculty,TESOL research + methodology
+Eileen Ariza,eariza@fau.edu,Professor TESOL/Bilingual Ed,Florida Atlantic University,Curriculum and Instruction,Tier4,TESOL Faculty,TESOL expert + bilingual education
+Andres Ramirez,ramirezj@fau.edu,Associate Professor TESOL,Florida Atlantic University,Curriculum and Instruction,Tier4,TESOL Faculty,TESOL research
+Sabrina Sembiante,ssembiante@fau.edu,Professor TESOL/Bilingual Ed,Florida Atlantic University,Curriculum and Instruction,Tier4,TESOL Faculty,Interim Co-Chair + TESOL lead
+Hanizah Zainuddin,zainuddi@fau.edu,Associate Professor TESOL,Florida Atlantic University,Curriculum and Instruction,Tier4,TESOL Faculty,TESOL research
+Thomas Juzek,tjuzek@fsu.edu,Assistant Professor Linguistics,Florida State University,Modern Languages and Linguistics,Tier4,Linguistics Faculty,Applied linguistics research
+Michael Leeser,mleeser@fsu.edu,Professor Linguistics,Florida State University,Modern Languages and Linguistics,Tier4,Linguistics Faculty,SLA + language processing
+Antje Muntendam,amuntendam@fsu.edu,Professor Linguistics,Florida State University,Modern Languages and Linguistics,Tier4,Linguistics Faculty,Bilingualism research
+Zhiying Qian,zqian@fsu.edu,Associate Professor Linguistics,Florida State University,Modern Languages and Linguistics,Tier4,Linguistics Faculty,Applied linguistics
+Gretchen Sunderman,gsunderman@fsu.edu,Professor Linguistics,Florida State University,Modern Languages and Linguistics,Tier4,Linguistics Faculty,Bilingualism + language processing
+Brent Henderson,bhendrsn@ufl.edu,Department Chair Linguistics,University of Florida,Linguistics,Tier1,Dept Chair,Linguistics department leader
+Paula Golombek,pgolombek@ufl.edu,Professor Applied Linguistics,University of Florida,Linguistics,Tier4,TESOL Faculty,TESOL teacher education expert
+Stefanie Wulff,swulff@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Corpus linguistics + SLA
+Ratree Wayland,ratree@ufl.edu,Associate Chair Linguistics,University of Florida,Linguistics,Tier2,Dept Admin,Phonetics + speech perception
+Crystal Marull,cmarull@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Applied linguistics
+Diego Pascual Cabo,dpascual@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Heritage languages + bilingualism
+Jorge Valdes Kroff,jvaldeskroff@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Bilingualism + code-switching
+Eleonora Rossi,eleonora.rossi@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Multilingualism + neurolinguistics
+Edith Kaan,kaan@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Sentence processing + ERP
+Helene Blondeau,blondeau@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Sociolinguistics
+James Essegbey,essegbey@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,African linguistics
+Andrea Hoa Pham,apham@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Phonology + Vietnamese
+Theresa Antes,antes@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,French linguistics
+Emily Rine Butler,erbutler@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Applied linguistics
+Benjamin Hebblethwaite,hebble@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Creole linguistics
+Gillian Lord,glord@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Spanish phonology + SLA
+Fiona McLaughlin,fmcl@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,African linguistics
+Sarah Moeller,smoeller@ufl.edu,Professor Linguistics,University of Florida,Linguistics,Tier4,Linguistics Faculty,Computational linguistics
+Kelli Granade,kgranade@ufl.edu,Staff,University of Florida,Linguistics,Tier4,Admin Staff,Department admin
+Marta L. Wayne,mlwayne@ufl.edu,Dean and Associate Provost,University of Florida,International Center,Tier0,Senior Admin,Top international programs decision maker
+Martine J. Angrand,,Director F-1 ISS (PDSO),University of Florida,International Center,Tier1,ISS Director,F-1 student services leader
+Victoria Dolce,,Associate Director Intl Student Support,University of Florida,International Center,Tier2,ISS Admin,Student support and engagement
+Ethel Porras,,Assistant Director F-1 ISS (DSO),University of Florida,International Center,Tier2,ISS Admin,F-1 advising + DSO
+Danielle Black,,F-1 Intl Student Advisor (DSO),University of Florida,International Center,Tier5,ISS Advisor,F-1 immigration advising
+Tikia Brown,,F-1 Intl Student Advisor (DSO),University of Florida,International Center,Tier5,ISS Advisor,F-1 immigration advising
+Steve Ghulamani,,F-1 Intl Student Advisor (DSO),University of Florida,International Center,Tier5,ISS Advisor,F-1 immigration advising
+Candice DeBose-Tyson,,F-1 Intl Student Advisor (DSO),University of Florida,International Center,Tier5,ISS Advisor,F-1 immigration advising
+Alvin Johnson Jr.,,F-1 Intl Student Advisor (DSO),University of Florida,International Center,Tier5,ISS Advisor,F-1 immigration advising
+Sebastian Reina,reina.s@ufl.edu,Administrative Assistant,University of Florida,International Center,Tier4,ISS Staff,Admin support
+Luis Johnson,lfjohnson@ufic.ufl.edu,Director RO-EVS,University of Florida,International Center,Tier1,Exchange Director,Exchange visitor services
+Jennifer North,jnorth@ufic.ufl.edu,Assistant Director ARO-EVS,University of Florida,International Center,Tier2,Exchange Admin,Exchange visitor services
+Amila Tica,atica@ufic.ufl.edu,Exchange Coordinator ARO-EVS,University of Florida,International Center,Tier5,Exchange Staff,Exchange coordination
+Zoe D'Alessandro,zdalessandro@ufic.ufl.edu,J-1 Immigration Specialist,University of Florida,International Center,Tier5,Exchange Staff,J-1 specialist
+Maryshelly Quinones,mquinones@ufic.ufl.edu,Insurance Specialist ARO-EVS,University of Florida,International Center,Tier5,Exchange Staff,Insurance
+Kenneth Parker,kparker@ufic.ufl.edu,Program Assistant EVS,University of Florida,International Center,Tier5,Exchange Staff,Program support
+John Mulligan,jmulligan@ufic.ufl.edu,Interim Director Study Abroad,University of Florida,International Center,Tier1,Study Abroad Director,Study abroad decision maker
+Yanina Morero,ymorero@ufic.ufl.edu,Data Management Analyst,University of Florida,International Center,Tier4,Data,Data analytics
+Mabel Cardec,mcardec@ufic.ufl.edu,Communications Manager,University of Florida,International Center,Tier4,Marketing,Communications
+Laura Dickey,ldickey@ufic.ufl.edu,Study Abroad Program Coordinator,University of Florida,International Center,Tier5,Study Abroad Staff,Program coordination
+Arley Morrell,amorrell@ufic.ufl.edu,Study Abroad Program Coordinator,University of Florida,International Center,Tier5,Study Abroad Staff,Program coordination
+Michael Kung,mkung@ufic.ufl.edu,Director Global Research Engagement,University of Florida,International Center,Tier1,Research Director,Global research partnerships
+Claire Anumba,canumba@ufic.ufl.edu,Special Projects Coordinator,University of Florida,International Center,Tier4,Projects,Special projects
+Sharon Brown,sbrown@ufic.ufl.edu,Intl Agreements Coordinator,University of Florida,International Center,Tier4,Agreements,International agreements
+Besiana Balla,bballa@ufic.ufl.edu,Program Manager,University of Florida,International Center,Tier4,Program,Program management
+Aghane Antunes,aantunes@ufic.ufl.edu,Coordinator,University of Florida,International Center,Tier5,Staff,Coordination
+Paloma Rodriguez,prodriguez@ufic.ufl.edu,Director Global Learning,University of Florida,International Center,Tier1,Global Learning Director,Global learning programs
+Carrie Martins,cmartins1@ufl.edu,Faculty Development Coordinator,University of Florida,International Center,Tier4,Faculty Dev,Faculty development
+Rosa Rey Garcia,rreygarcia@ufic.ufl.edu,Global Learning Coordinator,University of Florida,International Center,Tier5,Global Learning,Global learning
+Anita Badhwar,abadhwar@ufic.ufl.edu,Administrative Specialist,University of Florida,International Center,Tier4,Admin,Administrative support
+Terrence Funke,tfunke@ufic.ufl.edu,Executive Assistant Dean's Office,University of Florida,International Center,Tier4,Admin,Dean's office support
+Sara Williams,swilliams13@ufic.ufl.edu,HR Generalist,University of Florida,International Center,Tier4,HR,Human resources
+Sebastian Rodriguez Natali,shrodriguez@ufic.ufl.edu,Finance Manager,University of Florida,International Center,Tier4,Finance,Finance management
+Jackie Johnson,jjohnson@ufic.ufl.edu,Accountant,University of Florida,International Center,Tier4,Finance,Accounting
+Teresa de la Guardia,tdelaguardia@miami.edu,Executive Director ISSS,University of Miami,Intl Student and Scholar Services,Tier1,ISS Director,Top ISSS decision maker
+Claudia Zitzmann,czitzmann@miami.edu,Director Scholar Services,University of Miami,Intl Student and Scholar Services,Tier1,ISS Director,Scholar services leader
+Kristin Ponge,kponge@miami.edu,Sr. Associate Director Compliance,University of Miami,Intl Student and Scholar Services,Tier2,ISS Admin,Regulatory compliance
+Claudia Anderson,claudiama93@miami.edu,Associate Director Services,University of Miami,Intl Student and Scholar Services,Tier2,ISS Admin,Services and programs
+Yeline Ramirez,y.ramirez3@miami.edu,Associate Director I-20 Services,University of Miami,Intl Student and Scholar Services,Tier2,ISS Admin,Initial I-20 services
+Ana M. Rendon,anarendon@miami.edu,Sr. Assistant Director,University of Miami,Intl Student and Scholar Services,Tier2,ISS Admin,ISSS management
+Wendy Bellas,wxb209@miami.edu,Assistant Director,University of Miami,Intl Student and Scholar Services,Tier5,ISS Advisor,ISSS advising
+Luisa Gutierrez,lxg1340@miami.edu,Assistant Director,University of Miami,Intl Student and Scholar Services,Tier5,ISS Advisor,ISSS advising
+Ana Sippin,axs2508@miami.edu,Assistant Director,University of Miami,Intl Student and Scholar Services,Tier5,ISS Advisor,ISSS advising
+Dayla Nolis,nolisd@easternflorida.edu,Director Academic Technology,Eastern Florida State College,Academic Technology,Tier3,EdTech Director,EdTech decision maker
+Martin Tawil,Martin.Tawil@fsw.edu,Director CTLE,Florida SouthWestern State College,Center for Teaching and Learning,Tier3,EdTech Director,Teaching and learning technology
+Alyson Adams,adamsa@coe.ufl.edu,School of Teaching and Learning,University of Florida,College of Education,Tier4,Education Faculty,Teaching and learning research
+Michelle Shaw,mshaw@health.fau.edu,Director SAS,Florida Atlantic University,Student Accessibility Services,Tier3,DRC Director,Accessibility decision maker
+Ashley Ciccolini,aciccoli@health.fau.edu,Associate Director SAS,Florida Atlantic University,Student Accessibility Services,Tier3,DRC Admin,Accessibility management
+Courtney McGonagle,cmcgonag@health.fau.edu,Assistant Director SAS,Florida Atlantic University,Student Accessibility Services,Tier3,DRC Admin,Davie campus accessibility
+Farah Robles,frobles2014@health.fau.edu,Assistant Director SAS,Florida Atlantic University,Student Accessibility Services,Tier3,DRC Admin,Accessibility coordination
+Rebecca Eagen,reagen1@health.fau.edu,Accessibility Coordinator,Florida Atlantic University,Student Accessibility Services,Tier4,DRC Staff,Accommodations
+Shaun McCuen,smccuen@health.fau.edu,Accessibility Coordinator,Florida Atlantic University,Student Accessibility Services,Tier4,DRC Staff,Accommodations
+Sierra Graves,gravess@health.fau.edu,Accessibility Coordinator,Florida Atlantic University,Student Accessibility Services,Tier4,DRC Staff,Accommodations
+Heather Burmeister,hburmeister@health.fau.edu,Accessibility Coordinator,Florida Atlantic University,Student Accessibility Services,Tier4,DRC Staff,Accommodations
+Grace Collins,gcollins2019@health.fau.edu,Learning Specialist,Florida Atlantic University,Student Accessibility Services,Tier4,DRC Staff,Learning support
+Sharon Cardona,sahumada@health.fau.edu,Testing Services Coordinator,Florida Atlantic University,Student Accessibility Services,Tier4,DRC Staff,Testing accommodations
+Lexy Young,alexisyoung@health.fau.edu,Testing Administrator,Florida Atlantic University,Student Accessibility Services,Tier4,DRC Staff,Testing
+Clara M Fleites,cfleitesvara2018@health.fau.edu,Assistive Technology Specialist,Florida Atlantic University,Student Accessibility Services,Tier3,DRC Tech,Assistive tech evaluator - key contact
+Ann Marie Bedard,abedard2@fau.edu,Assistive Technology Specialist,Florida Atlantic University,Student Accessibility Services,Tier3,DRC Tech,Assistive tech
+Brandon Rooths,brooths@health.fau.edu,ADA Accessibility Coordinator,Florida Atlantic University,Student Accessibility Services,Tier4,DRC Staff,ADA compliance
+Glennis Lyew,glyew@health.fau.edu,Office Administrator,Florida Atlantic University,Student Accessibility Services,Tier4,DRC Staff,Office admin
+Mariana Ramirez,marianaramir2015@health.fau.edu,Notetaking Coordinator,Florida Atlantic University,Student Accessibility Services,Tier4,DRC Staff,Notetaking services
+Kelly Poppen,isss@fiu.edu,Director ISSS (PDSO/RO),Florida International University,Intl Student and Scholar Services,Tier1,ISS Director,ISSS decision maker
+Evelyn Rodriguez,isss@fiu.edu,Associate Director F-1 (DSO/ARO),Florida International University,Intl Student and Scholar Services,Tier2,ISS Admin,F-1 program management
+Ariel Ortiz,isss@fiu.edu,Associate Director J-1 (ARO),Florida International University,Intl Student and Scholar Services,Tier2,ISS Admin,J-1 program management
+Jonathan Ramos,isss@fiu.edu,Intl Student Coordinator (DSO),Florida International University,Intl Student and Scholar Services,Tier5,ISS Advisor,Student coordination
+Isaac Benavides,isss@fiu.edu,Intl Student Coordinator (DSO),Florida International University,Intl Student and Scholar Services,Tier5,ISS Advisor,Student coordination
+Melissa Fontanez Ocasio,isss@fiu.edu,Intl Student Coordinator (DSO),Florida International University,Intl Student and Scholar Services,Tier5,ISS Advisor,Student coordination
+Andre Dawson,isss@fiu.edu,Assistant Director (DSO),Florida International University,Intl Student and Scholar Services,Tier2,ISS Admin,ISSS management
+Leisha Cali,lcali@fgcu.edu,Director IELP,Florida Gulf Coast University,Intensive English Language Program,Tier1,ESL Director,IELP decision maker Fort Myers
+Molly Hamm-Rodriguez,mhammrodriguez@usf.edu,Assistant Professor Social Foundations,University of South Florida,College of Education,Tier4,TESOL Faculty,TESOL research + multilingual development
+Marcia Taylor,taylorm@usf.edu,AVP Immigration Compliance,University of South Florida,Office of International Services,Tier0,Senior Admin,Top immigration compliance leader
+Olivier Debure,debure@usf.edu,Associate Director OIS,University of South Florida,Office of International Services,Tier2,ISS Admin,Practical training + scholar teams
+Thora Cecil,thoracecil@usf.edu,Immigration Services Ops Manager,University of South Florida,Office of International Services,Tier2,ISS Admin,Current student team lead
+Shivaun Dobbs,sdobbs@usf.edu,Intl Student Advisor II,University of South Florida,Office of International Services,Tier5,ISS Advisor,F-1 advising
+Daniela Mui,dmui@usf.edu,Intl Student Advisor III,University of South Florida,Office of International Services,Tier5,ISS Advisor,F-1 advising
+Cynthia Green,cgreen2@fsu.edu,Director CGE,Florida State University,Center for Global Engagement,Tier1,ISS Director,CGE decision maker
+Jocelyn Vaughn,jmvaughn@fsu.edu,Program Director Data and Compliance,Florida State University,Center for Global Engagement,Tier2,ISS Admin,Data + SEVIS compliance
+Amado Cruz,acruz2@fsu.edu,IT Manager,Florida State University,Center for Global Engagement,Tier4,IT,Technology infrastructure
+Austin Sproles,austin.sproles@fsu.edu,Business Manager,Florida State University,Center for Global Engagement,Tier4,Finance,Business operations
+E. Tanya Schaad,tschaad@fsu.edu,Associate Director,Florida State University,Center for Global Engagement,Tier2,ISS Admin,Senior management
+Jared Tirone,jmtirone@fsu.edu,Senior Program Manager,Florida State University,Center for Global Engagement,Tier4,Program,Program management
+Scott Bleiweis,sbleiweis@fsu.edu,Program Manager New ISS,Florida State University,Center for Global Engagement,Tier4,Program,New international students
+Betty Jensen,bjensen@fsu.edu,International Student Advisor,Florida State University,Center for Global Engagement,Tier5,ISS Advisor,Immigration advising
+Lacey Moret,lmoret@fsu.edu,International Student Advisor,Florida State University,Center for Global Engagement,Tier5,ISS Advisor,Immigration advising
+Rachel Garvey,rgarvey@fsu.edu,International Student Advisor,Florida State University,Center for Global Engagement,Tier5,ISS Advisor,Immigration advising
+Alexandra Cintron Jimenez,acintronjimenez@fsu.edu,Immigration Advisor,Florida State University,Center for Global Engagement,Tier5,ISS Advisor,Immigration advising
+Leigh Ann Bauer,l.bauer@fsu.edu,Program Director Global Exchanges,Florida State University,Center for Global Engagement,Tier1,Exchange Director,Global exchange programs
+Caitlin Reichert,c.reichert@fsu.edu,Exchange Advisor,Florida State University,Center for Global Engagement,Tier5,Exchange Staff,Exchange advising
+Chloe Mueller,camueller@fsu.edu,Exchange Advisor,Florida State University,Center for Global Engagement,Tier5,Exchange Staff,Exchange advising
+Bryant Harden,bharden@fsu.edu,Program Director Global Citizenship,Florida State University,Center for Global Engagement,Tier1,Program Director,Global citizenship certificate
+Chandler Gadea-Guidicelli,cgadeaguidicelli@fsu.edu,Assistant Director,Florida State University,Center for Global Engagement,Tier2,ISS Admin,CGE management
+Alek Valles,avalles@fsu.edu,Program Manager,Florida State University,Center for Global Engagement,Tier4,Program,Program management
+Robert Hughes,rshughes@fsu.edu,Program Director Special Programs,Florida State University,Center for Global Engagement,Tier1,Special Programs,Special programs
+Annie Wilson,annie.wilson@fsu.edu,Student Services Manager,Florida State University,Center for Global Engagement,Tier4,Student Services,Student services
+Kara Imburgia,kimburgia@fsw.edu,Coordinator Intl Students,Florida SouthWestern State College,International Student Services,Tier5,ISS Staff,International student coordination
+Adrian Sanchez,asanchez24@fsw.edu,Sr Coordinator Intl Admissions,Florida SouthWestern State College,International Student Services,Tier2,ISS Admin,International recruitment
+Michael Messina,Michael.Messina@fsw.edu,Director Intl Education,Florida SouthWestern State College,International Education,Tier1,ISS Director,International education decision maker
+Krista Price,kprice24@valenciacollege.edu,Director Students with Disabilities,Valencia College,OSD,Tier3,DRC Director,Disability services decision maker
+Danelle Maschhoff,dmaschhoff@valenciacollege.edu,Assistant Director Disability Services,Valencia College,OSD,Tier3,DRC Admin,Disability management
+Steven Costa,scosta3@valenciacollege.edu,Assistive Technology Specialist,Valencia College,OSD,Tier3,DRC Tech,Assistive tech evaluator
+Donna Kimmeth,dkimmeth@valenciacollege.edu,Supervisor Deaf/HH Interpretation,Valencia College,OSD,Tier4,DRC Staff,Deaf/HH services
+Mary Asbury,masbury@valenciacollege.edu,Manager Disability Services,Valencia College,OSD,Tier4,DRC Staff,Disability management
+Yamil Roman-Cortes,yromancortes@valenciacollege.edu,Disability Specialist,Valencia College,OSD,Tier4,DRC Staff,Student accommodations
+Cecilia Guzman,cdalmau@valenciacollege.edu,Disability Specialist,Valencia College,OSD,Tier4,DRC Staff,Student accommodations
+Veronica Paniccia,vpaniccia1@valenciacollege.edu,Manager Disability Services,Valencia College,OSD,Tier4,DRC Staff,Disability management
+Malina Persaud Serrano,mpersaudserrano@valenciacollege.edu,Disability Specialist,Valencia College,OSD,Tier4,DRC Staff,Student accommodations
+Samm Rials,srials@valenciacollege.edu,Manager Disability Services,Valencia College,OSD,Tier4,DRC Staff,Disability management
+Rowina Petion,harmonr@pbsc.edu,Student Development Director,Palm Beach State College,Center for Student Accessibility,Tier3,DRC Director,Accessibility decision maker
+Zareya Senior,seniorz@pbsc.edu,Accessibility Representative,Palm Beach State College,Center for Student Accessibility,Tier4,DRC Staff,Accessibility services
+Richard Hunter,hunterr@pbsc.edu,Accessibility Manager Lake Worth,Palm Beach State College,Center for Student Accessibility,Tier4,DRC Staff,Lake Worth campus
+Alison Collman,collmana@pbsc.edu,Accessibility Advisor Lake Worth,Palm Beach State College,Center for Student Accessibility,Tier4,DRC Staff,Accommodations
+Siri Dias,diass@pbsc.edu,Accessibility Advisor Lake Worth,Palm Beach State College,Center for Student Accessibility,Tier4,DRC Staff,Accommodations
+Cathy Lombard,lombardc@pbsc.edu,Accessibility Manager Boca Raton,Palm Beach State College,Center for Student Accessibility,Tier4,DRC Staff,Boca Raton campus
+Rita Ashkar,ashkarr@pbsc.edu,Accessibility Advisor Boca Raton,Palm Beach State College,Center for Student Accessibility,Tier4,DRC Staff,Accommodations
+Melissa Braswell,braswelm@pbsc.edu,Accessibility Manager Palm Beach Gardens,Palm Beach State College,Center for Student Accessibility,Tier4,DRC Staff,PBG campus
+Dana Cohen,cohend@pbsc.edu,Accessibility Advisor Palm Beach Gardens,Palm Beach State College,Center for Student Accessibility,Tier4,DRC Staff,Accommodations
+Jose Murillo,murilloj@pbsc.edu,Accessibility Manager Belle Glade,Palm Beach State College,Center for Student Accessibility,Tier4,DRC Staff,Belle Glade campus
+Eduardo Febles,efebles1@mdc.edu,Department Chair World Languages,Miami Dade College - Kendall,World Languages / ESL,Tier1,ESL Director,Department budget holder Kendall
+Elizabeth Praschnik,epraschn@mdc.edu,Assistant to Chair,Miami Dade College - Kendall,World Languages / ESL,Tier4,ESL Staff,Admin support
+Kathleen Biache,kbiache@mdc.edu,EAP Faculty,Miami Dade College - Kendall,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Natalya Fateyeva,nfateyev@mdc.edu,EAP Faculty,Miami Dade College - Kendall,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Stephen Johnson,sjohnso2@mdc.edu,EAP Faculty,Miami Dade College - Kendall,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Grisselle Principe,gprincip@mdc.edu,EAP Faculty,Miami Dade College - Kendall,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Anouchka Rachelson,arachels@mdc.edu,EAP Faculty,Miami Dade College - Kendall,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Paula Sanchez,psanchez@mdc.edu,EAP Faculty,Miami Dade College - Kendall,World Languages / ESL,Tier4,ESL Faculty,Classroom adoption
+Rosa Alvarez,ralvare6@mdc.edu,Secretary,Miami Dade College - Kendall,World Languages / ESL,Tier4,ESL Staff,Admin support
+Maritza Betancourt,mbetanc2@mdc.edu,Education Recruitment Specialist,Miami Dade College - Kendall,World Languages / ESL,Tier4,ESL Staff,Student recruitment
+Lisbeth Smith-Palliser,lsmithpa@mdc.edu,Instructional Assistant,Miami Dade College - Kendall,World Languages / ESL,Tier4,ESL Staff,Instruction support
+Alexandra Bitton-Bailey,abitton-bailey@aa.ufl.edu,Director CTE,University of Florida,Center for Teaching Excellence,Tier3,EdTech Director,Teaching excellence leader
+Michael Barber,mebarber@ufl.edu,Assistant Director CTE,University of Florida,Center for Teaching Excellence,Tier3,EdTech Admin,Teaching technology
+John Jordi,jordi@aa.ufl.edu,Instructional Assessment Coordinator,University of Florida,Center for Teaching Excellence,Tier4,EdTech Staff,Assessment tools
+Zaina Sheets,zsheets@aa.ufl.edu,Operations Manager CTE,University of Florida,Center for Teaching Excellence,Tier4,EdTech Staff,Operations
+Lupita Eyde-Tucker,leydetucker@ufl.edu,Faculty Academic Support,University of Florida,Center for Teaching Excellence,Tier4,EdTech Staff,Faculty development
+Rhiannon Pollard,rhiannon@ucf.edu,Director Instructional Design,University of Central Florida,Center for Distributed Learning,Tier3,EdTech Director,Instructional design leader
+Sue Bauer,sue.bauer@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Tina Calandrino,tina.calandrino@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Aimee deNoyelles,Aimee@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Susan Jardaneh,Susan.Spraker@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Charlotte Jones-Roberts,Charlotte.Jones-Roberts@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Rohan Jowallah,rohan.jowallah@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Grace Kaletski-Maisel,grace.kaletskimaisel@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Denise Lowe,denise.lowe@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Roslyn Miller,Roslyn.Miller@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Jo Ann Smith,Jo.Smith@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Amy Sugar,Amy.Sugar@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Nancy Swenson,nancy.swenson@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Florence Williams,Florence.Williams@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Shelly Wyatt,Shelly.Wyatt@ucf.edu,Instructional Designer,University of Central Florida,Center for Distributed Learning,Tier4,EdTech Staff,Course design
+Jann Sutton,j.sutton@unf.edu,Senior Instructional Designer,University of North Florida,CIRT,Tier4,EdTech Staff,Instructional design
+Tiffany Nicholson,tnichol2@mdc.edu,Chair Liberal Arts,Miami Dade College - Hialeah,Liberal Arts and Sciences,Tier1,Dept Chair,Department leader Hialeah
+Jose Donis,jdonis@mdc.edu,Humanities Faculty,Miami Dade College - Hialeah,Liberal Arts and Sciences,Tier4,Faculty,Humanities instruction
+Evelyn Diaz,ediaz@mdc.edu,Psychology Faculty,Miami Dade College - Hialeah,Liberal Arts and Sciences,Tier4,Faculty,Psychology + student engagement
+Timi Hager,thager@usf.edu,Director Digital Learning,University of South Florida - Sarasota,Digital Learning,Tier3,EdTech Director,Digital learning decision maker
+Angie Fairweather,fairweather@usf.edu,Learning Design Project Manager,University of South Florida - Sarasota,Digital Learning,Tier4,EdTech Staff,Learning design
+Laura Aguado,laguado@usf.edu,Learning Designer,University of South Florida - Sarasota,Digital Learning,Tier4,EdTech Staff,Course design
+Bailey Cleveland,baileycleveland@usf.edu,Learning Designer,University of South Florida - Sarasota,Digital Learning,Tier4,EdTech Staff,Course design
+Todd Mendenhall,tmendenhall@usf.edu,Learning Designer II,University of South Florida - Sarasota,Digital Learning,Tier4,EdTech Staff,Course design
+Lakara Lycan,dllycan@usf.edu,Training and Support,University of South Florida - Sarasota,Digital Learning,Tier4,EdTech Staff,Training
+Evan Peck,evanpeck@usf.edu,Videographer and Editor,University of South Florida - Sarasota,Digital Learning,Tier4,EdTech Staff,Video content
+Heather Dietzold,hdietzold@nwfsc.edu,DSO,Northwest Florida State College,International Student Services,Tier5,ISS Advisor,F-1 DSO Niceville
+Jamie Stater,jamie.stater@fscj.edu,Student Support Services,Florida State College Jacksonville,Disability Services,Tier4,DRC Staff,Student support
+Ashlee Holloway,ashlee.holloway@fscj.edu,Student Support Services,Florida State College Jacksonville,Disability Services,Tier4,DRC Staff,Student support
+Michelle McLamb,mmclamb@fscj.edu,Student Support Coordinator,Florida State College Jacksonville,Disability Services,Tier4,DRC Staff,Disability coordination
+Raquel Gonzalez,raquel.gonzalez@fscj.edu,Student Support Coordinator,Florida State College Jacksonville,Disability Services,Tier4,DRC Staff,Disability coordination
+Kelly Harbert,kelly.harbert@fscj.edu,Student Support Coordinator,Florida State College Jacksonville,Disability Services,Tier4,DRC Staff,Disability coordination
+Denise Giarrusso,denise.giarrusso@fscj.edu,Associate Director Student Support,Florida State College Jacksonville,Disability Services,Tier3,DRC Admin,Disability services leadership
+Cindy Pfriender,pfriendc@cf.edu,ADA Coordinator,College of Central Florida,Accessibility Services,Tier3,DRC Admin,ADA compliance Ocala
+Dr. Mary Ann Begley,ADA@cf.edu,ADA Coordinator,College of Central Florida,Accessibility Services,Tier3,DRC Admin,ADA compliance
+Dr. Sonja Wright-Smith,sonja.smith@tsc.fl.edu,Assistant Director Student Services,Tallahassee State College,Student Accessibility Services,Tier3,DRC Admin,SAS leadership
+Dr. Jennifer Denise Carr,Jennifer.carr@tsc.fl.edu,Dean of Student Service,Tallahassee State College,Student Services,Tier0,Senior Admin,Student services decision maker
+Maureen Higgins,mhiggins@broward.edu,Disability Services Contact,Broward College,Accessibility Resources,Tier3,DRC Admin,Accessibility services Fort Lauderdale
+Laura Bell,lballard@fsu.edu,ESOL Coordinator,Florida State University,Anne Spencer Daves College of Ed,Tier2,ESOL Coordinator,ESOL tutoring coordination
+Sam Strickland,samstrick0@ufl.edu,AT Accessibility Specialist,University of Florida,Disability Resource Center,Tier3,DRC Tech,Assistive tech + captioning specialist
+John Liontas,liontas@usf.edu,Faculty TESOL/SLE,University of South Florida,College of Education,Tier4,TESOL Faculty,TESOL + foreign language education
+Noemi Nagy,nnagy@usf.edu,Faculty TESOL/SLE,University of South Florida,College of Education,Tier4,TESOL Faculty,Second language education
+Alejandro Brice,aebrice@usf.edu,Faculty TESOL/SLE,University of South Florida,College of Education,Tier4,TESOL Faculty,Communication sciences + bilingual
+Rachel Densler,accessibilityresources@fit.edu,Assistant Director Accessibility,Florida Institute of Technology,Accessibility Resources,Tier3,DRC Admin,Accessibility Melbourne
+Gabriel Lopez Kafati,accessibilityservices@barry.edu,Director Accessibility Services,Barry University,Accessibility Services,Tier3,DRC Director,Accessibility decision maker Miami
+Maria DeMartino,accessibilityservices@barry.edu,Accommodations Coordinator,Barry University,Accessibility Services,Tier4,DRC Staff,Accommodations
+Mar Amador,accessibilityservices@barry.edu,Accommodations Coordinator,Barry University,Accessibility Services,Tier4,DRC Staff,Accommodations
+Sasha Maldonado,sasha.maldonado@barry.edu,Director Student Services (PDSO),Barry University,International Student Services,Tier1,ISS Director,International services + PDSO
+Carmelys Rodriguez,carmelys.rodriguez@barry.edu,Manager ISS (ADSO),Barry University,International Student Services,Tier2,ISS Admin,International student management
+M. Pospichal,mpospichal@flsouthern.edu,Disability Services,Florida Southern College,Student Disability Services,Tier3,DRC Staff,Disability services Lakeland
