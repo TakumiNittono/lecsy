@@ -20,7 +20,7 @@
 // デプロイ: supabase functions deploy deepgram-token
 // 必要secrets: DEEPGRAM_ADMIN_KEY, DEEPGRAM_PROJECT_ID
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const DEEPGRAM_ADMIN_KEY = Deno.env.get('DEEPGRAM_ADMIN_KEY');
 const DEEPGRAM_PROJECT_ID = Deno.env.get('DEEPGRAM_PROJECT_ID');

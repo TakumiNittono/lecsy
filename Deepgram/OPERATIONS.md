@@ -62,6 +62,27 @@ select * from feature_flags;
 
 ---
 
+## 🔔 Slack アラート設定（任意だが強く推奨）
+
+`deepgram-balance-check` は残高 warning/critical 時に system_alerts 記録
+に加え、`SLACK_WEBHOOK_URL` があれば Slack にプッシュ通知する。未設定なら
+静かに no-op。
+
+```bash
+# 1. Slackで Incoming Webhook を作成 → URL をコピー
+#    https://api.slack.com/messaging/webhooks
+
+# 2. Supabase secret に登録
+supabase secrets set SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
+
+# 3. Edge Function を再デプロイして反映
+supabase functions deploy deepgram-balance-check
+
+# 4. 動作確認: CRITICAL_THRESHOLD を一時的に $99999 にして cron手動起動→Slack着信
+```
+
+---
+
 ## 🟢 Stripe Test → Live 切替手順（ローンチ日）
 
 事前条件:

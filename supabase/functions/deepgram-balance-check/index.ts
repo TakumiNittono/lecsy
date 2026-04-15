@@ -49,7 +49,8 @@ serve(async () => {
   const balJson = await balRes.json();
   const balance = Number(balJson.balances?.[0]?.amount ?? 0);
 
-  const supabase = createClient(
+  // deno-lint-ignore no-explicit-any
+  const supabase = createClient<any, any, any>(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   );
@@ -65,10 +66,14 @@ serve(async () => {
       .from('feature_flags')
       .update({ enabled: false, updated_at: new Date().toISOString() })
       .eq('name', 'realtime_captions_beta');
-    await recordAlert(supabase, 'critical', balance, 'Feature realtime_captions_beta auto-disabled');
+    const msg = 'Feature realtime_captions_beta auto-disabled';
+    await recordAlert(supabase, 'critical', balance, msg);
+    await postSlack('critical', balance, msg);
   } else if (balance < WARNING_THRESHOLD) {
     level = 'warning';
-    await recordAlert(supabase, 'warning', balance, `Balance below warning threshold ($${WARNING_THRESHOLD})`);
+    const msg = `Balance below warning threshold ($${WARNING_THRESHOLD})`;
+    await recordAlert(supabase, 'warning', balance, msg);
+    await postSlack('warning', balance, msg);
   }
 
   const result: BalanceCheckResult = {
@@ -83,7 +88,8 @@ serve(async () => {
 });
 
 async function recordAlert(
-  supabase: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
   level: 'warning' | 'critical',
   balance: number,
   message: string
@@ -97,6 +103,30 @@ async function recordAlert(
     });
   } catch (e) {
     console.error('[deepgram-balance-check] alert insert failed', e);
+  }
+}
+
+// SLACK_WEBHOOK_URL が設定されていれば警告/critical時にSlackへ通知する。
+// 未設定なら何もしない（ローカル開発・小規模運用でも落ちない）。
+async function postSlack(
+  level: 'warning' | 'critical',
+  balance: number,
+  message: string
+) {
+  const url = Deno.env.get('SLACK_WEBHOOK_URL');
+  if (!url) return;
+  const emoji = level === 'critical' ? ':rotating_light:' : ':warning:';
+  const text = `${emoji} *Deepgram balance ${level}*\n` +
+    `Balance: $${balance.toFixed(2)}\n` +
+    `${message}`;
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+  } catch (e) {
+    console.error('[deepgram-balance-check] slack post failed', e);
   }
 }
 

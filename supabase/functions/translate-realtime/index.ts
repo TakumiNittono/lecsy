@@ -9,7 +9,7 @@
 //
 // 要secret: OPENAI_API_KEY
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const CAMPAIGN_END_MS = new Date('2026-06-01T00:00:00+09:00').getTime();

@@ -23,6 +23,12 @@ import {
 import { getLimits, buildRateLimitBody } from '../_shared/campaign.ts';
 import { callOpenAIChat } from '../_shared/openai.ts';
 
+interface SummarizeRequest {
+  transcript_id: string;
+  mode: "summary" | "exam_mode";
+  output_language?: string;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return createPreflightResponse(req);
