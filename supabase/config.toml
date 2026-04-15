@@ -44,6 +44,9 @@ verify_jwt = false
 [functions.summarize]
 verify_jwt = false
 
+[functions.summarize-stream]
+verify_jwt = false
+
 [functions.stripe-webhook]
 # Webhookは外部からのリクエストのため、Stripe署名で検証
 verify_jwt = false
@@ -71,4 +74,22 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.submit-report]
+verify_jwt = false
+
+# Deepgram / translation / Stripe系（W01-W06追加分）
+# 同じく ES256 JWT 対応のため platform-level verify を無効化し、
+# 関数コード側で supabase.auth.getUser() + プラン判定を行う
+[functions.deepgram-token]
+verify_jwt = false
+
+[functions.translate-realtime]
+verify_jwt = false
+
+[functions.create-checkout-session]
+verify_jwt = false
+
+[functions.create-portal-session]
+verify_jwt = false
+
+[functions.deepgram-balance-check]
 verify_jwt = false

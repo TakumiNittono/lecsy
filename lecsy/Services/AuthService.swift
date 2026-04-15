@@ -34,13 +34,35 @@ class AuthService: NSObject, ObservableObject {
             // Magic Link / restored session) does not need to remember to post.
             switch (oldValue, currentUser) {
             case (nil, let new?):
+                guard let token = cachedAccessToken, !token.isEmpty else {
+                    AppLogger.error("currentUser set but cachedAccessToken is nil/empty — deferring lecsyDidSignIn", category: .auth)
+                    // Schedule a delayed retry so PostLoginCoordinator still fires
+                    // once the token lands (e.g. Keychain write completes).
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+                        guard let token = self?.cachedAccessToken, !token.isEmpty else {
+                            AppLogger.error("lecsyDidSignIn retry: token still missing", category: .auth)
+                            return
+                        }
+                        NotificationCenter.default.post(
+                            name: .lecsyDidSignIn,
+                            object: nil,
+                            userInfo: [
+                                "userId": new.id.uuidString,
+                                "email": (new.email ?? "").lowercased(),
+                                "accessToken": token
+                            ]
+                        )
+                    }
+                    break
+                }
                 NotificationCenter.default.post(
                     name: .lecsyDidSignIn,
                     object: nil,
                     userInfo: [
                         "userId": new.id.uuidString,
                         "email": (new.email ?? "").lowercased(),
-                        "accessToken": cachedAccessToken ?? ""
+                        "accessToken": token
                     ]
                 )
             case (_?, nil):

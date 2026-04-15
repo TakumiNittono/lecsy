@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 const faqs = [
   {
     question: "Is Lecsy really free?",
-    answer: "Yes! Lecsy offers unlimited recording and transcription for free forever. Pro features (AI summaries, exam prep mode) are $2.99/month — much more affordable than Otter's $16.99/month or Notta's $13.99/month."
+    answer: "Yes! Lecsy is 100% free — unlimited recording, transcription, AI summaries, and exam prep mode are all included with no subscription. Otter charges $16.99/month and Notta charges $13.99/month for the same core features."
   },
   {
     question: "How does offline transcription work?",
@@ -36,14 +36,14 @@ const faqs = [
   },
   {
     question: "Why should I switch from Otter to Lecsy?",
-    answer: "If you're a student recording college lectures, Lecsy offers: offline functionality (no Wi-Fi needed), local processing (better privacy), student-focused features (exam prep mode), and much lower cost ($2.99/month vs $16.99/month). Otter is designed for business, Lecsy is built for students."
+    answer: "If you're a student recording college lectures, Lecsy offers: on-device transcription (no Wi-Fi needed), audio stays on your iPhone (better privacy), student-focused features (exam prep mode), and it's 100% free vs Otter's $16.99/month. Otter is designed for business, Lecsy is built for students."
   }
 ];
 
 const comparisonRows = [
   {
     feature: "Price",
-    lecsy: "Free (Pro $2.99/mo)",
+    lecsy: "100% Free",
     otter: "Free limited, $16.99/mo",
     notta: "Free limited, $13.99/mo"
   },
@@ -172,7 +172,7 @@ export default function OtterAlternativeForLecturesPage() {
             <div className="bg-cyan-50 border-l-4 border-cyan-600 p-6 rounded-r-lg">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Student-Focused Pricing</h3>
               <p className="text-gray-700">
-                Lecsy is free forever for basic features. Pro is $2.99/month. Otter charges $16.99/month for unlimited transcription — over 5x more expensive. Notta charges $13.99/month — still 4x more expensive.
+                Lecsy is 100% free — recording, transcription, AI summaries, and exam prep all included. Otter charges $16.99/month for unlimited transcription. Notta charges $13.99/month. Lecsy costs nothing.
               </p>
             </div>
             <div className="bg-purple-50 border-l-4 border-purple-600 p-6 rounded-r-lg">
@@ -199,7 +199,7 @@ export default function OtterAlternativeForLecturesPage() {
               <strong className="text-gray-900">Cheap SIM cards work fine.</strong> Lecsy works offline, so you don't need expensive data plans. International students often use budget SIM cards or limited data — Lecsy doesn't require any internet connection.
             </p>
             <p>
-              <strong className="text-gray-900">Privacy-first approach.</strong> Your audio never leaves your iPhone. For international students concerned about data privacy, Lecsy's local processing is a major advantage over cloud-based Otter and Notta.
+              <strong className="text-gray-900">Privacy-first approach.</strong> Lecsy never stores your audio. Live audio is streamed to Deepgram for transcription and is auto-deleted within 30 days. For international students concerned about data privacy, this is a major advantage over Otter and Notta which store recordings indefinitely.
             </p>
           </div>
         </div>
@@ -237,7 +237,7 @@ export default function OtterAlternativeForLecturesPage() {
               <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0">4</div>
               <div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">Cancel Otter, Keep Lecsy</h3>
-                <p className="text-gray-700">Once you're comfortable with Lecsy, cancel your Otter subscription and save $14/month. Lecsy Pro is just $2.99/month.</p>
+                <p className="text-gray-700">Once you're comfortable with Lecsy, cancel your Otter subscription and save $17/month. Lecsy is 100% free.</p>
               </div>
             </div>
           </div>

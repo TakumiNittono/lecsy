@@ -96,7 +96,7 @@ struct SuperAdminView: View {
             orgs = try await OrganizationAPI.shared.listAllOrganizations()
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ErrorMessages.friendly(error)
         }
     }
 }
@@ -181,7 +181,7 @@ private struct CreateOrgSheet: View {
             onCreated(org)
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ErrorMessages.friendly(error)
         }
     }
 }
@@ -235,7 +235,7 @@ private struct GrantOwnershipSheet: View {
             resultMessage = "Owner \(r.action). The user will become active on next login."
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ErrorMessages.friendly(error)
             resultMessage = nil
         }
     }

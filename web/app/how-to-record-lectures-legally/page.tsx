@@ -227,7 +227,7 @@ export default function HowToRecordLecturesLegallyPage() {
               <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">✓</div>
               <div>
                 <h3 className="text-lg font-bold text-gray-900 mb-2">Use Lecsy for Privacy</h3>
-                <p className="text-gray-700">Lecsy processes everything locally on your iPhone. Your audio never leaves your device, ensuring better privacy and compliance with university policies.</p>
+                <p className="text-gray-700">Lecsy never stores your audio. Live audio is streamed to Deepgram for real-time transcription and auto-deleted within 30 days, supporting privacy and compliance with university policies.</p>
               </div>
             </div>
           </div>

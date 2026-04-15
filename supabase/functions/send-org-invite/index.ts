@@ -28,6 +28,15 @@ interface InvitePayload {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return createPreflightResponse(req);
   if (req.method !== 'POST') return createErrorResponse(req, 'method_not_allowed', 405);
@@ -79,24 +88,35 @@ serve(async (req) => {
       invited_by: user.email,
     };
 
-    // まず inviteUserByEmail を試す (新規ユーザー用)
+    // Strategy:
+    //  1) Always generate an invite/magiclink URL via Supabase Auth admin API
+    //     so the user can land on /login?org=<slug> and auto-join.
+    //  2) If RESEND_API_KEY is configured, send a branded email via Resend
+    //     (US pilot path). Otherwise fall back to Supabase's built-in mailer
+    //     (inviteUserByEmail).
     let inviteOk = false;
-    let inviteMethod = 'invite';
-    const { error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
-      data: inviteMetadata,
-      redirectTo,
+    let inviteMethod: 'resend' | 'invite' | 'magiclink' = 'invite';
+    let actionLink: string | null = null;
+
+    // Try to generate an invite link (works for new users)
+    const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+      type: 'invite',
+      email,
+      options: {
+        data: inviteMetadata,
+        redirectTo,
+      },
     });
 
-    if (!inviteErr) {
-      inviteOk = true;
+    if (!linkErr) {
+      actionLink = linkData?.properties?.action_link ?? null;
     } else if (
-      inviteErr.message?.toLowerCase().includes('already') ||
-      inviteErr.message?.toLowerCase().includes('exists') ||
-      inviteErr.status === 422
+      linkErr.message?.toLowerCase().includes('already') ||
+      linkErr.message?.toLowerCase().includes('exists') ||
+      linkErr.status === 422
     ) {
-      // 既存ユーザー: magic link にフォールバック
-      inviteMethod = 'magiclink';
-      const { error: linkErr } = await admin.auth.admin.generateLink({
+      // Existing user: fall back to magiclink
+      const { data: mlData, error: mlErr } = await admin.auth.admin.generateLink({
         type: 'magiclink',
         email,
         options: {
@@ -104,13 +124,72 @@ serve(async (req) => {
           redirectTo,
         },
       });
-      if (!linkErr) {
-        inviteOk = true;
-      } else {
-        throw new HttpError(500, `magiclink_failed: ${linkErr.message}`);
-      }
+      if (mlErr) throw new HttpError(500, `magiclink_failed: ${mlErr.message}`);
+      actionLink = mlData?.properties?.action_link ?? null;
+      inviteMethod = 'magiclink';
     } else {
-      throw new HttpError(500, `invite_failed: ${inviteErr.message}`);
+      throw new HttpError(500, `invite_link_failed: ${linkErr.message}`);
+    }
+
+    const resendKey = Deno.env.get('RESEND_API_KEY');
+    if (resendKey && actionLink) {
+      // Branded English-first email via Resend
+      const fromAddr = Deno.env.get('RESEND_FROM') ?? 'Lecsy <invites@lecsy.app>';
+      const inviterName = user.email ?? 'Your team';
+      const subject = `You're invited to join ${org.name} on Lecsy`;
+      const html = `
+<!doctype html>
+<html><body style="font-family:-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111">
+  <h2 style="margin:0 0 16px">You're invited to <span style="color:#2563eb">${escapeHtml(org.name)}</span></h2>
+  <p>${escapeHtml(inviterName)} has invited you to join <strong>${escapeHtml(org.name)}</strong> on Lecsy — the privacy-first lecture transcription app for students and educators.</p>
+  <p style="margin:24px 0">
+    <a href="${actionLink}" style="background:#2563eb;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Accept invitation</a>
+  </p>
+  <p style="font-size:12px;color:#666">If the button doesn't work, copy this link:<br><span style="word-break:break-all">${actionLink}</span></p>
+  <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+  <p style="font-size:12px;color:#888">${escapeHtml(org.name)} に招待されました。上のボタンからログインして参加してください。</p>
+</body></html>`.trim();
+
+      const resendRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: fromAddr,
+          to: [email],
+          subject,
+          html,
+        }),
+      });
+
+      if (!resendRes.ok) {
+        const errBody = await resendRes.text();
+        throw new HttpError(500, `resend_failed: ${resendRes.status} ${errBody}`);
+      }
+      inviteMethod = 'resend';
+      inviteOk = true;
+    } else {
+      // Fallback: use Supabase's built-in mailer (sends invite email itself)
+      const { error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
+        data: inviteMetadata,
+        redirectTo,
+      });
+      if (
+        inviteErr &&
+        !(
+          inviteErr.message?.toLowerCase().includes('already') ||
+          inviteErr.message?.toLowerCase().includes('exists') ||
+          inviteErr.status === 422
+        )
+      ) {
+        throw new HttpError(500, `invite_failed: ${inviteErr.message}`);
+      }
+      // For existing users, the magic link was already generated above; Supabase
+      // does not send it automatically, so we rely on the caller surfacing the
+      // link or the user retrying. (Branded path via Resend is preferred.)
+      inviteOk = true;
     }
 
     // audit

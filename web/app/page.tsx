@@ -11,7 +11,7 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "Lecsy | Free Lecture Recording & AI Notes App for Students",
   description:
-    "Record lectures on iPhone, transcribe offline with WhisperKit, get AI summaries & exam prep in 12 languages. Free through June 1, 2026. Privacy-first — audio never leaves your device.",
+    "Record lectures on iPhone, get real-time bilingual captions via Deepgram, AI summaries & study guides in 20+ languages. Built for international students. Free plan available. Lecsy never stores your audio.",
   alternates: {
     canonical: "https://www.lecsy.app/",
   },
@@ -74,13 +74,13 @@ export default function Home() {
             "@context": "https://schema.org",
             "@type": "FAQPage",
             mainEntity: [
-              { "@type": "Question", name: "Is my data safe with Lecsy?", acceptedAnswer: { "@type": "Answer", text: "Yes. All audio recording and transcription happens entirely on your iPhone using WhisperKit. Your voice never leaves your device. Only transcript text is synced to the cloud when you choose to sign in, and you can turn that off anytime." } },
-              { "@type": "Question", name: "Do I need internet to record and transcribe?", acceptedAnswer: { "@type": "Answer", text: "No. Recording and transcription work 100% offline using on-device AI. You only need internet for the one-time model download (~150MB), cloud sync, AI summaries, and Exam Mode." } },
+              { "@type": "Question", name: "Is my data safe with Lecsy?", acceptedAnswer: { "@type": "Answer", text: "Audio is streamed to Deepgram for real-time transcription over an encrypted connection. Deepgram automatically deletes processed audio within 30 days. Lecsy itself never stores your audio. Transcript text syncs to our cloud only when you sign in. AI features send transcript text only (never audio) to OpenAI." } },
+              { "@type": "Question", name: "Do I need internet to record and transcribe?", acceptedAnswer: { "@type": "Answer", text: "Real-time bilingual captions require internet because audio is streamed to Deepgram for transcription. If you're offline you can still record locally and transcribe later when you reconnect." } },
               { "@type": "Question", name: "What languages does Lecsy support?", acceptedAnswer: { "@type": "Answer", text: "Lecsy supports 12 languages for transcription: English, Japanese, Spanish, French, German, Chinese, Korean, and more. AI summaries can be generated in a different language than the recording." } },
-              { "@type": "Question", name: "How does Lecsy compare to Otter.ai?", acceptedAnswer: { "@type": "Answer", text: "Lecsy offers unlimited free recording (Otter limits to 300min/month), works offline (Otter requires internet), costs $0 vs $16.99/month, and keeps audio on-device (Otter uploads to cloud). Save over $200/year." } },
+              { "@type": "Question", name: "How does Lecsy compare to Otter.ai?", acceptedAnswer: { "@type": "Answer", text: "Lecsy is built specifically for international students with real-time bilingual captions. Both Lecsy and Otter use cloud transcription for the paid tier, but Lecsy never stores your audio (Deepgram auto-deletes within 30 days). Lecsy Pro is $12.99/month vs Otter's $16.99/month, and Lecsy has a permanent Free plan." } },
               { "@type": "Question", name: "Is it legal to record lectures?", acceptedAnswer: { "@type": "Answer", text: "In most universities, recording lectures for personal study is permitted. Many schools encourage it as an accessibility accommodation. Check your university's policy." } },
-              { "@type": "Question", name: "How accurate is the transcription?", acceptedAnswer: { "@type": "Answer", text: "Lecsy uses OpenAI's Whisper model running locally on your device via WhisperKit. Accuracy is typically 85-95% for clear audio, comparable to cloud-based services." } },
-              { "@type": "Question", name: "Is Lecsy really free?", acceptedAnswer: { "@type": "Answer", text: "Yes — every feature (recording, transcription, AI summaries, Exam Mode, 12 languages, web sync) is completely free through June 1, 2026. No ads, no subscription, no credit card. After June 1, pricing will be decided based on user feedback. Features that are free today will stay free for existing users." } },
+              { "@type": "Question", name: "How accurate is the transcription?", acceptedAnswer: { "@type": "Answer", text: "Lecsy uses Deepgram Nova-3 multilingual model. Accuracy is typically 95%+ for clear English lecture audio and 90%+ for non-native speakers." } },
+              { "@type": "Question", name: "Is Lecsy really free?", acceptedAnswer: { "@type": "Answer", text: "The Free plan is permanently free: on-device recording, AI Study Guide (3 per month), and transcript sync. Upgrade to Pro ($12.99/month) or Student ($7.99/month) for real-time bilingual captions and unlimited AI features." } },
               { "@type": "Question", name: "What about AI summaries — does my data go to a server?", acceptedAnswer: { "@type": "Answer", text: "When you tap AI Summary or Exam Mode, only the transcript text (never audio) is sent to OpenAI's GPT-4o-mini to generate the summary. OpenAI does not use API content to train its models. Audio always stays on your iPhone." } },
             ],
           }),
@@ -142,7 +142,43 @@ export default function Home() {
       </header>
 
       {/* ━━━ HERO ━━━ */}
-      <section className="relative pt-32 pb-20 lg:pt-44 lg:pb-32 overflow-hidden">
+      {/* ━━━ COMING SOON BIG ANNOUNCEMENT ━━━ */}
+      <section className="relative pt-24 pb-6 overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-700">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.15),transparent_60%)]" />
+        <div className="relative max-w-6xl mx-auto px-5 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 border border-white/30 backdrop-blur-sm mb-4">
+            <span className="w-2 h-2 rounded-full bg-yellow-300 animate-pulse" />
+            <span className="text-xs font-bold text-white tracking-widest uppercase">
+              Coming Soon · Private Beta
+            </span>
+          </div>
+          <h2 className="font-[family-name:var(--font-display)] text-3xl md:text-5xl lg:text-6xl font-extrabold text-white tracking-tight mb-4">
+            Real-time bilingual captions,
+            <br className="hidden md:block" />
+            <span className="text-yellow-200"> powered by Deepgram.</span>
+          </h2>
+          <p className="text-lg lg:text-xl text-blue-100 max-w-2xl mx-auto mb-6">
+            See the lecture in English AND your native language —
+            live, in class, word-by-word. Launching for international students this summer.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+            <a
+              href="mailto:nittonotakumi@gmail.com?subject=Lecsy%20Beta%20Waitlist"
+              className="inline-flex items-center gap-2 h-12 px-6 rounded-xl bg-white text-blue-700 font-bold text-sm hover:bg-blue-50 transition-all shadow-lg"
+            >
+              Join the waitlist
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+              </svg>
+            </a>
+            <span className="text-xs text-blue-200">
+              Current Lecsy users stay free with on-device WhisperKit.
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section className="relative pt-20 pb-20 lg:pt-28 lg:pb-32 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-blue-50/80 via-white to-white pointer-events-none" />
         <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[900px] h-[600px] bg-blue-400/[0.08] rounded-full blur-[120px] pointer-events-none" />
 
@@ -151,7 +187,7 @@ export default function Home() {
             <div className="inline-flex items-center gap-2 mb-8 px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
               <span className="text-xs font-medium text-blue-600 tracking-wide">
-                Free through June 1, 2026 &middot; No ads &middot; No account required
+                Available now · Free · On-device
               </span>
             </div>
 
@@ -224,10 +260,10 @@ export default function Home() {
       <section className="border-y border-gray-100 bg-gray-50/50">
         <div className="max-w-6xl mx-auto px-5 py-10 grid grid-cols-2 md:grid-cols-4 gap-8">
           {[
-            { value: "$0", label: "Through June 1, 2026", accent: true },
+            { value: "$0", label: "Free plan, forever", accent: true },
             { value: "\u221E", label: "Recording minutes" },
             { value: "12", label: "Languages supported" },
-            { value: "0", label: "Audio sent to cloud", suffix: "bytes" },
+            { value: "0", label: "Audio on our servers", suffix: "bytes" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <div
@@ -302,7 +338,7 @@ export default function Home() {
               <div className="w-12 h-12 mx-auto mb-3 bg-blue-100 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
               </div>
-              <h3 className="font-bold text-gray-900 mb-1">Audio never leaves your phone</h3>
+              <h3 className="font-bold text-gray-900 mb-1">Lecsy never stores your audio</h3>
               <p className="text-sm text-gray-600">Your .m4a file stays on your iPhone. Not in our cloud, not anywhere else. Ever.</p>
             </div>
             <div className="text-center">
@@ -444,7 +480,7 @@ export default function Home() {
               {
                 step: "02",
                 title: "Transcribe",
-                desc: "WhisperKit converts speech to text on your device. No internet. No upload. 12 languages.",
+                desc: "Deepgram Nova-3 transcribes lectures in real time over an encrypted connection. Deepgram auto-deletes audio in 30 days. 20+ languages.",
                 icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
               },
               {
@@ -499,7 +535,7 @@ export default function Home() {
                   Audio stays on your iPhone
                 </h3>
                 <p className="text-blue-100 text-sm leading-relaxed max-w-sm">
-                  Transcription runs entirely on your device via WhisperKit. Your .m4a file is never uploaded anywhere — not to our servers, not to any AI provider. No ads, no trackers, no IDFA.
+                  Lecsy never stores your audio. Live transcription is performed by Deepgram and processed audio is auto-deleted within 30 days. Your local .m4a backup file stays on your device. No ads, no trackers, no IDFA.
                 </p>
               </div>
             </div>
@@ -657,54 +693,98 @@ export default function Home() {
         <div className="max-w-3xl mx-auto px-5">
           <div className="mb-12 text-center">
             <h2 className="font-[family-name:var(--font-display)] text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight mb-3">
-              Every feature. Free.
+              Simple pricing.
             </h2>
-            <p className="text-gray-500 text-lg">No paywall. No catch. No credit card.</p>
+            <p className="text-gray-500 text-lg">Free plan available now. Paid plans launching with Deepgram this summer.</p>
           </div>
 
-          <div className="p-8 lg:p-10 rounded-2xl border-2 border-blue-600 bg-white relative shadow-lg shadow-blue-600/[0.06]">
-            <div className="absolute -top-3 left-6 px-3 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full uppercase tracking-wider">
-              Free through June 1, 2026
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Free Plan - Available Now */}
+            <div className="p-8 lg:p-10 rounded-2xl border-2 border-blue-600 bg-white relative shadow-lg shadow-blue-600/[0.06]">
+              <div className="absolute -top-3 left-6 px-3 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full uppercase tracking-wider">
+                Available Now
+              </div>
+
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="font-[family-name:var(--font-display)] text-5xl font-bold text-gray-900">$0</span>
+                <span className="text-gray-400">forever</span>
+              </div>
+              <p className="text-sm text-gray-400 mb-8">The Free plan — everything on-device.</p>
+
+              <div className="grid gap-y-3 mb-8">
+                {[
+                  "Unlimited recording",
+                  "On-device AI transcription (WhisperKit)",
+                  "AI summaries (3 per month)",
+                  "Exam prep mode (Q&A)",
+                  "12 languages",
+                  "Synced audio playback",
+                  "Bookmarks & search",
+                  "PDF & Markdown export",
+                  "Web sync at lecsy.app",
+                ].map((f) => (
+                  <div key={f} className="flex items-center gap-3 text-sm text-gray-700">
+                    <CheckIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                    {f}
+                  </div>
+                ))}
+              </div>
+
+              <a
+                href={APP_STORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full text-center h-12 leading-[3rem] rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+              >
+                Download Free
+              </a>
             </div>
 
-            <div className="flex items-baseline gap-2 mb-1">
-              <span className="font-[family-name:var(--font-display)] text-5xl font-bold text-gray-900">$0</span>
-            </div>
-            <p className="text-sm text-gray-400 mb-8">No ads. No subscription. Every feature included.</p>
+            {/* Paid Plans - Coming Soon */}
+            <div className="p-8 lg:p-10 rounded-2xl border-2 border-dashed border-indigo-300 bg-gradient-to-br from-indigo-50 to-blue-50 relative">
+              <div className="absolute -top-3 left-6 px-3 py-0.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xs font-bold rounded-full uppercase tracking-wider">
+                Coming Soon
+              </div>
 
-            <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3 mb-8">
-              {[
-                "Unlimited recording",
-                "Offline AI transcription",
-                "AI-powered summaries",
-                "Exam prep mode (Q&A)",
-                "12 languages",
-                "Multilingual AI summaries",
-                "Synced audio playback",
-                "Bookmarks & search",
-                "PDF & Markdown export",
-                "Web sync at lecsy.app",
-              ].map((f) => (
-                <div key={f} className="flex items-center gap-3 text-sm text-gray-700">
-                  <CheckIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                  {f}
-                </div>
-              ))}
-            </div>
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="font-[family-name:var(--font-display)] text-5xl font-bold text-gray-900">$7.99+</span>
+                <span className="text-gray-400">/month</span>
+              </div>
+              <p className="text-sm text-gray-500 mb-8">Student / Pro / Power — unlocked with Deepgram.</p>
 
-            <a
-              href={APP_STORE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full text-center h-12 leading-[3rem] rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
-            >
-              Download Free
-            </a>
+              <div className="grid gap-y-3 mb-8">
+                {[
+                  "Real-time bilingual captions (Deepgram)",
+                  "Live translation in 7+ languages",
+                  "Unlimited AI Study Guide",
+                  "Unlimited Anki / Quizlet export",
+                  "Exam Prep Plan generator",
+                  "Priority support",
+                ].map((f) => (
+                  <div key={f} className="flex items-center gap-3 text-sm text-gray-700">
+                    <svg className="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{f}</span>
+                  </div>
+                ))}
+              </div>
 
-            <div className="mt-8 pt-6 border-t border-gray-100">
-              <p className="text-sm text-gray-500 leading-relaxed">
-                <strong className="text-gray-700">After June 1, 2026:</strong> We&apos;ll decide pricing based on what students actually ask for. Our promise is simple — every feature that is free today will stay free for users who already have it. We will not paywall features you already rely on.
-              </p>
+              <a
+                href="mailto:nittonotakumi@gmail.com?subject=Lecsy%20Beta%20Waitlist"
+                className="block w-full text-center h-12 leading-[3rem] rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+              >
+                Join the Waitlist
+              </a>
+
+              <div className="mt-6 pt-6 border-t border-indigo-200">
+                <Link
+                  href="/pricing"
+                  className="inline-block text-sm font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                >
+                  View detailed paid plans →
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -720,11 +800,11 @@ export default function Home() {
             {[
               {
                 q: "Is my data safe?",
-                a: "Yes. Audio recording and transcription happen entirely on your iPhone. Your voice never leaves your device. Transcript text is synced to the cloud only if you sign in (you can turn this off). When you use AI summaries or Exam Mode, only the transcript text (not audio) is sent to OpenAI."
+                a: "Yes. Audio is streamed to Deepgram (our speech-to-text provider) over an encrypted connection for real-time transcription, and Deepgram automatically deletes processed audio within 30 days. Lecsy itself never stores your audio. Transcript text syncs to our cloud only if you sign in. AI features send transcript text only (never audio) to OpenAI. See our Privacy Policy for details."
               },
               {
                 q: "Do I need internet to record and transcribe?",
-                a: "No. Recording and transcription work 100% offline via WhisperKit on your device. You only need internet for the initial one-time model download (~150MB), cloud sync, AI summaries, and Exam Mode."
+                a: "Real-time bilingual captions require internet (audio is streamed to Deepgram). If you're offline, the recording is still saved on your device and you can transcribe it later when you reconnect."
               },
               {
                 q: "What languages are supported?",
@@ -732,7 +812,7 @@ export default function Home() {
               },
               {
                 q: "How does this compare to Otter.ai?",
-                a: "Lecsy offers unlimited free recording (vs 300 min/month), works offline (vs internet required), costs $0 (vs $16.99/month), and keeps audio on your device (vs cloud upload). You save over $200/year."
+                a: "Lecsy is built specifically for international students with real-time bilingual captions (vs Otter's English-only). Lecsy Pro is $12.99/month vs Otter's $16.99/month, and Lecsy has a permanent Free plan (on-device only)."
               },
               {
                 q: "Is it legal to record lectures?",
@@ -740,7 +820,7 @@ export default function Home() {
               },
               {
                 q: "How accurate is the transcription?",
-                a: "Lecsy uses OpenAI\u2019s Whisper model running locally via WhisperKit. Accuracy is typically 85\u201395% for clear audio, comparable to cloud services. Sitting closer to the speaker helps."
+                a: "Lecsy uses Deepgram Nova-3 multilingual model. Accuracy is typically 95%+ for clear English lecture audio and 90%+ for non-native speakers. Sitting closer to the speaker helps."
               },
               {
                 q: "What iPhones are supported?",
@@ -748,7 +828,7 @@ export default function Home() {
               },
               {
                 q: "Is Lecsy really free?",
-                a: "Yes \u2014 every feature (recording, transcription, AI summaries, Exam Mode, 12 languages, web sync) is free through June 1, 2026. No ads, no subscription, no credit card. After that, we\u2019ll decide pricing based on user feedback. Features that are free today will stay free for existing users."
+                a: "The Free plan is permanently free: on-device recording, AI Study Guide (3 per month), and transcript sync. Real-time bilingual captions and unlimited AI require Pro ($12.99/mo) or Student ($7.99/mo)."
               },
               {
                 q: "What data goes to OpenAI?",
@@ -784,7 +864,7 @@ export default function Home() {
             Never miss a word again
           </h2>
           <p className="text-blue-100 text-lg mb-10 max-w-lg mx-auto">
-            Join students who record, transcribe, and ace their exams — completely free through June 1, 2026.
+            Join students who record, transcribe, and ace their exams — Free plan always available.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
             <a

@@ -13,8 +13,8 @@
 //     lawsuit for storing/training on raw audio).
 //   - Upload is fire-and-forget. Failure must NEVER block the local lecture
 //     save flow — local-first remains the source of truth on device.
-//   - Upload is gated by `lecsyCloudSyncEnabled` (default ON). Users can
-//     opt out per-device from PrivacySettingsView.
+//   - Upload is gated by `lecsyCloudSyncEnabled` (default OFF — opt-in for
+//     App Store privacy compliance). Users enable per-device from PrivacySettingsView.
 //   - Anonymous users (skipped sign-in) are silently skipped.
 //
 
@@ -31,7 +31,7 @@ final class CloudSyncService: ObservableObject {
     @Published var lastBackfillSummary: String?
 
     /// UserDefaults key for the per-device cloud sync toggle.
-    /// Default ON. Users can disable from PrivacySettingsView.
+    /// Default OFF (opt-in for App Store privacy compliance). Users enable from PrivacySettingsView.
     static let cloudSyncEnabledKey = "lecsy.cloudSyncEnabled"
 
     private let api = LecsyAPIClient.shared
@@ -40,9 +40,9 @@ final class CloudSyncService: ObservableObject {
 
     /// Whether the user has cloud sync enabled on this device.
     var isEnabled: Bool {
-        // Default true (opt-out, not opt-in)
+        // Default false (opt-in). User must explicitly enable in Privacy settings.
         if UserDefaults.standard.object(forKey: Self.cloudSyncEnabledKey) == nil {
-            return true
+            return false
         }
         return UserDefaults.standard.bool(forKey: Self.cloudSyncEnabledKey)
     }
@@ -79,6 +79,13 @@ final class CloudSyncService: ObservableObject {
 
         // Resolve org context (nil for B2C users, populated for org members)
         let orgContext = OrganizationContext.shared.saveContext()
+        // Warn if user is an org member but context is nil — likely a PostLoginCoordinator issue
+        if orgContext == nil && AuthService.shared.isOrgMember {
+            AppLogger.warning(
+                "Cloud sync: user is org member but OrganizationContext is nil — recording will save as private",
+                category: .recording
+            )
+        }
 
         struct SavePayload: Encodable {
             let title: String

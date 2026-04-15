@@ -188,13 +188,14 @@ class OrganizationService: ObservableObject {
         organizations = [demoOrg, demoOrg2]
         currentOrganization = demoOrg
 
-        // Current user as admin
+        // Current user as admin — use the actual signed-in user's info, not hardcoded.
         let currentUserId = UUID()
+        let authedEmail = AuthService.shared.currentUser?.email ?? "you@lecsy.app"
         currentMembership = OrganizationMember(
             organizationId: orgId,
             userId: currentUserId,
-            email: "takumi@lecsy.app",
-            displayName: "Takumi (You)",
+            email: authedEmail,
+            displayName: authedEmail,
             role: .owner,
             status: .active,
             joinedAt: Calendar.current.date(byAdding: .month, value: -3, to: Date()) ?? Date()
@@ -379,11 +380,12 @@ class OrganizationService: ObservableObject {
     }
 
     private func mockMembershipFor(_ org: Organization) -> OrganizationMember? {
+        let authedEmail = AuthService.shared.currentUser?.email ?? "you@lecsy.app"
         return OrganizationMember(
             organizationId: org.id,
             userId: UUID(),
-            email: "takumi@lecsy.app",
-            displayName: "Takumi (You)",
+            email: authedEmail,
+            displayName: authedEmail,
             role: .owner,
             status: .active
         )

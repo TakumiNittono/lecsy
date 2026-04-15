@@ -36,14 +36,14 @@ const faqs = [
   },
   {
     question: "How is this different from Zoom transcription?",
-    answer: "Zoom transcription only works for online classes. Lecsy works for in-person lectures, seminars, and labs. Plus, Lecsy processes everything locally on your device, so your audio never leaves your iPhone — better privacy and works offline."
+    answer: "Zoom transcription only works for online classes. Lecsy works for in-person lectures, seminars, and labs with real-time bilingual captions. Lecsy never stores your audio — Deepgram processes it for transcription and auto-deletes it within 30 days."
   }
 ];
 
 const comparisonRows = [
   {
     feature: "Price",
-    lecsy: "Free (Pro $2.99/mo)",
+    lecsy: "100% Free",
     otter: "Free limited, $16.99/mo",
     notta: "Free limited, $13.99/mo"
   },
@@ -159,10 +159,9 @@ export default function AITranscriptionForStudentsPage() {
                 Unlike cloud-based transcription services, Lecsy processes everything locally on your iPhone. This means:
               </p>
               <ul className="list-disc list-inside space-y-2 text-gray-700 mt-4">
-                <li>No Wi-Fi required — perfect for lecture halls with poor connectivity</li>
-                <li>Faster transcription — no waiting for cloud processing</li>
-                <li>Better privacy — your audio never leaves your device</li>
-                <li>No data charges — especially important for international students</li>
+                <li>Real-time captions — see what the professor said as they say it</li>
+                <li>Lecsy never stores your audio (Deepgram auto-deletes within 30 days)</li>
+                <li>Bilingual translation built in — read in your native language live</li>
               </ul>
             </div>
             <div className="bg-white p-8 rounded-xl shadow-md">
@@ -189,9 +188,9 @@ export default function AITranscriptionForStudentsPage() {
               </p>
             </div>
             <div className="bg-gradient-to-br from-sky-50 to-cyan-50 p-6 rounded-xl">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">100% Local Processing</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Lecsy Never Stores Your Audio</h3>
               <p className="text-gray-700">
-                Your audio never leaves your device. Transcription happens locally, ensuring privacy and compliance with university policies.
+                Live audio is streamed to Deepgram for transcription and auto-deleted within 30 days. We do not retain or train AI models on your data — supporting privacy and university compliance.
               </p>
             </div>
             <div className="bg-gradient-to-br from-cyan-50 to-blue-50 p-6 rounded-xl">
@@ -203,7 +202,7 @@ export default function AITranscriptionForStudentsPage() {
             <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-6 rounded-xl">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Free to Start</h3>
               <p className="text-gray-700">
-                Unlimited recording and transcription are free forever. Pro features (AI summaries, exam prep) are just $2.99/month — affordable for students.
+                Unlimited recording, transcription, AI summaries, and exam prep are all 100% free. No subscription, no credit card.
               </p>
             </div>
           </div>

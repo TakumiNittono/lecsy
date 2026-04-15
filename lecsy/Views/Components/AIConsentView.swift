@@ -19,26 +19,26 @@ struct AIConsentView: View {
                     .font(.system(size: 64))
                     .foregroundStyle(.blue)
 
-                Text("Privacy & On-Device AI")
+                Text("How Lecsy Handles Your Audio")
                     .font(.title2.bold())
                     .multilineTextAlignment(.center)
 
                 VStack(alignment: .leading, spacing: 16) {
                     privacyPoint(
-                        icon: "cpu",
-                        text: "All AI transcription runs on-device using Apple CoreML. No third-party AI service is used."
-                    )
-                    privacyPoint(
                         icon: "iphone",
-                        text: "Your audio recordings never leave your device and are never sent to any external server."
+                        text: "Your recordings stay on your device. Transcription runs on your iPhone."
                     )
                     privacyPoint(
-                        icon: "wifi",
-                        text: "Internet is only used once to download the AI model (~150 MB). No user data is transmitted during the download."
+                        icon: "cloud.slash",
+                        text: "Lecsy never uploads your audio. Only transcript text can be saved to your account — and only if you choose to."
+                    )
+                    privacyPoint(
+                        icon: "building.2",
+                        text: "If your organization enables cloud transcription, audio is processed transiently by our subprocessor and is never stored by Lecsy."
                     )
                     privacyPoint(
                         icon: "lock.shield",
-                        text: "Your data stays on your device. Nothing is uploaded to any server."
+                        text: "Your content is yours. We never train AI models on your data."
                     )
                 }
                 .padding(.horizontal, 24)

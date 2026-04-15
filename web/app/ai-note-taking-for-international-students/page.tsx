@@ -28,7 +28,7 @@ const faqs = [
   },
   {
     question: "Is it free for students?",
-    answer: "Yes! Lecsy is free forever for basic features — unlimited recording and transcription. Pro features (AI summaries, exam prep) are $2.99/month, which is affordable for students compared to other apps that charge $13-17/month."
+    answer: "Yes! Lecsy is 100% free. Unlimited recording, transcription, AI summaries, and exam prep are all free with no subscription. Compared to Otter ($16.99/mo) or Notta ($13.99/mo), Lecsy costs nothing."
   },
   {
     question: "How is this different from Otter.ai?",
@@ -43,7 +43,7 @@ const faqs = [
 const comparisonRows = [
   {
     feature: "Price",
-    lecsy: "Free (Pro $2.99/mo)",
+    lecsy: "100% Free",
     otter: "Free limited, $16.99/mo"
   },
   {
@@ -177,9 +177,9 @@ export default function AINoteTakingForInternationalStudentsPage() {
               </p>
             </div>
             <div className="bg-gradient-to-br from-sky-50 to-cyan-50 p-6 rounded-xl">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Privacy: Data Stays Local</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Privacy: Lecsy Never Stores Your Audio</h3>
               <p className="text-gray-700">
-                Your audio never leaves your iPhone. All processing happens locally, so you don't have to worry about your recordings being stored on foreign servers or privacy concerns.
+                Live audio is streamed to Deepgram (our speech-to-text provider) for real-time transcription and auto-deleted within 30 days. Lecsy itself never stores your audio. We do not retain your data or train AI models on it.
               </p>
             </div>
             <div className="bg-gradient-to-br from-cyan-50 to-blue-50 p-6 rounded-xl">
@@ -191,7 +191,7 @@ export default function AINoteTakingForInternationalStudentsPage() {
             <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-6 rounded-xl">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Free to Start</h3>
               <p className="text-gray-700">
-                Unlimited recording and transcription are free forever. Pro features are just $2.99/month — much more affordable than Otter ($16.99/month) or Notta ($13.99/month).
+                Unlimited recording, transcription, AI summaries, and exam prep are all 100% free — much better than Otter ($16.99/month) or Notta ($13.99/month).
               </p>
             </div>
           </div>
@@ -219,8 +219,8 @@ export default function AINoteTakingForInternationalStudentsPage() {
               <h3 className="text-xl font-bold text-gray-900 mb-3">Lecsy: Offline, Private, Affordable</h3>
               <ul className="list-disc list-inside space-y-2 text-gray-700">
                 <li>Works completely offline — no data charges</li>
-                <li>Local processing — your audio never leaves your device</li>
-                <li>Free forever for basic features, $2.99/month for Pro</li>
+                <li>Lecsy never stores your audio (Deepgram auto-deletes within 30 days)</li>
+                <li>100% free — AI summaries and exam prep included</li>
                 <li>Built specifically for college students and academic lectures</li>
               </ul>
             </div>
@@ -296,8 +296,8 @@ export default function AINoteTakingForInternationalStudentsPage() {
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0">4</div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Upgrade to Pro (Optional)</h3>
-                <p className="text-gray-700">Get AI summaries, exam prep mode, and key points extraction for just $2.99/month.</p>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Unlock AI Summaries (Free)</h3>
+                <p className="text-gray-700">Tap the AI Summary button to get key points, section outlines, and exam prep questions — all free, no subscription.</p>
               </div>
             </div>
           </div>

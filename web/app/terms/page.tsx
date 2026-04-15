@@ -14,14 +14,15 @@ export default function TermsPage() {
           <h1 className="text-3xl font-bold text-gray-900 mb-8">Terms of Service</h1>
 
           <p className="text-gray-600 mb-6">
-            Last updated: April 9, 2026
+            Last updated: April 14, 2026
           </p>
 
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">1. Overview</h2>
             <p className="text-gray-700 leading-relaxed">
-              Lecsy (&ldquo;the Service&rdquo;) is a lecture recording and AI study application that provides on-device transcription,
-              AI-powered summaries, exam preparation features, and cross-device transcript sync.
+              Lecsy (&ldquo;the Service&rdquo;) is a lecture recording and AI study application built for international students.
+              It provides real-time bilingual captions powered by Deepgram, AI-powered summaries and study guides
+              powered by OpenAI, and cross-device transcript sync via Supabase.
               By using the Service, you agree to these Terms. If you do not agree, do not use the Service.
             </p>
           </section>
@@ -36,14 +37,22 @@ export default function TermsPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">3. Pricing</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">3. Pricing &amp; Subscriptions</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
               All features are free through June 1, 2026. No ads, no subscription, no credit card required.
             </p>
+            <p className="text-gray-700 leading-relaxed mb-4">
+              From June 1, 2026 onward:
+            </p>
+            <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4 mb-4">
+              <li><strong>Free</strong>: Limited recording minutes per month, batch transcription only.</li>
+              <li><strong>Pro</strong> &mdash; $12.99 / month or $109 / year. Real-time bilingual captions, AI Study Guide, unlimited lectures.</li>
+              <li><strong>Student</strong> &mdash; $6.99 / month or $59 / year. Same as Pro; verified .edu email required.</li>
+            </ul>
             <p className="text-gray-700 leading-relaxed">
-              After June 1, 2026, pricing will be determined based on user feedback. Our commitment: features that
-              are free today will remain free for existing users. We will not retroactively paywall features you
-              already rely on.
+              Subscriptions are processed by Stripe and are billed in advance on a recurring basis. You may cancel anytime
+              from Settings &rarr; Manage Subscription, which opens the Stripe Customer Portal. Cancellation takes effect
+              at the end of the current billing period; we do not issue prorated refunds.
             </p>
           </section>
 
@@ -53,9 +62,11 @@ export default function TermsPage() {
               By using the Service, you acknowledge the following data processing:
             </p>
             <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-              <li><strong>Audio:</strong> Recorded and transcribed entirely on your device. Never uploaded.</li>
-              <li><strong>Transcript text:</strong> Synced to our server (Supabase) when signed in, for backup and web access. You can disable this.</li>
-              <li><strong>AI Summary &amp; Exam Mode:</strong> When you tap the button, transcript text (not audio) is sent to OpenAI&apos;s GPT-4o-mini API. OpenAI does not train on API content.</li>
+              <li><strong>Live audio:</strong> Streamed to Deepgram (Nova-3) over an encrypted WebSocket for real-time transcription. Deepgram automatically deletes processed audio within 30 days. <strong>Lecsy never stores your audio</strong>.</li>
+              <li><strong>Local audio file (.m4a):</strong> Stays on your device only.</li>
+              <li><strong>Transcript text:</strong> Synced to our server (Supabase) when signed in, for backup and web access.</li>
+              <li><strong>AI Summary, Translation &amp; Study Guide:</strong> When you tap the relevant button, transcript text (not audio) is sent to OpenAI&apos;s API. OpenAI does not train on API content.</li>
+              <li><strong>Billing:</strong> Subscription payments are processed by Stripe. Lecsy never sees your card number.</li>
             </ul>
             <p className="text-gray-700 leading-relaxed mt-4">
               For full details, see our <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>.
@@ -111,6 +122,24 @@ export default function TermsPage() {
               We reserve the right to modify or discontinue the Service at any time. For significant changes,
               we will provide reasonable notice. If the Service is discontinued, we will give users adequate time
               to export their data.
+            </p>
+          </section>
+
+          <section className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">9b. Organizations &amp; Educational Institutions</h2>
+            <p className="text-gray-700 leading-relaxed mb-4">
+              When the Service is provided to a school, university, or other organization under a separate written
+              agreement, that agreement governs in case of conflict with these Terms. For institutional customers
+              we will, on request:
+            </p>
+            <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
+              <li>Sign a Data Processing Addendum (DPA) with Standard Contractual Clauses for cross-border transfers</li>
+              <li>Provide HECVAT-Lite responses for security review</li>
+              <li>Operate as a FERPA &ldquo;school official&rdquo; with &ldquo;legitimate educational interest&rdquo;</li>
+              <li>Negotiate Zero Data Retention with Deepgram for sensitive deployments</li>
+            </ul>
+            <p className="text-gray-700 leading-relaxed mt-4">
+              Contact <a href="mailto:nittonotakumi@gmail.com" className="text-blue-600 hover:underline">nittonotakumi@gmail.com</a> for institutional inquiries.
             </p>
           </section>
 

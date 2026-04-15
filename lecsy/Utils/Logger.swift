@@ -64,7 +64,10 @@ struct AppLogger {
     static func logToken(_ label: String, token: String?, category: LogCategory = .auth) {
         #if DEBUG
         if let token = token {
-            debug("\(label): \(maskSensitive(token, visibleChars: 8))", category: category)
+            // Show only 4 leading chars — enough to correlate in logs,
+            // never enough to reconstruct a usable token even if a DEBUG
+            // build's console output is shared with a QA tester.
+            debug("\(label): \(maskSensitive(token, visibleChars: 4))", category: category)
         } else {
             debug("\(label): nil", category: category)
         }

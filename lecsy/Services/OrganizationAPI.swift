@@ -68,7 +68,7 @@ final class OrganizationAPI {
             )
         } catch {
             // 招待送信失敗はログのみ。メンバー追加自体は成功扱い。
-            print("[OrganizationAPI] send-org-invite failed (non-fatal): \(error)")
+            AppLogger.warning("send-org-invite failed (non-fatal): \(error)", category: .general)
         }
     }
 

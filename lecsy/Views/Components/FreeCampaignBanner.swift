@@ -28,9 +28,9 @@ enum CampaignConfig {
         return Calendar(identifier: .gregorian).date(from: comps) ?? Date.distantFuture
     }()
 
-    static var isActive: Bool {
-        Date() < endDate
-    }
+    /// memo.md フェーズ1以降: キャンペーン撤廃。常に false。
+    /// endDate / daysRemaining はレガシー互換のため残すが非表示になる。
+    static var isActive: Bool { false }
 
     /// 残り日数 (切り上げ)
     static var daysRemaining: Int {
@@ -40,29 +40,11 @@ enum CampaignConfig {
     }
 }
 
-/// Small, quiet trial-period indicator. Always visible while the campaign is
-/// active — no dismiss button, no gradient, no emoji. Sits at the top of the
-/// screen as a subtle pill so users remember the free window is finite without
-/// feeling marketed at.
+/// キャンペーン終了後は `CampaignConfig.isActive` が常に false なので何も表示しない。
+/// 将来キャンペーンを再開する時のためにビュー構造だけ残している。
 struct FreeCampaignBanner: View {
     var body: some View {
-        if CampaignConfig.isActive {
-            HStack(spacing: 5) {
-                Image(systemName: "clock")
-                    .font(.system(size: 9, weight: .semibold))
-                Text("Free trial until May 31")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-            }
-            .foregroundColor(.secondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(Color(.systemGray6))
-            )
-            .padding(.top, 4)
-            .accessibilityLabel("Free trial until May 31")
-        }
+        EmptyView()
     }
 }
 

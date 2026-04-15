@@ -33,12 +33,22 @@ export async function updateSession(request: NextRequest) {
   }
 
   // ルートパス（LP）とログインページ、公開ページは認証不要
+  const path = request.nextUrl.pathname
+  const publicPages = new Set([
+    '/',
+    '/privacy',
+    '/terms',
+    '/pricing',
+    '/ai-transcription-for-students',
+    '/lecture-recording-app-college',
+    '/ai-note-taking-for-international-students',
+    '/otter-alternative-for-lectures',
+    '/how-to-record-lectures-legally',
+  ])
   if (
-    request.nextUrl.pathname === '/' ||
-    request.nextUrl.pathname.startsWith('/login') ||
-    request.nextUrl.pathname.startsWith('/auth') ||
-    request.nextUrl.pathname === '/privacy' ||
-    request.nextUrl.pathname === '/terms'
+    publicPages.has(path) ||
+    path.startsWith('/login') ||
+    path.startsWith('/auth')
   ) {
     return supabaseResponse
   }
@@ -49,7 +59,6 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // 認証が必要なページ（/app, /org/**, /admin/** など）へのアクセスを保護
-  const path = request.nextUrl.pathname
   const isProtectedB2B = path.startsWith('/org') || path.startsWith('/admin')
   if (!user) {
     const url = request.nextUrl.clone()
@@ -58,6 +67,45 @@ export async function updateSession(request: NextRequest) {
       url.searchParams.set('redirect', path)
     }
     return NextResponse.redirect(url)
+  }
+
+  // /org/[slug]/** : 非メンバーは /app へ追い返す（防御の二段目）
+  // ページ側でも getOrgMembership で再チェックされるが、ここで先に弾く。
+  // /org/create など slug を持たないトップレベルは除外する。
+  const orgMatch = path.match(/^\/org\/([^/]+)(?:\/|$)/)
+  if (orgMatch) {
+    const slug = orgMatch[1]
+    // slug が予約語（create, new など）の場合はスキップ
+    const reserved = new Set(['create', 'new'])
+    if (!reserved.has(slug)) {
+      // RLS 経由で organizations + 自分の active membership をチェック。
+      // anon キー + ユーザーセッション cookie で動作するので、
+      // is_org_member() RLS を信頼する。
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('slug', slug)
+        .maybeSingle()
+
+      let allowed = false
+      if (org) {
+        const { data: member } = await supabase
+          .from('organization_members')
+          .select('role')
+          .eq('org_id', org.id)
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .maybeSingle()
+        allowed = !!member
+      }
+
+      if (!allowed) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/app'
+        url.search = ''
+        return NextResponse.redirect(url)
+      }
+    }
   }
 
   return supabaseResponse

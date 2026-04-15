@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct OnboardingView: View {
     @AppStorage("lecsy.hasSeenOnboarding") private var hasSeenOnboarding = false
@@ -16,24 +17,52 @@ struct OnboardingView: View {
     @State private var selectedLanguage: TranscriptionLanguage = .english
     @State private var elapsedSeconds: Int = 0
     @State private var setupTimer: Timer?
+    @State private var showSignInSuccess = false
 
     private let totalPages = 5
     private let authPageIndex = 4
     private let estimatedSeconds: Double = 90
 
     var body: some View {
-        VStack(spacing: 0) {
-            TabView(selection: $currentPage) {
-                privacyPage.tag(0)
-                howItWorksPage.tag(1)
-                featuresPage.tag(2)
-                languagePage.tag(3)
-                authPage.tag(4)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .animation(.easeInOut(duration: 0.3), value: currentPage)
+        ZStack {
+            VStack(spacing: 0) {
+                TabView(selection: $currentPage) {
+                    privacyPage.tag(0)
+                    howItWorksPage.tag(1)
+                    featuresPage.tag(2)
+                    languagePage.tag(3)
+                    authPage.tag(4)
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .animation(.easeInOut(duration: 0.3), value: currentPage)
 
-            bottomSection
+                bottomSection
+            }
+
+            // Sign-in success overlay
+            if showSignInSuccess {
+                Color.black.opacity(0.35).ignoresSafeArea()
+                VStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.green.opacity(0.15))
+                            .frame(width: 96, height: 96)
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 72))
+                            .foregroundStyle(.green)
+                    }
+                    Text("Sign-in Successful!")
+                        .font(.title2.bold())
+                    if let email = authService.currentUser?.email {
+                        Text(email)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(36)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+                .transition(.scale.combined(with: .opacity))
+            }
         }
         .onAppear {
             startSetupTimer()
@@ -116,7 +145,26 @@ struct OnboardingView: View {
     }
 
     private func tryFinishIfReady() {
-        guard currentPage == authPageIndex else { return }
+        // Show the success toast as soon as the user signs in, but DO NOT
+        // advance past the onboarding/download screen until the AI model
+        // has finished loading. We want users to see download progress.
+        if authService.isAuthenticated && !showSignInSuccess {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                showSignInSuccess = true
+            }
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+            // Auto-hide the toast after 1.4s so the download UI is visible again.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    showSignInSuccess = false
+                }
+            }
+        }
+
+        // Only actually finish onboarding when BOTH:
+        //   - the user has signed in (or explicitly skipped), AND
+        //   - the AI model has finished downloading/loading.
         let authedOrSkipped = authService.isAuthenticated || authService.hasSkippedLogin
         if authedOrSkipped && transcriptionService.isModelLoaded {
             completeOnboarding()
@@ -148,16 +196,27 @@ struct OnboardingView: View {
                     .font(.system(size: 56))
                     .foregroundStyle(.blue)
 
-                Text("Your Privacy Matters")
+                Text("How Your Audio Is Handled")
                     .font(.title.bold())
 
                 VStack(alignment: .leading, spacing: 14) {
-                    iconRow(icon: "cpu", text: "All AI transcription runs on-device. No third-party AI service is used.")
-                    iconRow(icon: "iphone", text: "Your audio recordings never leave your device.")
-                    iconRow(icon: "wifi", text: "No internet needed for transcription. Everything works offline.")
-                    iconRow(icon: "lock.shield", text: "Your recordings and transcriptions stay on your device. Nothing is uploaded.")
+                    iconRow(icon: "iphone",
+                            text: "Transcription runs on your iPhone. Your audio stays on your device.")
+                    iconRow(icon: "cloud.slash",
+                            text: "We never upload your recordings. Only transcript text can be saved to your account, and only if you choose to.")
+                    iconRow(icon: "building.2",
+                            text: "Organizations can opt in to cloud transcription. In that case audio is processed transiently and never stored by Lecsy.")
+                    iconRow(icon: "lock.shield",
+                            text: "Your content is yours. We never train AI models on your data.")
                 }
                 .padding(.horizontal, 32)
+
+                Text("See our Privacy Policy at lecsy.app/privacy.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .padding(.top, 8)
 
                 Spacer().frame(height: 40)
             }
@@ -183,8 +242,8 @@ struct OnboardingView: View {
                              title: "Record",
                              desc: "Tap the mic button to start recording your lecture. Pause and resume anytime.")
                     stepCard(step: "2", icon: "cpu", color: .blue,
-                             title: "Transcribe",
-                             desc: "AI automatically converts speech to text, entirely on your device.")
+                             title: "On-Device Transcription",
+                             desc: "After recording, your iPhone transcribes the audio locally. Works offline — your audio never leaves your device.")
                     stepCard(step: "3", icon: "doc.text.magnifyingglass", color: .green,
                              title: "Review",
                              desc: "Read, search, and copy your transcription. Export as text, Markdown, or PDF.")
@@ -207,7 +266,7 @@ struct OnboardingView: View {
                     .font(.system(size: 56))
                     .foregroundStyle(.blue)
 
-                Text("Built for Students")
+                Text("Powerful Features")
                     .font(.title.bold())
 
                 VStack(spacing: 20) {
@@ -280,11 +339,67 @@ struct OnboardingView: View {
 
     // MARK: - Page 5: Sign In + AI download progress (concurrent)
 
+    @ViewBuilder
     private var authPage: some View {
         VStack(spacing: 0) {
-            modelDownloadBanner
-            LoginView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if authService.isAuthenticated {
+                // Already signed in — show only the signed-in waiting view
+                // (which has its own progress bar). Skip the top banner so
+                // we don't end up with two progress bars.
+                signedInWaitingView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                modelDownloadBanner
+                LoginView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    private var signedInWaitingView: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.12))
+                    .frame(width: 96, height: 96)
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 72))
+                    .foregroundStyle(.green)
+            }
+            Text("Signed in")
+                .font(.title2.bold())
+            if let email = authService.currentUser?.email {
+                Text(email)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer().frame(height: 16)
+            VStack(spacing: 8) {
+                HStack {
+                    Image(systemName: "cpu").foregroundStyle(.blue)
+                    Text(transcriptionService.isModelLoaded
+                         ? "AI model ready"
+                         : "Setting up AI…")
+                        .font(.subheadline.weight(.medium))
+                    Spacer()
+                    Text("\(Int(setupProgress * 100))%")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.blue)
+                }
+                ProgressView(value: setupProgress).tint(.blue)
+                Text(transcriptionService.isModelLoaded
+                     ? "Ready to go!"
+                     : estimatedTimeRemaining)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(16)
+            .background(Color.blue.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 24)
+            Spacer()
         }
     }
 

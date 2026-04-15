@@ -55,6 +55,13 @@ final class PostLoginCoordinator {
     func handleSignIn(userId: String, email: String, accessToken: String) async {
         // No need to push tokens into LecsyAPIClient — it now reads them
         // directly from AuthService.shared (single source of truth).
+
+        // Guard: token must be present before making API calls.
+        guard AuthService.shared.cachedAccessToken != nil else {
+            AppLogger.error("handleSignIn called but cachedAccessToken is nil — skipping org activation", category: .auth)
+            return
+        }
+
         do {
             let activated = try await OrganizationAPI.shared.activatePendingMemberships()
             if !activated.isEmpty {
@@ -68,9 +75,9 @@ final class PostLoginCoordinator {
                 await refreshMemberships()
             }
         } catch {
-            #if DEBUG
-            print("[PostLoginCoordinator] activate failed: \(error)")
-            #endif
+            AppLogger.warning("activate pending memberships failed: \(error)", category: .auth)
+            // Still try to refresh memberships — user may already be active
+            await refreshMemberships()
         }
     }
 
@@ -80,29 +87,40 @@ final class PostLoginCoordinator {
         OrganizationContext.shared.clear()
     }
 
+    /// Maximum retry attempts for membership refresh (network can be flaky).
+    private static let maxRetries = 3
+
     private func refreshMemberships() async {
-        do {
-            let rows = try await OrganizationAPI.shared.listMyOrganizations()
-            // Bridge to OrganizationService: take the first active org as current
-            if let first = rows.first, let org = first.organizations {
-                let mapped = Organization(
-                    id: UUID(uuidString: org.id) ?? UUID(),
-                    name: org.name,
-                    slug: org.slug,
-                    type: .languageSchool,
-                    plan: OrganizationPlan(rawValue: org.plan ?? "free") ?? .free,
-                    maxSeats: org.max_seats ?? 50
-                )
-                let role = OrganizationRole(rawValue: first.role) ?? .student
-                OrganizationService.shared.joinOrganization(mapped, as: role)
-                // Adopt org context for new recordings (Phase 1.5 #4).
-                OrganizationContext.shared.adoptDefaultContext(orgId: org.id)
+        for attempt in 1...Self.maxRetries {
+            do {
+                let rows = try await OrganizationAPI.shared.listMyOrganizations()
+                // Bridge to OrganizationService: take the first active org as current
+                if let first = rows.first, let org = first.organizations {
+                    let mapped = Organization(
+                        id: UUID(uuidString: org.id) ?? UUID(),
+                        name: org.name,
+                        slug: org.slug,
+                        type: .languageSchool,
+                        plan: OrganizationPlan(rawValue: org.plan ?? "free") ?? .free,
+                        maxSeats: org.max_seats ?? 50
+                    )
+                    let role = OrganizationRole(rawValue: first.role) ?? .student
+                    OrganizationService.shared.joinOrganization(mapped, as: role)
+                    // Adopt org context for new recordings (Phase 1.5 #4).
+                    OrganizationContext.shared.adoptDefaultContext(orgId: org.id)
+                    AppLogger.info("Org context adopted: \(org.id) (\(org.name))", category: .auth)
+                } else {
+                    AppLogger.debug("No active org memberships found", category: .auth)
+                }
+                return // success — exit retry loop
+            } catch {
+                AppLogger.warning("refreshMemberships attempt \(attempt)/\(Self.maxRetries) failed: \(error)", category: .auth)
+                if attempt < Self.maxRetries {
+                    try? await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000) // 1s, 2s backoff
+                }
             }
-        } catch {
-            #if DEBUG
-            print("[PostLoginCoordinator] refresh memberships failed: \(error)")
-            #endif
         }
+        AppLogger.error("refreshMemberships exhausted all retries — org context will be nil", category: .auth)
     }
 
     private func showJoinedToast(orgId: String) async {

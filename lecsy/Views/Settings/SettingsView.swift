@@ -6,10 +6,14 @@
 //
 
 import SwiftUI
+import Combine
 
 struct SettingsView: View {
     @StateObject private var authService = AuthService.shared
     @StateObject private var transcriptionService = TranscriptionService.shared
+    @StateObject private var planService = PlanService.shared
+    @State private var translationTarget: TranslationTargetLanguage = .current
+    @AppStorage(PlanService.forceLocalKey) private var forceLocalTranscription: Bool = false
 
     @State private var showSignInSheet = false
     @State private var showSignOutDialog = false
@@ -94,6 +98,55 @@ struct SettingsView: View {
                     Text("Transcription Language")
                 }
 
+                // Transcription Method — Pro (org member) のみ override トグルを表示。
+                // Free プランは常にオンデバイス (WhisperKit) 固定なので何も出さない。
+                if planService.isPaid {
+                    Section {
+                        HStack {
+                            Image(systemName: "cpu")
+                                .foregroundColor(.gray)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("On-Device Only")
+                                    .foregroundColor(.primary)
+                                Text(forceLocalTranscription
+                                     ? "Using on-device transcription"
+                                     : "Using cloud transcription")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $forceLocalTranscription)
+                                .labelsHidden()
+                                .onChange(of: forceLocalTranscription) { _, _ in
+                                    planService.objectWillChange.send()
+                                }
+                        }
+                    } header: {
+                        Text("Transcription Method")
+                    } footer: {
+                        Text("Force on-device processing. Turning this on disables real-time captions.")
+                    }
+                }
+
+                // Bilingual Translation Target — Pro (org member) のみ表示
+                if planService.isPaid {
+                    Section {
+                        Picker("Translate captions to", selection: $translationTarget) {
+                            ForEach(TranslationTargetLanguage.allCases) { lang in
+                                Text(lang.displayName).tag(lang)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .onChange(of: translationTarget) { _, newValue in
+                            TranslationTargetLanguage.set(newValue)
+                        }
+                    } header: {
+                        Text("Bilingual Captions")
+                    } footer: {
+                        Text("Live captions show the original on the left and a translation in your chosen language on the right.")
+                    }
+                }
+
 
                 // Account section
                 Section("Account") {
@@ -126,7 +179,7 @@ struct SettingsView: View {
                                     do {
                                         try await authService.signOut()
                                     } catch {
-                                        deleteAccountErrorMessage = error.localizedDescription
+                                        deleteAccountErrorMessage = ErrorMessages.friendly(error)
                                         showDeleteAccountErrorAlert = true
                                     }
                                 }
@@ -139,7 +192,7 @@ struct SettingsView: View {
                                             LectureStore.shared.deleteAllData()
                                         }
                                     } catch {
-                                        deleteAccountErrorMessage = error.localizedDescription
+                                        deleteAccountErrorMessage = ErrorMessages.friendly(error)
                                         showDeleteAccountErrorAlert = true
                                     }
                                 }
@@ -170,6 +223,27 @@ struct SettingsView: View {
                             Spacer()
                             FreeCampaignBanner()
                         }
+                    }
+                }
+
+                // Plan section — B2B専用。org member のみ所属情報を表示。
+                // B2C（org非所属）には課金UIを一切見せない（2026-06-01ローンチまで）。
+                if authService.isAuthenticated && planService.isPaid {
+                    Section {
+                        HStack {
+                            Image(systemName: "building.2")
+                                .foregroundColor(.blue)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Pro (via your organization)")
+                                    .foregroundColor(.primary)
+                                Text("Managed by your organization admin.")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                        }
+                    } header: {
+                        Text("Plan")
                     }
                 }
 
@@ -279,7 +353,7 @@ struct SettingsView: View {
                         do {
                             try await authService.deleteAccount()
                         } catch {
-                            deleteAccountErrorMessage = error.localizedDescription
+                            deleteAccountErrorMessage = ErrorMessages.friendly(error)
                             showDeleteAccountErrorAlert = true
                         }
                         isDeletingAccount = false

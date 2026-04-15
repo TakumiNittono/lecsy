@@ -102,6 +102,20 @@ struct LoginView: View {
                 }
                 .disabled(authService.isLoading)
 
+                // Continue without login (right under Apple / Google)
+                Button(action: {
+                    authService.skipLogin()
+                }) {
+                    Text("Continue without login")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                        .frame(height: 44)
+                        .background(Color.secondary.opacity(0.08))
+                        .cornerRadius(12)
+                }
+                .disabled(authService.isLoading)
+
                 // ── Divider ──
                 HStack {
                     Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
@@ -116,17 +130,6 @@ struct LoginView: View {
 
                 // ── Email magic link ──
                 magicLinkSection
-
-                // Skip button - allows using app without account
-                Button(action: {
-                    authService.skipLogin()
-                }) {
-                    Text("Continue without account")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.top, 8)
-                .disabled(authService.isLoading)
             }
             .padding(.horizontal, horizontalSizeClass == .regular ? 80 : 40)
             
@@ -248,7 +251,7 @@ struct LoginView: View {
             try? await Task.sleep(nanoseconds: 200_000_000)
             otpFieldFocused = true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ErrorMessages.friendly(error)
         }
     }
 
@@ -259,7 +262,7 @@ struct LoginView: View {
             // authStateChanges listener will flip isAuthenticated and dismiss
             // this view via the parent navigator
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ErrorMessages.friendly(error)
             // Don't reset stage — let user retry the code
         }
     }
@@ -298,10 +301,10 @@ struct LoginView: View {
                     errorMessage = "Interactive sign in required."
                 @unknown default:
                     AppLogger.error("LoginView: Unknown error case", category: .auth)
-                    errorMessage = error.localizedDescription
+                    errorMessage = ErrorMessages.friendly(error)
                 }
             } else {
-                errorMessage = error.localizedDescription
+                errorMessage = ErrorMessages.friendly(error)
             }
             
             currentNonce = nil
@@ -314,7 +317,7 @@ struct LoginView: View {
         do {
             try await authService.signInWithGoogle()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ErrorMessages.friendly(error)
         }
     }
     
@@ -365,7 +368,7 @@ struct LoginView: View {
             currentNonce = nil
             AppLogger.error("LoginView: Apple Sign In error - \(error.localizedDescription)", category: .auth)
             
-            errorMessage = error.localizedDescription
+            errorMessage = ErrorMessages.friendly(error)
         }
     }
     

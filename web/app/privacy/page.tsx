@@ -3,7 +3,8 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy',
-  description: 'Lecsy Privacy Policy — how we handle your audio, transcripts, and personal data. Audio never leaves your device.',
+  description:
+    'Lecsy Privacy Policy — how we handle your audio, transcripts, and personal data. Audio is processed via Deepgram (auto-deleted within 30 days) and never stored by Lecsy.',
 };
 
 export default function PrivacyPage() {
@@ -14,13 +15,13 @@ export default function PrivacyPage() {
           <h1 className="text-4xl font-bold text-gray-900 mb-4">Privacy Policy</h1>
 
           <p className="text-gray-600 mb-8 text-sm">
-            <strong>Last Updated:</strong> April 9, 2026
+            <strong>Last Updated:</strong> April 14, 2026
           </p>
 
           <section className="mb-10">
             <h2 className="text-2xl font-semibold text-gray-800 mb-4">1. Introduction</h2>
             <p className="text-gray-700 leading-relaxed">
-              Lecsy (&ldquo;the App&rdquo;) respects your privacy and is committed to protecting your personal information.
+              Lecsy (&ldquo;the App&rdquo;) is built for international students who attend English-language lectures.
               This Privacy Policy explains what information we collect, how we use it, and your rights regarding your data.
             </p>
           </section>
@@ -30,10 +31,12 @@ export default function PrivacyPage() {
             <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
               <p className="text-blue-800 font-semibold mb-2">The short version</p>
               <p className="text-blue-900 leading-relaxed text-sm">
-                Recording and transcription happen <strong>entirely on your iPhone</strong> via WhisperKit (on-device AI).
-                Your audio file (.m4a) is <strong>never uploaded anywhere</strong>.
-                Transcript text syncs to our server only when you&apos;re signed in (you can turn this off).
-                When you tap AI Summary or Exam Mode, the transcript <strong>text</strong> (not audio) is sent to OpenAI to generate the result.
+                When you record a lecture, audio is streamed in real time to <strong>Deepgram</strong>
+                {' '}(our speech-to-text provider) over an encrypted connection.
+                Deepgram returns transcript text immediately and <strong>automatically deletes the processed audio within 30 days</strong>.
+                <strong> Lecsy itself never stores your audio</strong> on its servers.
+                Transcript text is saved on your device and, when you are signed in, synced to our database for cross-device access.
+                When you tap AI Summary or Bilingual Translation, the transcript <strong>text</strong> (not audio) is sent to OpenAI to generate the result.
               </p>
             </div>
 
@@ -42,44 +45,58 @@ export default function PrivacyPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b">Data</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b">On Device</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b">Our Server</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b">Your Device</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b">Lecsy Server</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b">Deepgram</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b">OpenAI</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b">Condition</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   <tr>
-                    <td className="px-4 py-3 text-gray-700 border-b font-medium">Audio (.m4a)</td>
+                    <td className="px-4 py-3 text-gray-700 border-b font-medium">Audio (live stream)</td>
+                    <td className="px-4 py-3 text-green-700 border-b font-semibold">Yes</td>
+                    <td className="px-4 py-3 text-green-700 border-b font-semibold">Never</td>
+                    <td className="px-4 py-3 text-gray-700 border-b">Yes (auto-deleted &lt; 30d)</td>
+                    <td className="px-4 py-3 text-green-700 border-b font-semibold">Never</td>
+                    <td className="px-4 py-3 text-gray-600 border-b">Streamed only while you are recording</td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-3 text-gray-700 border-b font-medium">Audio (.m4a file)</td>
                     <td className="px-4 py-3 text-green-700 border-b font-semibold">Yes</td>
                     <td className="px-4 py-3 text-green-700 border-b font-semibold">Never</td>
                     <td className="px-4 py-3 text-green-700 border-b font-semibold">Never</td>
-                    <td className="px-4 py-3 text-gray-600 border-b">Always stays on device only</td>
+                    <td className="px-4 py-3 text-green-700 border-b font-semibold">Never</td>
+                    <td className="px-4 py-3 text-gray-600 border-b">Local backup file, stays on your device</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3 text-gray-700 border-b font-medium">Transcript text</td>
                     <td className="px-4 py-3 text-green-700 border-b font-semibold">Yes</td>
                     <td className="px-4 py-3 text-gray-700 border-b">Yes</td>
+                    <td className="px-4 py-3 text-gray-700 border-b">&mdash;</td>
                     <td className="px-4 py-3 text-green-700 border-b font-semibold">No</td>
-                    <td className="px-4 py-3 text-gray-600 border-b">Synced when signed in; disable in Settings &rarr; Privacy &rarr; Cloud Sync</td>
+                    <td className="px-4 py-3 text-gray-600 border-b">Synced when signed in</td>
                   </tr>
                   <tr>
-                    <td className="px-4 py-3 text-gray-700 border-b font-medium">AI Summary / Exam Mode input</td>
+                    <td className="px-4 py-3 text-gray-700 border-b font-medium">AI Summary / Translation input</td>
                     <td className="px-4 py-3 text-green-700 border-b font-semibold">Yes</td>
                     <td className="px-4 py-3 text-gray-700 border-b">Yes</td>
+                    <td className="px-4 py-3 text-gray-700 border-b">&mdash;</td>
                     <td className="px-4 py-3 text-gray-700 border-b">Yes</td>
-                    <td className="px-4 py-3 text-gray-600 border-b">Only when you tap the button; text only, never audio</td>
+                    <td className="px-4 py-3 text-gray-600 border-b">Text only, never audio; only on demand</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3 text-gray-700 border-b font-medium">Account info (email, name, ID)</td>
                     <td className="px-4 py-3 text-gray-700 border-b">&mdash;</td>
                     <td className="px-4 py-3 text-gray-700 border-b">Yes</td>
+                    <td className="px-4 py-3 text-gray-700 border-b">&mdash;</td>
                     <td className="px-4 py-3 text-green-700 border-b font-semibold">No</td>
-                    <td className="px-4 py-3 text-gray-600 border-b">Via Apple / Google / Magic Link sign-in</td>
+                    <td className="px-4 py-3 text-gray-600 border-b">Apple / Google / Magic Link sign-in</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3 text-gray-700 border-b font-medium">Ads / Trackers / IDFA</td>
                     <td className="px-4 py-3 text-gray-700 border-b">&mdash;</td>
+                    <td className="px-4 py-3 text-green-700 border-b font-semibold">None</td>
                     <td className="px-4 py-3 text-green-700 border-b font-semibold">None</td>
                     <td className="px-4 py-3 text-green-700 border-b font-semibold">None</td>
                     <td className="px-4 py-3 text-gray-600 border-b">No ad SDKs installed; IDFA not collected</td>
@@ -90,68 +107,72 @@ export default function PrivacyPage() {
           </section>
 
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">3. On-Device Transcription</h2>
+            <h2 className="text-2xl font-semibold text-gray-800 mb-4">3. Real-Time Transcription via Deepgram</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
-              Lecsy performs all speech-to-text transcription <strong>entirely on your device</strong> using
-              the open-source WhisperKit library (Apple CoreML). No audio data is sent to any server for transcription.
+              Lecsy uses <strong>Deepgram Nova-3</strong> to perform real-time speech-to-text on lecture audio.
+              While you are recording, audio is streamed to Deepgram&apos;s servers over an encrypted (TLS) WebSocket
+              connection. Transcript text is returned within milliseconds and stored on your device.
             </p>
             <p className="text-gray-700 leading-relaxed mb-4">
-              The AI model (~150 MB) is downloaded once from HuggingFace on first launch. During this download,
-              no user data is transmitted — only model weights are downloaded. After that, transcription works completely offline.
+              <strong>Deepgram&apos;s data handling:</strong>
+            </p>
+            <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4 mb-4">
+              <li>Audio is processed only to produce the transcript and is <strong>not used to train Deepgram&apos;s models</strong> (per Deepgram&apos;s API terms).</li>
+              <li>Processed audio is <strong>automatically deleted within 30 days</strong>.</li>
+              <li>Lecsy uses short-lived API tokens (15-minute TTL) to authorize each session, so no permanent credentials live on your phone.</li>
+              <li>For organization customers we will negotiate a <strong>Zero Data Retention</strong> agreement with Deepgram on request.</li>
+            </ul>
+            <p className="text-gray-700 leading-relaxed">
+              <strong>If you are offline</strong>, real-time transcription is unavailable. The local audio file is still saved and you can re-attempt transcription when you reconnect.
             </p>
           </section>
 
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">4. AI Summaries &amp; Exam Mode</h2>
+            <h2 className="text-2xl font-semibold text-gray-800 mb-4">4. AI Summaries, Translation &amp; Study Guides</h2>
             <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-4">
               <p className="text-amber-900 leading-relaxed text-sm">
-                When you tap the <strong>AI Summary</strong> or <strong>Exam Mode</strong> button, the transcript
-                <strong> text</strong> (never audio) is sent from our server to <strong>OpenAI&apos;s GPT-4o-mini</strong> API
-                to generate the summary or exam questions. OpenAI does not use API content to train its models.
-                We do not use your data to train AI models either.
+                When you tap <strong>AI Summary</strong>, <strong>Bilingual Translation</strong>, or <strong>Study Guide</strong>,
+                the transcript <strong>text</strong> (never audio) is sent from our server to <strong>OpenAI&apos;s API</strong>
+                {' '}(GPT-4o-mini and gpt-5-nano) to generate the result. OpenAI does not use API content to train its models.
+                Lecsy does not use your data to train AI models either.
               </p>
             </div>
           </section>
 
           <section className="mb-10">
             <h2 className="text-2xl font-semibold text-gray-800 mb-4">5. Information We Collect</h2>
-
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">Account Information (optional)</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">Account Information (optional but required for cloud features)</h3>
                 <ul className="list-disc list-inside text-gray-700 space-y-1 ml-4">
                   <li>Email address (from Apple ID or Google account)</li>
                   <li>Display name</li>
                   <li>User ID</li>
                 </ul>
-                <p className="text-gray-600 text-sm mt-1 ml-4">
-                  Collected only when you choose to sign in. The app can be used without an account for recording and transcription.
-                </p>
               </div>
 
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">Audio Recordings</h3>
                 <ul className="list-disc list-inside text-gray-700 space-y-1 ml-4">
                   <li>Lecture audio recorded through the app</li>
-                  <li><strong className="text-green-700">Stored on your device only — never uploaded to any server</strong></li>
-                  <li><strong className="text-green-700">Processed on-device only — never sent to any third-party service</strong></li>
+                  <li><strong className="text-green-700">Local file (.m4a) stored on your device only — never uploaded to Lecsy servers</strong></li>
+                  <li>Streamed to Deepgram in real time for transcription, then deleted by Deepgram within 30 days (see Section 3)</li>
                 </ul>
               </div>
 
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">Transcription Text</h3>
                 <ul className="list-disc list-inside text-gray-700 space-y-1 ml-4">
-                  <li>Text generated from on-device speech recognition</li>
+                  <li>Text returned by Deepgram during recording</li>
                   <li>Stored locally on your device</li>
-                  <li>If you sign in, text is synced to our server (Supabase) for cross-device access and backup</li>
-                  <li>Cloud sync can be disabled: Settings &rarr; Privacy &rarr; Cloud Sync</li>
+                  <li>If you are signed in, text is synced to our server (Supabase) for cross-device access and backup</li>
                 </ul>
               </div>
 
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">Usage Data</h3>
                 <ul className="list-disc list-inside text-gray-700 space-y-1 ml-4">
-                  <li>Feature usage statistics (for rate limiting)</li>
+                  <li>Recording minutes per day / per month (for usage caps and billing)</li>
                   <li>Device type and operating system version</li>
                 </ul>
               </div>
@@ -161,54 +182,52 @@ export default function PrivacyPage() {
           <section className="mb-10">
             <h2 className="text-2xl font-semibold text-gray-800 mb-4">6. How We Use Your Information</h2>
             <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
-              <li><strong>On-Device Transcription:</strong> Audio is processed locally using WhisperKit (Apple CoreML). No data leaves your device during this process.</li>
-              <li><strong>AI Features:</strong> Transcript text is sent to OpenAI GPT-4o-mini when you use AI Summary or Exam Mode.</li>
-              <li><strong>Authentication:</strong> To verify your identity and manage your account (if you sign in)</li>
-              <li><strong>Data Synchronization:</strong> To sync your transcription text across devices (only when signed in)</li>
-              <li><strong>Service Improvement:</strong> Anonymized usage data to improve our services</li>
+              <li><strong>Real-Time Transcription:</strong> Audio is streamed to Deepgram while recording; transcript text is returned and stored.</li>
+              <li><strong>AI Features:</strong> Transcript text is sent to OpenAI when you use AI Summary, Translation, or Study Guide.</li>
+              <li><strong>Authentication:</strong> To verify your identity and manage your account.</li>
+              <li><strong>Data Synchronization:</strong> To sync transcript text across devices.</li>
+              <li><strong>Service Operation:</strong> Anonymized usage data to enforce quotas and improve reliability.</li>
             </ul>
           </section>
 
           <section className="mb-10">
             <h2 className="text-2xl font-semibold text-gray-800 mb-4">7. Data Storage</h2>
-
             <div className="space-y-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">On Your Device</h3>
                 <ul className="list-disc list-inside text-gray-700 space-y-1 ml-4">
                   <li>Audio recording files (.m4a)</li>
-                  <li>AI model files (Apple CoreML format)</li>
-                  <li>Transcription text</li>
+                  <li>Transcript text and segments</li>
                   <li>App settings and preferences</li>
                 </ul>
               </div>
 
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">In the Cloud (only when signed in)</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">On Lecsy Servers (Supabase, when signed in)</h3>
                 <ul className="list-disc list-inside text-gray-700 space-y-1 ml-4">
                   <li>Account information (email, display name)</li>
-                  <li>Transcription text (for cross-device sync and backup)</li>
-                  <li>Usage logs (rate-limit tracking)</li>
-                  <li><strong className="text-green-700">Audio recordings are never uploaded to the cloud</strong></li>
+                  <li>Transcript text (for cross-device sync and backup)</li>
+                  <li>Usage logs (rate-limit and billing tracking)</li>
+                  <li><strong className="text-green-700">Audio recordings are never stored by Lecsy</strong></li>
                 </ul>
               </div>
 
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">Security Measures</h3>
                 <ul className="list-disc list-inside text-gray-700 space-y-1 ml-4">
-                  <li>All data is transferred over encrypted connections (HTTPS/TLS)</li>
+                  <li>All data is transferred over encrypted connections (HTTPS/TLS 1.3)</li>
                   <li>Data at rest is encrypted</li>
                   <li>Row-level security ensures you can only access your own data</li>
-                  <li>On-device data is protected by iOS device security</li>
+                  <li>Short-lived (15-minute TTL) API tokens for Deepgram, never long-lived secrets in the app</li>
                 </ul>
               </div>
             </div>
           </section>
 
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">8. Third-Party Services</h2>
+            <h2 className="text-2xl font-semibold text-gray-800 mb-4">8. Sub-Processors</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
-              We use the following third-party services:
+              We use the following third-party services (sub-processors) to operate Lecsy. Each is bound by their own privacy and security commitments:
             </p>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 border border-gray-300">
@@ -222,9 +241,29 @@ export default function PrivacyPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   <tr>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b"><strong>Deepgram</strong></td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Real-time speech-to-text (Nova-3)</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Live audio stream (auto-deleted &lt; 30 days)</td>
+                    <td className="px-4 py-3 text-sm text-blue-600 border-b">
+                      <a href="https://deepgram.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:underline">
+                        deepgram.com/privacy
+                      </a>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b"><strong>OpenAI</strong></td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">AI summaries, translation, study guides</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Transcript text only (no audio); on demand</td>
+                    <td className="px-4 py-3 text-sm text-blue-600 border-b">
+                      <a href="https://openai.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:underline">
+                        openai.com/privacy
+                      </a>
+                    </td>
+                  </tr>
+                  <tr>
                     <td className="px-4 py-3 text-sm text-gray-700 border-b"><strong>Supabase</strong></td>
                     <td className="px-4 py-3 text-sm text-gray-700 border-b">Database, authentication, cloud sync</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Account info, transcription text (no audio)</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Account info, transcript text (no audio)</td>
                     <td className="px-4 py-3 text-sm text-blue-600 border-b">
                       <a href="https://supabase.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:underline">
                         supabase.com/privacy
@@ -232,12 +271,12 @@ export default function PrivacyPage() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b"><strong>OpenAI</strong></td>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b">AI summaries &amp; Exam Mode (GPT-4o-mini)</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Transcript text only (no audio); only when user taps the button</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b"><strong>Stripe</strong></td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Subscription billing</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Email, payment method (held by Stripe)</td>
                     <td className="px-4 py-3 text-sm text-blue-600 border-b">
-                      <a href="https://openai.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:underline">
-                        openai.com/privacy
+                      <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:underline">
+                        stripe.com/privacy
                       </a>
                     </td>
                   </tr>
@@ -261,16 +300,6 @@ export default function PrivacyPage() {
                       </a>
                     </td>
                   </tr>
-                  <tr>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b"><strong>HuggingFace</strong></td>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b">AI model hosting (one-time download)</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b">No user data (only model files are downloaded)</td>
-                    <td className="px-4 py-3 text-sm text-blue-600 border-b">
-                      <a href="https://huggingface.co/privacy" target="_blank" rel="noopener noreferrer" className="hover:underline">
-                        huggingface.co/privacy
-                      </a>
-                    </td>
-                  </tr>
                 </tbody>
               </table>
             </div>
@@ -283,11 +312,11 @@ export default function PrivacyPage() {
             </p>
             <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
               <li><strong>With Your Consent:</strong> When you explicitly authorize sharing</li>
-              <li><strong>Service Providers:</strong> Third-party services listed above, solely for providing our services</li>
-              <li><strong>Legal Requirements:</strong> To comply with applicable laws, regulations, or legal processes</li>
+              <li><strong>Sub-Processors:</strong> Listed in Section 8, solely to operate the Service</li>
+              <li><strong>Legal Requirements:</strong> To comply with applicable laws or legal processes</li>
             </ul>
             <p className="text-gray-700 leading-relaxed mt-4 font-semibold">
-              Your audio recordings are never shared with anyone. They exist only on your device.
+              We never share or sell your transcript text or audio data for advertising or model training.
             </p>
           </section>
 
@@ -295,7 +324,7 @@ export default function PrivacyPage() {
             <h2 className="text-2xl font-semibold text-gray-800 mb-4">10. AI Training</h2>
             <p className="text-gray-700 leading-relaxed">
               We do <strong>not</strong> use your audio, transcripts, or any other personal data to train artificial intelligence models.
-              OpenAI does not use API content to train its models (per OpenAI&apos;s API terms). Your data is yours.
+              Our sub-processors (Deepgram, OpenAI) also commit, in their API terms, to not using your data for model training.
             </p>
           </section>
 
@@ -334,8 +363,9 @@ export default function PrivacyPage() {
             <h2 className="text-2xl font-semibold text-gray-800 mb-4">12. Data Retention</h2>
             <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
               <li>On-device data (audio, transcripts) remains until you delete it</li>
-              <li>Cloud data is retained while your account is active</li>
+              <li>Cloud transcript data is retained while your account is active</li>
               <li>Upon account deletion, all cloud data is deleted within 30 days</li>
+              <li>Audio sent to Deepgram for live transcription is auto-deleted within 30 days by Deepgram</li>
               <li>Some data may be retained longer if required by law</li>
             </ul>
           </section>
@@ -352,10 +382,9 @@ export default function PrivacyPage() {
           <section className="mb-10">
             <h2 className="text-2xl font-semibold text-gray-800 mb-4">14. International Data Transfers</h2>
             <p className="text-gray-700 leading-relaxed">
-              If you sign in, your transcription text may be transferred to and processed in countries other
-              than your country of residence via our cloud provider (Supabase). By using the sync feature,
-              you consent to such transfers. Audio recordings are never transferred internationally as they
-              remain on your device.
+              Lecsy is operated from the United States. Audio (briefly) and transcript text may be processed in the
+              United States by Deepgram, OpenAI, and Supabase. By using the Service, you consent to such transfers.
+              Where required by law, we rely on Standard Contractual Clauses (SCCs) for cross-border transfers.
             </p>
           </section>
 
@@ -387,7 +416,17 @@ export default function PrivacyPage() {
           </section>
 
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">17. Changes to This Policy</h2>
+            <h2 className="text-2xl font-semibold text-gray-800 mb-4">17. FERPA (Educational Records)</h2>
+            <p className="text-gray-700 leading-relaxed">
+              When Lecsy is provided to a school under a written agreement, it operates as a
+              &ldquo;school official&rdquo; with &ldquo;legitimate educational interest&rdquo; under FERPA, processing student
+              data only as directed by the school. We do not disclose personally identifiable information from
+              education records to third parties without consent or as permitted by FERPA.
+            </p>
+          </section>
+
+          <section className="mb-10">
+            <h2 className="text-2xl font-semibold text-gray-800 mb-4">18. Changes to This Policy</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
               We may update this Privacy Policy from time to time. We will notify you of significant changes through:
             </p>
@@ -399,7 +438,7 @@ export default function PrivacyPage() {
           </section>
 
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">18. Contact Us</h2>
+            <h2 className="text-2xl font-semibold text-gray-800 mb-4">19. Contact Us</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
               If you have any questions about this Privacy Policy, please contact us:
             </p>
@@ -425,20 +464,26 @@ export default function PrivacyPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   <tr>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Audio recordings</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b">On-device transcription (WhisperKit)</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Audio (live)</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Real-time transcription</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Streamed to Deepgram, deleted &lt; 30 days</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Deepgram only</td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Audio (.m4a)</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Local backup of recording</td>
                     <td className="px-4 py-3 text-sm text-gray-700 border-b">Your device only</td>
                     <td className="px-4 py-3 text-sm font-semibold text-green-700 border-b">No one</td>
                   </tr>
                   <tr>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Transcription text</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Transcript text</td>
                     <td className="px-4 py-3 text-sm text-gray-700 border-b">Display, search, cross-device backup</td>
                     <td className="px-4 py-3 text-sm text-gray-700 border-b">Device + cloud (if signed in)</td>
                     <td className="px-4 py-3 text-sm text-gray-700 border-b">Supabase (our cloud provider)</td>
                   </tr>
                   <tr>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b">AI summary / exam input</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Generate summaries &amp; exam questions</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">AI summary / translation input</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 border-b">Generate summaries, translations, study guides</td>
                     <td className="px-4 py-3 text-sm text-gray-700 border-b">Processed, not stored by OpenAI</td>
                     <td className="px-4 py-3 text-sm text-gray-700 border-b">OpenAI (text only, on demand)</td>
                   </tr>
@@ -454,10 +499,9 @@ export default function PrivacyPage() {
             <div className="mt-4">
               <p className="text-gray-800 font-semibold mb-2">Key Points:</p>
               <ul className="list-none space-y-1">
-                <li className="text-green-700">&#10003; Audio never leaves your device</li>
-                <li className="text-green-700">&#10003; Transcription is on-device (WhisperKit / Apple CoreML)</li>
-                <li className="text-green-700">&#10003; AI features send text only to OpenAI (not audio), only on demand</li>
-                <li className="text-green-700">&#10003; Cloud sync is optional and only for transcript text</li>
+                <li className="text-green-700">&#10003; Audio is never stored on Lecsy servers</li>
+                <li className="text-green-700">&#10003; Live audio sent to Deepgram is auto-deleted within 30 days</li>
+                <li className="text-green-700">&#10003; AI features send transcript text only (not audio), only on demand</li>
                 <li className="text-green-700">&#10003; No data is sold to third parties</li>
                 <li className="text-green-700">&#10003; No data is used to train AI models</li>
                 <li className="text-green-700">&#10003; You can delete your data anytime</li>
@@ -467,7 +511,7 @@ export default function PrivacyPage() {
 
           <div className="border-t pt-8 mt-8">
             <p className="text-gray-600 text-sm mb-4 italic">
-              This Privacy Policy is effective as of April 9, 2026.
+              This Privacy Policy is effective as of April 14, 2026.
             </p>
             <Link href="/" className="text-blue-600 hover:text-blue-800 font-medium inline-flex items-center">
               <span>&larr;</span>

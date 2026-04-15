@@ -47,6 +47,21 @@ export default async function AdminPage() {
   const activeSubs = subs?.filter((s: any) => s.status === 'active').length || 0
   const totalSubs = subs?.length || 0
 
+  // Lecsy Beta org の情報取得（フェーズ1-2のコア）
+  const { data: betaOrg } = await admin
+    .from('organizations')
+    .select('id, slug, name')
+    .eq('slug', 'lecsy-beta')
+    .maybeSingle()
+
+  const { count: betaMemberCount } = betaOrg
+    ? await admin
+        .from('organization_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', betaOrg.id)
+        .eq('status', 'active')
+    : { count: 0 }
+
   const handleSignOut = async () => {
     'use server'
     const supabase = createClient()
@@ -83,6 +98,41 @@ export default async function AdminPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Platform Admin</h1>
         <p className="text-gray-600 mb-8">Manage all organizations and users across Lecsy.</p>
+
+        {/* 🧪 Lecsy Beta Testers — Private beta access management */}
+        {betaOrg && (
+          <div className="mb-8 rounded-xl border-2 border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-2xl">🧪</span>
+                  <h2 className="text-xl font-bold text-gray-900">Lecsy Beta Testers</h2>
+                  <span className="rounded-full bg-blue-600 px-2 py-0.5 text-xs font-bold text-white">
+                    PRO
+                  </span>
+                </div>
+                <p className="text-sm text-gray-700">
+                  Private beta access for friends. Members get full Pro features (Deepgram live captions + translation).
+                  Currently <span className="font-bold">{betaMemberCount ?? 0}</span> active member(s).
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Link
+                  href={`/org/${betaOrg.slug}/members`}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+                >
+                  Manage Members →
+                </Link>
+                <Link
+                  href={`/org/${betaOrg.slug}/members/import`}
+                  className="rounded-lg border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-colors"
+                >
+                  Add by CSV
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Platform Stats */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">

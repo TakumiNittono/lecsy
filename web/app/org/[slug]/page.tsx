@@ -27,14 +27,6 @@ export default async function OrgDashboardPage({
     .select('*', { count: 'exact', head: true })
     .eq('org_id', orgId)
 
-  // Get all member user_ids for aggregate queries
-  const { data: members } = await supabase
-    .from('organization_members')
-    .select('user_id')
-    .eq('org_id', orgId)
-
-  const memberIds = members?.map((m) => m.user_id) || []
-
   // Current month boundaries
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
@@ -64,12 +56,17 @@ export default async function OrgDashboardPage({
     user_email: string
   }> = []
 
-  if (memberIds.length > 0) {
+  {
+    // All transcript stats are filtered strictly by organization_id.
+    // We deliberately do NOT use `user_id IN (members)` — that would leak
+    // personal pre-membership recordings (organization_id IS NULL) into
+    // org-scoped dashboards.
+
     // Monthly recordings
     const { count: recCount } = await supabase
       .from('transcripts')
       .select('*', { count: 'exact', head: true })
-      .in('user_id', memberIds)
+      .eq('organization_id', orgId)
       .gte('created_at', monthStart)
       .lt('created_at', monthEnd)
     monthlyRecordings = recCount || 0
@@ -78,7 +75,7 @@ export default async function OrgDashboardPage({
     const { data: durationData } = await supabase
       .from('transcripts')
       .select('duration')
-      .in('user_id', memberIds)
+      .eq('organization_id', orgId)
       .gte('created_at', monthStart)
       .lt('created_at', monthEnd)
 
@@ -94,7 +91,7 @@ export default async function OrgDashboardPage({
     const { data: activeData } = await supabase
       .from('transcripts')
       .select('user_id')
-      .in('user_id', memberIds)
+      .eq('organization_id', orgId)
       .gte('created_at', sevenDaysAgo)
 
     if (activeData) {
@@ -106,7 +103,7 @@ export default async function OrgDashboardPage({
     const { count: prevRecCount } = await supabase
       .from('transcripts')
       .select('*', { count: 'exact', head: true })
-      .in('user_id', memberIds)
+      .eq('organization_id', orgId)
       .gte('created_at', prevMonthStart)
       .lt('created_at', prevMonthEnd)
     prevMonthlyRecordings = prevRecCount || 0
@@ -114,7 +111,7 @@ export default async function OrgDashboardPage({
     const { data: prevDurationData } = await supabase
       .from('transcripts')
       .select('duration')
-      .in('user_id', memberIds)
+      .eq('organization_id', orgId)
       .gte('created_at', prevMonthStart)
       .lt('created_at', prevMonthEnd)
 
@@ -129,7 +126,7 @@ export default async function OrgDashboardPage({
     const { data: prevActiveData } = await supabase
       .from('transcripts')
       .select('user_id')
-      .in('user_id', memberIds)
+      .eq('organization_id', orgId)
       .gte('created_at', prevMonthStart)
       .lt('created_at', prevMonthEnd)
 
@@ -141,7 +138,7 @@ export default async function OrgDashboardPage({
     const { data: recentTranscripts } = await supabase
       .from('transcripts')
       .select('id, title, created_at, duration, language, user_id')
-      .in('user_id', memberIds)
+      .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
       .limit(10)
 

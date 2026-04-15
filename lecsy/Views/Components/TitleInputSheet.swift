@@ -38,7 +38,7 @@ struct TitleInputSheet: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 500)
 
-                    TextField("Course (optional)", text: $courseName)
+                    TextField("Subject (optional)", text: $courseName)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 500)
                         .onChange(of: courseName) { _, newValue in

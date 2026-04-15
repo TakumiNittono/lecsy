@@ -109,4 +109,25 @@ enum ErrorMessages {
             message: "An unexpected error occurred during transcription. Please try again."
         )
     }
+
+    /// Convert any raw error into a short, user-friendly string.
+    /// Use this instead of `error.localizedDescription` anywhere in the UI.
+    static func friendly(_ error: Error) -> String {
+        let raw = "\(error)"
+        if raw.contains("NSURLErrorDomain") || raw.contains("connection was lost")
+            || raw.contains("timed out") || raw.contains("not connected")
+            || raw.contains("offline") || raw.contains("No Internet") {
+            return "Network error — please check your connection and try again."
+        }
+        if raw.contains("401") || raw.contains("403") || raw.contains("JWT") {
+            return "Session expired. Please sign out and sign in again."
+        }
+        if raw.contains("429") || raw.contains("rate limit") {
+            return "Too many requests — please wait a moment and try again."
+        }
+        if raw.contains("500") || raw.contains("502") || raw.contains("503") {
+            return "Server is temporarily unavailable. Please try again later."
+        }
+        return "Something went wrong. Please try again."
+    }
 }

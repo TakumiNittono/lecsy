@@ -59,15 +59,15 @@ struct SyncedTranscriptView: View {
                                         .frame(width: 40, alignment: .trailing)
                                 } else {
                                     Text(formatTimestamp(segment.startTime))
-                                        .font(.system(.caption2, design: .monospaced))
+                                        .font(.system(.footnote, design: .monospaced))
                                         .foregroundColor(.secondary.opacity(0.7))
                                         .frame(width: 40, alignment: .trailing)
                                 }
 
                                 Text(segment.cleanText)
-                                    .font(.system(.callout, design: .default))
+                                    .font(.body)
                                     .foregroundColor(.primary)
-                                    .lineSpacing(3)
+                                    .lineSpacing(4)
                                     .multilineTextAlignment(.leading)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
