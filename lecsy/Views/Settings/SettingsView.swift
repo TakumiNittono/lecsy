@@ -228,75 +228,11 @@ struct SettingsView: View {
                     }
                 }
 
-                // Plan section — 2026-06-01 ローンチ時点で B2B / B2C 両対応。
-                // 3 分岐: (a) Pro via org, (b) Pro via Stripe, (c) Free。
                 if authService.isAuthenticated {
-                    Section {
-                        switch planService.proSource {
-                        case .organization:
-                            HStack {
-                                Image(systemName: "building.2")
-                                    .foregroundColor(.blue)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Pro (via your organization)")
-                                        .foregroundColor(.primary)
-                                    Text("Managed by your organization admin.")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                Spacer()
-                            }
-                        case .stripe:
-                            Button {
-                                openPortal()
-                            } label: {
-                                HStack {
-                                    Image(systemName: "creditcard.fill")
-                                        .foregroundColor(.green)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Pro (via Stripe subscription)")
-                                            .foregroundColor(.primary)
-                                        Text(isOpeningPortal
-                                             ? "Opening portal…"
-                                             : "Tap to manage or cancel.")
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    if isOpeningPortal {
-                                        ProgressView()
-                                    } else {
-                                        Image(systemName: "arrow.up.right.square")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-                            .disabled(isOpeningPortal)
-                        case .none:
-                            Button {
-                                BillingService.shared.openPricing()
-                            } label: {
-                                HStack {
-                                    Image(systemName: "sparkles")
-                                        .foregroundColor(.purple)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("View Plans")
-                                            .foregroundColor(.primary)
-                                        Text("Unlock bilingual captions & AI study guide.")
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "arrow.up.right.square")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                    } header: {
-                        Text("Plan")
-                    }
+                    PlanSection(
+                        isOpeningPortal: isOpeningPortal,
+                        openPortal: openPortal
+                    )
                 }
 
                 // Support section
@@ -450,6 +386,110 @@ struct SettingsView: View {
             return TranscriptionLanguage.allCases
         }
         return TranscriptionLanguage.baseLanguages
+    }
+}
+
+// MARK: - PlanSection
+//
+// 2026-06-01 ローンチ:
+//  - Pro via org: 常に表示（B2B 所属表示）
+//  - Pro via Stripe / View Plans: feature_flags.b2c_stripe_checkout=true の時だけ表示
+//    (ローンチ時 B2C は WhisperKit Free のみ、DB で flag を true にすると iOS に解放される)
+
+private struct PlanSection: View {
+    @ObservedObject var planService: PlanService = PlanService.shared
+    let isOpeningPortal: Bool
+    let openPortal: () -> Void
+
+    var body: some View {
+        switch planService.proSource {
+        case .organization:
+            Section {
+                orgRow
+            } header: {
+                Text("Plan")
+            }
+        case .stripe:
+            if planService.b2cCheckoutEnabled {
+                Section {
+                    stripeRow
+                } header: {
+                    Text("Plan")
+                }
+            }
+        case .none:
+            if planService.b2cCheckoutEnabled {
+                Section {
+                    viewPlansRow
+                } header: {
+                    Text("Plan")
+                }
+            }
+        }
+    }
+
+    private var orgRow: some View {
+        HStack {
+            Image(systemName: "building.2")
+                .foregroundColor(.blue)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Pro (via your organization)")
+                    .foregroundColor(.primary)
+                Text("Managed by your organization admin.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+        }
+    }
+
+    private var stripeRow: some View {
+        Button(action: openPortal) {
+            HStack {
+                Image(systemName: "creditcard.fill")
+                    .foregroundColor(.green)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Pro (via Stripe subscription)")
+                        .foregroundColor(.primary)
+                    Text(isOpeningPortal
+                         ? "Opening portal…"
+                         : "Tap to manage or cancel.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                if isOpeningPortal {
+                    ProgressView()
+                } else {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .disabled(isOpeningPortal)
+    }
+
+    private var viewPlansRow: some View {
+        Button {
+            BillingService.shared.openPricing()
+        } label: {
+            HStack {
+                Image(systemName: "sparkles")
+                    .foregroundColor(.purple)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("View Plans")
+                        .foregroundColor(.primary)
+                    Text("Unlock bilingual captions & AI study guide.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Image(systemName: "arrow.up.right.square")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
     }
 }
 

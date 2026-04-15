@@ -93,10 +93,10 @@
 - [x] `web/app/api/stripe/portal/route.ts` — Edge Functionプロキシ
 
 **iOS**
-- [x] `lecsy/Services/BillingService.swift` (2026-04-15) — `openPricing()` で Safari に `/pricing` を開く、`openPortal()` で `create-portal-session` Edge Function 経由で Stripe Customer Portal を開く。
-- [x] `lecsy/Services/PlanService.swift` (2026-04-15) — Pro 判定を B2B (organization_members) と B2C (subscriptions.status='active' + provider='stripe') の 2 系統並行に拡張。`ProSource` enum で UI 分岐。
-- [x] Settings画面に Plan セクション (2026-04-15) — Free → "View Plans"、Pro via org → 既存表示、Pro via Stripe → "Manage Subscription" ボタン。
-  **方針 (2026-04-15 訂正)**: 6/1 は B2B と B2C 両方同時ローンチ。iOS の個人課金導線は必須。
+- [x] `lecsy/Services/BillingService.swift` (2026-04-15) — `openPricing()` で Safari に `/pricing`、`openPortal()` で Stripe Customer Portal を開く。コード保有、UI は feature flag で gate。
+- [x] `lecsy/Services/PlanService.swift` (2026-04-15) — Pro 判定を B2B (organization_members) と B2C (subscriptions.status='active' + provider='stripe') の 2 系統並行に拡張。`ProSource` enum で UI 分岐。`b2cCheckoutEnabled` flag も同時フェッチ。
+- [x] Settings `PlanSection` (2026-04-15) — Pro via org は常に表示。Stripe 経路と "View Plans" は `feature_flags.b2c_stripe_checkout` が true の時のみ表示。
+  **方針 (2026-04-15 再確認)**: 6/1 ローンチ時点は B2B のみ Deepgram Pro。B2C は WhisperKit Free のみで課金UI非表示。ローンチ後に個人プラン解放するときは `update public.feature_flags set enabled=true where name='b2c_stripe_checkout'` で remote 解放。
 
 **Stripe Test mode infra**
 - [x] Products作成: `Lecsy Pro` / `Lecsy Student`

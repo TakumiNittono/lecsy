@@ -59,3 +59,4 @@ yarn-error.log*
 
 # Skills
 skills-lock.json
+deno.lock

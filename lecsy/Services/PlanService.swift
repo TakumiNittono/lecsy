@@ -43,6 +43,11 @@ final class PlanService: ObservableObject {
     @Published private(set) var proSource: ProSource = .none
     @Published private(set) var lastRefreshed: Date?
 
+    /// B2C Stripe Checkout / Portal の UI をアプリ内で露出するかどうか。
+    /// 2026-06-01 ローンチ時点では false。個人プラン解放タイミングで
+    /// `update public.feature_flags set enabled=true where name='b2c_stripe_checkout'` で有効化。
+    @Published private(set) var b2cCheckoutEnabled: Bool = false
+
     private var cancellables: Set<AnyCancellable> = []
     private var refreshTask: Task<Void, Never>?
 
@@ -124,6 +129,10 @@ final class PlanService: ObservableObject {
             let status: String?
             let provider: String?
         }
+        struct FeatureFlagRow: Decodable {
+            let name: String
+            let enabled: Bool
+        }
         do {
             async let orgRowsTask: [OrgMemberRow] = LecsyAPIClient.shared.restGET(
                 "/organization_members",
@@ -143,8 +152,17 @@ final class PlanService: ObservableObject {
                     "limit": "1",
                 ]
             )
+            async let flagRowsTask: [FeatureFlagRow] = LecsyAPIClient.shared.restGET(
+                "/feature_flags",
+                query: [
+                    "select": "name,enabled",
+                    "name": "eq.b2c_stripe_checkout",
+                    "limit": "1",
+                ]
+            )
             let orgRows = try await orgRowsTask
             let subRows = try await subRowsTask
+            let flagRows = (try? await flagRowsTask) ?? []
 
             // レスポンス後に Task がキャンセルされていたら書き戻さない（stale 応答対策）
             if Task.isCancelled {
@@ -171,6 +189,7 @@ final class PlanService: ObservableObject {
                 setPlan(.free, source: .none)
                 AppLogger.info("PlanService: Free (no active pro source)", category: .general)
             }
+            b2cCheckoutEnabled = flagRows.first?.enabled ?? false
             lastRefreshed = Date()
         } catch {
             AppLogger.warning("PlanService refresh failed (keeping cached plan=\(currentPlan.rawValue)): \(error.localizedDescription)", category: .general)
