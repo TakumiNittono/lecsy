@@ -2,15 +2,16 @@
 //  PlanService.swift
 //  lecsy
 //
-//  B2B 専用:
-//    - Pro判定の唯一の根拠 = active な organization_members かつ org.plan='pro'
-//    - B2C（org非所属）は常に Free、WhisperKit のみ
-//    - Force local transcription ON → Pro でも WhisperKit を使う（QA用）
+//  2026-06-01 B2B + B2C 同時ローンチ。Pro 判定ソースは2系統:
+//    A. B2B: active な organization_members かつ org.plan='pro'
+//    B. B2C: subscriptions.status='active' かつ provider='stripe'
+//    どちらか一方でも満たせば Pro。両方とも無ければ Free。
+//    Force local transcription ON → Pro でも WhisperKit を使う（QA用）
 //
 //  耐障害性:
 //    - 一度 Pro と判定したプランを UserDefaults にキャッシュ、次回起動時に即復元
 //    - refresh 中の一時的な失敗（JWT期限切れ、ネットワーク断、初期化レース）では Pro を降格しない
-//    - 降格は「認証状態が完全に揃った上で、明示的に org.plan!='pro' が確認できた」時のみ
+//    - 降格は「認証状態が完全に揃った上で、両方の経路で明示的に pro でないと確認できた」時のみ
 //    - Task 直列化 + cancellation チェックで in-flight response の後着による書き戻しを防ぐ
 //
 
@@ -27,10 +28,19 @@ final class PlanService: ObservableObject {
         case free, pro
     }
 
+    /// Pro の出所。UI で "via your organization" / "via Stripe subscription" を出し分けるため。
+    enum ProSource: String {
+        case none          // Free
+        case organization  // B2B: active org member, org.plan='pro'
+        case stripe        // B2C: subscriptions.status='active', provider='stripe'
+    }
+
     static let forceLocalKey = "lecsy.forceLocalTranscription"
     private static let cachedPlanKey = "lecsy.cachedPlan"
+    private static let cachedSourceKey = "lecsy.cachedProSource"
 
     @Published private(set) var currentPlan: Plan = .free
+    @Published private(set) var proSource: ProSource = .none
     @Published private(set) var lastRefreshed: Date?
 
     private var cancellables: Set<AnyCancellable> = []
@@ -40,6 +50,10 @@ final class PlanService: ObservableObject {
         if let raw = UserDefaults.standard.string(forKey: Self.cachedPlanKey),
            let cached = Plan(rawValue: raw) {
             currentPlan = cached
+        }
+        if let raw = UserDefaults.standard.string(forKey: Self.cachedSourceKey),
+           let cached = ProSource(rawValue: raw) {
+            proSource = cached
         }
 
         AuthService.shared.$currentUser
@@ -106,8 +120,12 @@ final class PlanService: ObservableObject {
             let organizations: OrgPlan?
             struct OrgPlan: Decodable { let plan: String? }
         }
+        struct SubscriptionRow: Decodable {
+            let status: String?
+            let provider: String?
+        }
         do {
-            let rows: [OrgMemberRow] = try await LecsyAPIClient.shared.restGET(
+            async let orgRowsTask: [OrgMemberRow] = LecsyAPIClient.shared.restGET(
                 "/organization_members",
                 query: [
                     "select": "status,organizations!inner(plan)",
@@ -116,6 +134,18 @@ final class PlanService: ObservableObject {
                     "limit": "1",
                 ]
             )
+            async let subRowsTask: [SubscriptionRow] = LecsyAPIClient.shared.restGET(
+                "/subscriptions",
+                query: [
+                    "select": "status,provider",
+                    "user_id": "eq.\(userId)",
+                    "status": "eq.active",
+                    "limit": "1",
+                ]
+            )
+            let orgRows = try await orgRowsTask
+            let subRows = try await subRowsTask
+
             // レスポンス後に Task がキャンセルされていたら書き戻さない（stale 応答対策）
             if Task.isCancelled {
                 AppLogger.info("PlanService: refresh result dropped (cancelled)", category: .general)
@@ -126,12 +156,20 @@ final class PlanService: ObservableObject {
                 AppLogger.info("PlanService: refresh result dropped (user switched)", category: .general)
                 return
             }
-            if let m = rows.first, m.organizations?.plan == "pro" {
-                setPlan(.pro)
+
+            let orgPro = orgRows.first?.organizations?.plan == "pro"
+            let stripePro = subRows.first?.status == "active" &&
+                            subRows.first?.provider == "stripe"
+
+            if orgPro {
+                setPlan(.pro, source: .organization)
                 AppLogger.info("PlanService: Pro via org membership", category: .general)
+            } else if stripePro {
+                setPlan(.pro, source: .stripe)
+                AppLogger.info("PlanService: Pro via Stripe subscription", category: .general)
             } else {
-                setPlan(.free)
-                AppLogger.info("PlanService: Free (no active pro org)", category: .general)
+                setPlan(.free, source: .none)
+                AppLogger.info("PlanService: Free (no active pro source)", category: .general)
             }
             lastRefreshed = Date()
         } catch {
@@ -146,14 +184,18 @@ final class PlanService: ObservableObject {
 
     // MARK: - Private
 
-    private func setPlan(_ plan: Plan) {
+    private func setPlan(_ plan: Plan, source: ProSource) {
         currentPlan = plan
+        proSource = source
         UserDefaults.standard.set(plan.rawValue, forKey: Self.cachedPlanKey)
+        UserDefaults.standard.set(source.rawValue, forKey: Self.cachedSourceKey)
     }
 
     private func clearPlan() {
         refreshTask?.cancel()
         currentPlan = .free
+        proSource = .none
         UserDefaults.standard.removeObject(forKey: Self.cachedPlanKey)
+        UserDefaults.standard.removeObject(forKey: Self.cachedSourceKey)
     }
 }

@@ -93,12 +93,10 @@
 - [x] `web/app/api/stripe/portal/route.ts` — Edge Functionプロキシ
 
 **iOS**
-- [~] `lecsy/Services/BillingService.swift` — 現状はスタブのみ（19行）。
-  **戦略変更 (2026-04-14)**: ローンチまでは B2B 専用で個人向け課金 UI を露出しない方針に転換。
-  Pro 判定は organization_members の active + org.plan='pro' 経路のみ（`PlanService`）。
-  Web `/pricing` は信用装置として残し、iOS からの Stripe Checkout 誘導は **ローンチ後** 判断。
-- [ ] Settings画面に "Manage Subscription" ボタン追加 — **保留**。上記戦略転換により B2C iOS 課金 UI は露出しない。
-  B2B メンバーは Web の `/org/[slug]/settings` から管理。
+- [x] `lecsy/Services/BillingService.swift` (2026-04-15) — `openPricing()` で Safari に `/pricing` を開く、`openPortal()` で `create-portal-session` Edge Function 経由で Stripe Customer Portal を開く。
+- [x] `lecsy/Services/PlanService.swift` (2026-04-15) — Pro 判定を B2B (organization_members) と B2C (subscriptions.status='active' + provider='stripe') の 2 系統並行に拡張。`ProSource` enum で UI 分岐。
+- [x] Settings画面に Plan セクション (2026-04-15) — Free → "View Plans"、Pro via org → 既存表示、Pro via Stripe → "Manage Subscription" ボタン。
+  **方針 (2026-04-15 訂正)**: 6/1 は B2B と B2C 両方同時ローンチ。iOS の個人課金導線は必須。
 
 **Stripe Test mode infra**
 - [x] Products作成: `Lecsy Pro` / `Lecsy Student`

@@ -24,6 +24,8 @@ struct SettingsView: View {
     @State private var showReportSheet = false
     @State private var cloudSyncEnabled = CloudSyncService.shared.isEnabled
     @ObservedObject private var cloudSync = CloudSyncService.shared
+    @State private var isOpeningPortal = false
+    @State private var billingErrorMessage: String?
 
     var body: some View {
         NavigationView {
@@ -226,21 +228,71 @@ struct SettingsView: View {
                     }
                 }
 
-                // Plan section — B2B専用。org member のみ所属情報を表示。
-                // B2C（org非所属）には課金UIを一切見せない（2026-06-01ローンチまで）。
-                if authService.isAuthenticated && planService.isPaid {
+                // Plan section — 2026-06-01 ローンチ時点で B2B / B2C 両対応。
+                // 3 分岐: (a) Pro via org, (b) Pro via Stripe, (c) Free。
+                if authService.isAuthenticated {
                     Section {
-                        HStack {
-                            Image(systemName: "building.2")
-                                .foregroundColor(.blue)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Pro (via your organization)")
-                                    .foregroundColor(.primary)
-                                Text("Managed by your organization admin.")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
+                        switch planService.proSource {
+                        case .organization:
+                            HStack {
+                                Image(systemName: "building.2")
+                                    .foregroundColor(.blue)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Pro (via your organization)")
+                                        .foregroundColor(.primary)
+                                    Text("Managed by your organization admin.")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
                             }
-                            Spacer()
+                        case .stripe:
+                            Button {
+                                openPortal()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "creditcard.fill")
+                                        .foregroundColor(.green)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Pro (via Stripe subscription)")
+                                            .foregroundColor(.primary)
+                                        Text(isOpeningPortal
+                                             ? "Opening portal…"
+                                             : "Tap to manage or cancel.")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    if isOpeningPortal {
+                                        ProgressView()
+                                    } else {
+                                        Image(systemName: "arrow.up.right.square")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                            .disabled(isOpeningPortal)
+                        case .none:
+                            Button {
+                                BillingService.shared.openPricing()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "sparkles")
+                                        .foregroundColor(.purple)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("View Plans")
+                                            .foregroundColor(.primary)
+                                        Text("Unlock bilingual captions & AI study guide.")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right.square")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
                         }
                     } header: {
                         Text("Plan")
@@ -367,8 +419,29 @@ struct SettingsView: View {
             } message: {
                 Text(deleteAccountErrorMessage)
             }
+            .alert("Billing", isPresented: Binding(
+                get: { billingErrorMessage != nil },
+                set: { if !$0 { billingErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { billingErrorMessage = nil }
+            } message: {
+                Text(billingErrorMessage ?? "")
+            }
         }
         .navigationViewStyle(.stack)
+    }
+
+    private func openPortal() {
+        guard !isOpeningPortal else { return }
+        isOpeningPortal = true
+        Task {
+            defer { isOpeningPortal = false }
+            do {
+                try await BillingService.shared.openPortal()
+            } catch {
+                billingErrorMessage = error.localizedDescription
+            }
+        }
     }
 
     /// Languages available for selection (base always, extended only with kit)
