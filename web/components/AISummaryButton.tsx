@@ -54,8 +54,6 @@ export default function AISummaryButton({ transcriptId }: AISummaryButtonProps) 
         throw new Error('Not authenticated. Please log in again.')
       }
 
-      console.log('Making API request with token:', session.access_token.substring(0, 20) + '...')
-
       const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/summarize`, {
         method: 'POST',
         headers: {

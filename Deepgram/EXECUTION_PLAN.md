@@ -75,8 +75,8 @@
 
 **Phase 2 (実機検証 1週間後)**
 - [ ] WhisperKit参照を完全削除 (`TranscriptionService.swift` -1500行、`WhisperKitModels/` フォルダ削除、`project.pbxproj`からSPM依存解除)
-- [ ] `Info.plist` マイク用途文言書き換え（"on-device" → "processed via Deepgram, never stored by lecsy"）
-- [ ] `PrivacyInfo.xcprivacy` DataType更新
+- [x] `Info.plist` マイク用途文言書き換え（"on-device" → "processed via Deepgram, never stored by lecsy"）(2026-04-14 完了)
+- [x] `PrivacyInfo.xcprivacy` DataType更新（AudioData宣言、2026-04-14 完了）
 
 **判断基準**: Deepgram経路が500ユーザー × 1週間で98%以上成功なら Phase 2 実行。
 **Gate**: Phase 1 ✅ / Phase 2 は実運用検証後
@@ -93,8 +93,12 @@
 - [x] `web/app/api/stripe/portal/route.ts` — Edge Functionプロキシ
 
 **iOS**
-- [x] `lecsy/Services/BillingService.swift` — SFSafariViewController で `/pricing` または Portal 開く
-- [ ] Settings画面に "Manage Subscription" ボタン追加（W08直前で十分）
+- [~] `lecsy/Services/BillingService.swift` — 現状はスタブのみ（19行）。
+  **戦略変更 (2026-04-14)**: ローンチまでは B2B 専用で個人向け課金 UI を露出しない方針に転換。
+  Pro 判定は organization_members の active + org.plan='pro' 経路のみ（`PlanService`）。
+  Web `/pricing` は信用装置として残し、iOS からの Stripe Checkout 誘導は **ローンチ後** 判断。
+- [ ] Settings画面に "Manage Subscription" ボタン追加 — **保留**。上記戦略転換により B2C iOS 課金 UI は露出しない。
+  B2B メンバーは Web の `/org/[slug]/settings` から管理。
 
 **Stripe Test mode infra**
 - [x] Products作成: `Lecsy Pro` / `Lecsy Student`
