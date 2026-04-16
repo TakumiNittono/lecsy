@@ -104,6 +104,12 @@ final class PlanService: ObservableObject {
     }
 
     func refresh() async {
+        // サインイン直後は AuthService の currentUser sink と
+        // RecordView.onAppear の両方から連続で呼ばれるので、1 秒以内の
+        // 連打は前回の結果を流用する。重複ネットワーク + 重複ログを抑える。
+        if let last = lastRefreshed, Date().timeIntervalSince(last) < 1.0 {
+            return
+        }
         refreshTask?.cancel()
         let task = Task { @MainActor in
             await performRefresh()

@@ -89,6 +89,21 @@ class RecordingService: NSObject, ObservableObject {
     private func setupNotifications() {
         let nc = NotificationCenter.default
 
+        // Grab a background task only when the app actually resigns active
+        // while recording — holding it from startRecording() onward triggers
+        // "Background Task ... created over 30 seconds ago" warnings whenever
+        // the user records in the foreground (most of the time).
+        // iOS keeps the recorder alive in the background via
+        // UIBackgroundModes: audio + an active AVAudioRecorder — the task is
+        // only a safety net for the transition window.
+        nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, self.isRecording else { return }
+            self.setupBackgroundTask()
+        }
+        nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.endBackgroundTask()
+        }
+
         // Restore audio session and metering when app returns to foreground
         nc.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self = self, self.isRecording else { return }
@@ -497,9 +512,10 @@ class RecordingService: NSObject, ObservableObject {
             throw RecordingError.recordingFailed
         }
         
-        // Start background task
-        setupBackgroundTask()
-        
+        // Background task is started lazily when the app resigns active —
+        // see setupNotifications(). This avoids the "Background Task created
+        // over 30 seconds ago" foreground warning for every recording.
+
         // Recording file URL
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let fileName = "recording_\(Date().timeIntervalSince1970).m4a"

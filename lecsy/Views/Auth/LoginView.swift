@@ -74,7 +74,11 @@ struct LoginView: View {
                     )
                     .signInWithAppleButtonStyle(.black)
                     .frame(height: 50)
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                    // ASAuthorizationAppleIDButton は内部で width <= 375 の制約を
+                    // 持っている (Apple HIG)。外側が 400+ だと constraint 競合ログ
+                    // が出るので、ここで 375 に揃える。iPad では中央寄せで余白になる。
+                    .frame(maxWidth: 375)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .cornerRadius(12)
                     .disabled(authService.isLoading)
                 
