@@ -16,7 +16,7 @@ export async function PATCH(
   const { orgId } = result
 
   const body = await request.json()
-  const { name } = body
+  const { name, logo_url } = body
 
   if (name !== undefined) {
     if (typeof name !== 'string' || name.trim().length === 0 || name.length > 100) {
@@ -27,8 +27,22 @@ export async function PATCH(
     }
   }
 
+  if (logo_url !== undefined && logo_url !== null) {
+    if (typeof logo_url !== 'string' || logo_url.length > 500) {
+      return NextResponse.json(
+        { error: 'Invalid logo_url (max 500 chars)' },
+        { status: 400 }
+      )
+    }
+    // Only accept URLs we control (our own Supabase Storage bucket).
+    if (!/^https?:\/\/[^\s]+\/storage\/v1\/object\/public\/org-logos\//.test(logo_url)) {
+      return NextResponse.json({ error: 'logo_url must be from org-logos bucket' }, { status: 400 })
+    }
+  }
+
   const updates: Record<string, any> = {}
   if (name !== undefined) updates.name = name.trim()
+  if (logo_url !== undefined) updates.logo_url = logo_url
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })

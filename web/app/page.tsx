@@ -141,9 +141,22 @@ export default function Home() {
         </div>
       </header>
 
+      {/* ━━━ B2B BANNER (thin) ━━━ */}
+      <div className="fixed top-14 w-full z-40 bg-[#0B1E3F] text-white text-[13px]">
+        <div className="max-w-6xl mx-auto px-5 h-9 flex items-center justify-center gap-2">
+          <span className="text-[#C8D1E0] hidden sm:inline">For schools and ESL programs —</span>
+          <Link href="/schools" className="font-medium text-[#F5C96B] hover:text-white transition-colors inline-flex items-center gap-1">
+            Lecsy for Schools
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
+      </div>
+
       {/* ━━━ HERO ━━━ */}
       {/* ━━━ COMING SOON BIG ANNOUNCEMENT ━━━ */}
-      <section className="relative pt-24 pb-6 overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-700">
+      <section className="relative pt-[8.25rem] pb-6 overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-700">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.15),transparent_60%)]" />
         <div className="relative max-w-6xl mx-auto px-5 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 border border-white/30 backdrop-blur-sm mb-4">

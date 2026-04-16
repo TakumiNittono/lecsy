@@ -34,11 +34,23 @@ export default async function OrgLayout({
       {/* Header */}
       <header className="border-b border-gray-200 bg-white sticky top-0 z-50">
         <div className="px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <Link href="/app" className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">
               lecsy
             </Link>
-            <span className="text-gray-300">|</span>
+            {membership.org.logo_url ? (
+              <>
+                <span className="text-gray-200">/</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={membership.org.logo_url}
+                  alt={`${membership.org.name} logo`}
+                  className="h-7 w-auto max-w-[120px] object-contain"
+                />
+              </>
+            ) : (
+              <span className="text-gray-300">|</span>
+            )}
             <OrgSwitcher currentSlug={params.slug} currentOrgName={membership.org.name} orgs={userOrgs} />
           </div>
           <div className="flex items-center gap-4">

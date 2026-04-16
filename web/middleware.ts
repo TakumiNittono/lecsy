@@ -5,6 +5,7 @@ export async function middleware(request: NextRequest) {
   // 公開APIルート（Webhookなど）はスキップ
   const publicApiPaths = [
     '/api/stripe-webhook',  // Stripeからのwebhook
+    '/api/schools/demo',    // /schools/demo からの匿名 POST
   ]
   
   if (publicApiPaths.some(path => request.nextUrl.pathname.startsWith(path))) {

@@ -52,8 +52,9 @@ export default async function OrgAiPage({
     .eq('org_id', orgId)
     .gte('created_at', today.toISOString())
 
-  const planLimits: Record<string, number> = { starter: 10, growth: 50, enterprise: 200 }
-  const dailyLimit = planLimits[org.plan] || 10
+  // plan is now 'free' | 'pro' (see 20260407100000_b2b_simplify.sql)
+  const planLimits: Record<string, number> = { free: 50, pro: 500 }
+  const dailyLimit = planLimits[org.plan] ?? 50
 
   return (
     <div className="px-6 lg:px-10 py-8">
@@ -71,9 +72,8 @@ export default async function OrgAiPage({
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-gray-700">Daily AI Usage</span>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${
-              org.plan === 'enterprise' ? 'bg-purple-100 text-purple-700' :
-              org.plan === 'growth' ? 'bg-blue-100 text-blue-700' :
-              'bg-gray-100 text-gray-700'
+              org.plan === 'pro' ? 'bg-blue-100 text-blue-700' :
+              'bg-amber-100 text-amber-700'
             }`}>
               {org.plan}
             </span>

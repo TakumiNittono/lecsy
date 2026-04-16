@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import LogoUploader from './LogoUploader'
 
 interface OrgSettingsProps {
   slug: string
@@ -9,14 +10,14 @@ interface OrgSettingsProps {
     name: string
     type: string
     plan: string
+    logo_url: string | null
   }
   role: string
 }
 
 const planBadgeColors: Record<string, string> = {
-  starter: 'bg-gray-100 text-gray-700',
-  growth: 'bg-blue-100 text-blue-700',
-  enterprise: 'bg-purple-100 text-purple-700',
+  free: 'bg-amber-100 text-amber-700',
+  pro: 'bg-blue-100 text-blue-700',
 }
 
 export default function OrgSettings({ slug, org, role }: OrgSettingsProps) {
@@ -76,6 +77,9 @@ export default function OrgSettings({ slug, org, role }: OrgSettingsProps) {
 
   return (
     <div className="space-y-8 max-w-2xl">
+      {/* Logo upload */}
+      <LogoUploader slug={slug} orgName={org.name} currentLogoUrl={org.logo_url} />
+
       {/* Edit org name */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Organization Name</h2>
@@ -112,7 +116,7 @@ export default function OrgSettings({ slug, org, role }: OrgSettingsProps) {
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-500">Plan</span>
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${planBadgeColors[org.plan] || planBadgeColors.starter}`}>
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${planBadgeColors[org.plan] || planBadgeColors.free}`}>
               {org.plan}
             </span>
           </div>

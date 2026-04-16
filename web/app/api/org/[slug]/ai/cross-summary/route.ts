@@ -3,10 +3,11 @@ import { requireOrgRole } from '@/utils/api/org-auth'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
+// plan simplified to 'free' | 'pro' in 20260407100000_b2b_simplify.sql.
+// Pilots run on 'free' with comfortable demo headroom.
 const PLAN_DAILY_LIMITS: Record<string, number> = {
-  starter: 10,
-  growth: 50,
-  enterprise: 200,
+  free: 50,
+  pro: 500,
 }
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -48,7 +49,7 @@ export async function POST(
   const supabase = createAdminClient()
 
   // プラン別日次リミット
-  const dailyLimit = PLAN_DAILY_LIMITS[org.plan] || PLAN_DAILY_LIMITS.starter
+  const dailyLimit = PLAN_DAILY_LIMITS[org.plan] ?? PLAN_DAILY_LIMITS.free
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 

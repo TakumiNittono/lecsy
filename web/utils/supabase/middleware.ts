@@ -48,7 +48,8 @@ export async function updateSession(request: NextRequest) {
   if (
     publicPages.has(path) ||
     path.startsWith('/login') ||
-    path.startsWith('/auth')
+    path.startsWith('/auth') ||
+    path.startsWith('/schools')
   ) {
     return supabaseResponse
   }

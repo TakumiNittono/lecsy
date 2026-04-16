@@ -28,6 +28,7 @@ export default async function SettingsPage({
           name: membership.org.name,
           type: membership.org.type,
           plan: membership.org.plan,
+          logo_url: membership.org.logo_url,
         }}
         role={membership.role}
       />

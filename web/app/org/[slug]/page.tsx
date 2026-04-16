@@ -2,6 +2,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { getOrgMembership } from '@/utils/api/org-auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import WelcomeCard from './onboarding/WelcomeCard'
 
 export const dynamic = 'force-dynamic'
 
@@ -122,13 +123,14 @@ export default async function OrgDashboardPage({
       }, 0)
     }
 
-    // Previous month active users (unique users who recorded)
+    // Previous 7-day active users (apples-to-apples with the 7d "this week" card)
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
     const { data: prevActiveData } = await supabase
       .from('transcripts')
       .select('user_id')
       .eq('organization_id', orgId)
-      .gte('created_at', prevMonthStart)
-      .lt('created_at', prevMonthEnd)
+      .gte('created_at', fourteenDaysAgo)
+      .lt('created_at', sevenDaysAgo)
 
     if (prevActiveData) {
       prevActiveUsers = new Set(prevActiveData.map((t) => t.user_id)).size
@@ -187,14 +189,29 @@ export default async function OrgDashboardPage({
 
   // Plan badge color
   const planColors: Record<string, string> = {
-    starter: 'bg-gray-100 text-gray-700',
-    growth: 'bg-blue-100 text-blue-700',
-    enterprise: 'bg-purple-100 text-purple-700',
+    free: 'bg-amber-100 text-amber-700',
+    pro: 'bg-blue-100 text-blue-700',
   }
-  const planBadgeClass = planColors[org.plan] || planColors.starter
+  const planBadgeClass = planColors[org.plan] || planColors.free
+
+  const showWelcome = (totalMembers ?? 0) < 3
+  const hasLogo = Boolean(org.logo_url)
+  const displayName = (org.settings as any)?.display_name as string | undefined
 
   return (
     <div className="px-6 lg:px-10 py-8">
+      {showWelcome && (
+        <WelcomeCard
+          slug={params.slug}
+          orgName={org.name}
+          displayName={displayName}
+          trialEndsAt={org.trial_ends_at}
+          hasLogo={hasLogo}
+          memberCount={totalMembers ?? 0}
+          maxSeats={org.max_seats}
+        />
+      )}
+
       {/* Org info bar */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-8 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -276,7 +293,7 @@ export default async function OrgDashboardPage({
           <p className="text-sm text-gray-500 mt-1">Active in last 7 days</p>
           {activeUsersTrend && (
             <p className={`text-xs mt-1 font-medium ${activeUsersTrend.delta >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-              {activeUsersTrend.label} vs last month
+              {activeUsersTrend.label} vs previous 7 days
             </p>
           )}
         </div>
@@ -285,7 +302,7 @@ export default async function OrgDashboardPage({
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-3 mb-8">
         <Link
-          href={`/org/${params.slug}/invite`}
+          href={`/org/${params.slug}/members`}
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -310,6 +327,15 @@ export default async function OrgDashboardPage({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
           View Usage
+        </Link>
+        <Link
+          href={`/org/${params.slug}/onboarding/guide`}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Setup Guide
         </Link>
       </div>
 

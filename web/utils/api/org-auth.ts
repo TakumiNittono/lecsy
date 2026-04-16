@@ -23,6 +23,9 @@ export interface OrgAuthResult {
     type: string
     plan: string
     max_seats: number
+    logo_url: string | null
+    settings: Record<string, any> | null
+    trial_ends_at: string | null
   }
 }
 
@@ -44,7 +47,7 @@ export async function requireOrgRole(
 
   const { data: org } = await admin
     .from('organizations')
-    .select('id, name, slug, type, plan, max_seats')
+    .select('id, name, slug, type, plan, max_seats, logo_url, settings, trial_ends_at')
     .eq('slug', slug)
     .single()
 
@@ -90,7 +93,7 @@ export async function getOrgMembership(slug: string) {
 
   const { data: org } = await admin
     .from('organizations')
-    .select('id, name, slug, type, plan, max_seats')
+    .select('id, name, slug, type, plan, max_seats, logo_url, settings, trial_ends_at')
     .eq('slug', slug)
     .single()
 

@@ -81,14 +81,53 @@ export default function MembersList({
     })
   }
 
+  function translateInviteError(raw: string | undefined): string {
+    if (!raw) return 'Something went wrong. Try again or email founder@lecsy.app.'
+    const s = raw.toLowerCase()
+    if (s.startsWith('invalid email:')) {
+      const bad = raw.replace(/^invalid email:\s*/i, '')
+      return `That email doesn't look right: ${bad}. Check for typos.`
+    }
+    if (s.startsWith('all emails are already members')) {
+      return 'Those email addresses are already on your team.'
+    }
+    if (s.startsWith('seat limit exceeded')) {
+      const remaining = Math.max(0, maxSeats - seatUsage)
+      return `You have ${remaining} of ${maxSeats} seats left. Email founder@lecsy.app to raise your seat cap.`
+    }
+    if (s === 'domain_not_allowed') {
+      return `This org only accepts certain email domains. Edit allowed domains in Settings → Organization Info.`
+    }
+    if (s === 'invalid_role') {
+      return 'Please pick a role (Student / Teacher / Admin) before inviting.'
+    }
+    return raw
+  }
+
   async function handleAddMembers() {
-    const emails = addEmails
+    // Parse + report specific bad emails rather than dropping them silently.
+    const raw = addEmails
       .split(/[,\n]/)
       .map((e) => e.trim().toLowerCase())
-      .filter((e) => EMAIL_REGEX.test(e))
+      .filter(Boolean)
 
-    if (emails.length === 0) {
-      showMsg('error', 'Please enter valid email addresses')
+    const valid = raw.filter((e) => EMAIL_REGEX.test(e))
+    const invalid = raw.filter((e) => !EMAIL_REGEX.test(e))
+
+    if (valid.length === 0) {
+      showMsg('error', raw.length === 0
+        ? 'Paste at least one email address.'
+        : `None of those look like valid emails. Check: ${invalid.slice(0, 2).join(', ')}${invalid.length > 2 ? '…' : ''}`)
+      return
+    }
+
+    // Pre-flight seat check so users don't get a backend error after upload.
+    const remaining = maxSeats - seatUsage
+    if (valid.length > remaining) {
+      showMsg(
+        'error',
+        `You have ${remaining} of ${maxSeats} seats left. You pasted ${valid.length} emails. Email founder@lecsy.app to raise the cap.`,
+      )
       return
     }
 
@@ -97,11 +136,11 @@ export default function MembersList({
       const res = await fetch(`/api/org/${slug}/invites`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emails, role: addRole }),
+        body: JSON.stringify({ emails: valid, role: addRole }),
       })
       const data = await res.json()
       if (!res.ok) {
-        showMsg('error', data.error || 'Failed to add members')
+        showMsg('error', translateInviteError(data.error))
         return
       }
 
@@ -114,14 +153,15 @@ export default function MembersList({
       setMembers((prev) => [...prev, ...newMembers])
 
       const msgs = []
-      if (newMembers.length > 0) msgs.push(`${newMembers.length} members added`)
-      if (data.skipped?.length > 0) msgs.push(`${data.skipped.length} skipped (already members)`)
-      showMsg('success', msgs.join(', '))
+      if (newMembers.length > 0) msgs.push(`${newMembers.length} invited`)
+      if (data.skipped?.length > 0) msgs.push(`${data.skipped.length} already on team`)
+      if (invalid.length > 0) msgs.push(`${invalid.length} skipped (invalid)`)
+      showMsg('success', msgs.join(' · '))
 
       setAddEmails('')
       setShowAddForm(false)
     } catch {
-      showMsg('error', 'Network error. Please try again.')
+      showMsg('error', 'Network error. Try again in a moment.')
     } finally {
       setAddLoading(false)
     }
@@ -239,20 +279,25 @@ export default function MembersList({
           />
         </div>
         {canManage && (
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shrink-0"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
-              />
-            </svg>
-            Add Members
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-gray-500 hidden sm:inline">
+              {Math.max(0, maxSeats - seatUsage)} seats left
+            </span>
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                />
+              </svg>
+              Add Members
+            </button>
+          </div>
         )}
       </div>
 

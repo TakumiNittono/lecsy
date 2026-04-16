@@ -49,7 +49,9 @@ export default function GlossaryPanel({
   glossaryCount: number
   role: OrgRole
 }) {
-  const [tab, setTab] = useState<'generate' | 'browse'>('generate')
+  // Default to Browse when the org already has terms — directors want to see
+  // what's already in the glossary, not be dropped into an empty Generate form.
+  const [tab, setTab] = useState<'generate' | 'browse'>(glossaryCount > 0 ? 'browse' : 'generate')
   const canGenerate = ROLE_HIERARCHY[role] >= ROLE_HIERARCHY.teacher
 
   // Generate state
