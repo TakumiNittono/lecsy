@@ -172,8 +172,25 @@ final class LecsyAPIClient {
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     }
 
+    /// `URLSession.data(for:)` をラップして、iOS の古典的な stale-socket エラー
+    /// (-1005 NetworkConnectionLost) で 1 回だけ自動リトライする。
+    /// QUIC/HTTP3 のアイドル接続が裏でタイムアウトすると、次のリクエスト発火時に
+    /// いきなり -1005 で失敗する既知の iOS バグ。Apple 自身の推奨対処がリトライ。
+    /// `-1009 (NotConnectedToInternet)` や本物の `-1001 (TimedOut)` はリトライしない。
+    private func send(_ req: URLRequest) async throws -> (Data, URLResponse) {
+        do {
+            return try await session.data(for: req)
+        } catch let error as URLError where error.code == .networkConnectionLost {
+            AppLogger.warning(
+                "URLSession -1005 (stale socket) on \(req.url?.path ?? "?") — retrying once",
+                category: .general
+            )
+            return try await session.data(for: req)
+        }
+    }
+
     private func perform<T: Decodable>(_ req: URLRequest) async throws -> T {
-        let (data, resp) = try await session.data(for: req)
+        let (data, resp) = try await send(req)
         guard let http = resp as? HTTPURLResponse else {
             throw SupabaseError.server("invalid_response", 0)
         }
