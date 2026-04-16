@@ -93,3 +93,6 @@ verify_jwt = false
 
 [functions.deepgram-balance-check]
 verify_jwt = false
+
+[functions.notify-pilot-lead]
+verify_jwt = false
