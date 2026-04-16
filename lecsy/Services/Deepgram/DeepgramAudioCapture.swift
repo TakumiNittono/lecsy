@@ -27,6 +27,7 @@ final class DeepgramAudioCapture {
     private let engine = AVAudioEngine()
     private var converter: AVAudioConverter?
     private var didLogFirstChunk = false
+    private var chunkWatchdog: Task<Void, Never>?
     private let targetFormat: AVAudioFormat = {
         // 16kHz mono Int16 interleaved little-endian（Deepgram linear16想定）
         var desc = AudioStreamBasicDescription(
@@ -44,31 +45,58 @@ final class DeepgramAudioCapture {
     }()
 
     func start() throws {
-        // AVAudioSession は RecordingService が所有する。
-        // 以前はここで setCategory(.measurement) + setPreferredSampleRate(16000)
-        // を呼んでいて、録音中の recorder セッション (mode: .default, hwRate)
-        // を上書きして AVAudioRecorder を壊していた。
-        // 今は何も触らず、AVAudioEngine の入力タップだけ張って、
-        // ハードウェア形式のまま受け取って AVAudioConverter で 16kHz に落とす。
+        // AVAudioSession は RecordingService が所有する。ここでは触らない。
+        //
+        // engine.start() を先に呼ぶ: input node の format は engine が走るまで
+        // 確定しない（0 channels / 0 Hz を返すことがある）ので、start 後に
+        // 実際の hw format を取得してからタップを張る方が確実。
         let input = engine.inputNode
-        let hwFormat = input.inputFormat(forBus: 0)
+
+        engine.prepare()
+        try engine.start()
+
+        let hwFormat = input.outputFormat(forBus: 0)
+        AppLogger.info("Deepgram: audio engine started — hwFormat=\(hwFormat.sampleRate)Hz ch=\(hwFormat.channelCount) fmt=\(hwFormat.commonFormat.rawValue)", category: .transcription)
+
+        guard hwFormat.sampleRate > 0, hwFormat.channelCount > 0 else {
+            engine.stop()
+            throw NSError(domain: "DeepgramAudioCapture", code: -2,
+                          userInfo: [NSLocalizedDescriptionKey: "Input node returned invalid format after engine.start"])
+        }
 
         guard let conv = AVAudioConverter(from: hwFormat, to: targetFormat) else {
+            engine.stop()
             throw NSError(domain: "DeepgramAudioCapture", code: -1,
                           userInfo: [NSLocalizedDescriptionKey: "Converter init failed"])
         }
         self.converter = conv
 
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 4_096, format: hwFormat) { [weak self] buffer, _ in
+        // format: nil で node の native 形式を自動採用。hwFormat を渡すと
+        // 実 format と食い違った時に tap が発火しないことがある。
+        input.installTap(onBus: 0, bufferSize: 4_096, format: nil) { [weak self] buffer, _ in
             self?.convertAndEmit(buffer: buffer)
         }
 
-        engine.prepare()
-        try engine.start()
+        // 3秒経っても chunk が届かなければ警告。
+        // tap の silent failure（AVAudioRecorder と hardware input を取り合って
+        // buffer が来ないケース）を検知するため。
+        didLogFirstChunk = false
+        chunkWatchdog?.cancel()
+        chunkWatchdog = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            await MainActor.run {
+                if !self.didLogFirstChunk {
+                    AppLogger.warning("Deepgram: no audio chunk after 3s — tap may be silent (AVAudioRecorder conflict?)", category: .transcription)
+                }
+            }
+        }
     }
 
     func stop() {
+        chunkWatchdog?.cancel()
+        chunkWatchdog = nil
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         // AVAudioSession.setActive(false) は呼ばない。
