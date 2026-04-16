@@ -251,11 +251,15 @@ final class DeepgramStreamSession: ObservableObject {
         _ = speechFinal
         if isFinal {
             let lang = (first["languages"] as? [String])?.first
+            let wasEmpty = finalizedSegments.isEmpty
             finalizedSegments.append(
                 .init(text: transcript, start: start, end: start + duration, language: lang)
             )
             interimText = ""
             lastSegmentAt = Date()
+            if wasEmpty {
+                AppLogger.info("Deepgram: first final segment received", category: .transcription)
+            }
         } else {
             interimText = transcript
         }

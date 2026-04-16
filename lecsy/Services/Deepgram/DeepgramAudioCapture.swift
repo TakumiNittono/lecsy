@@ -26,6 +26,7 @@ final class DeepgramAudioCapture {
 
     private let engine = AVAudioEngine()
     private var converter: AVAudioConverter?
+    private var didLogFirstChunk = false
     private let targetFormat: AVAudioFormat = {
         // 16kHz mono Int16 interleaved little-endian（Deepgram linear16想定）
         var desc = AudioStreamBasicDescription(
@@ -43,13 +44,12 @@ final class DeepgramAudioCapture {
     }()
 
     func start() throws {
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord,
-                                mode: .measurement,
-                                options: [.defaultToSpeaker, .allowBluetooth])
-        try session.setPreferredSampleRate(16_000)
-        try session.setActive(true, options: [])
-
+        // AVAudioSession は RecordingService が所有する。
+        // 以前はここで setCategory(.measurement) + setPreferredSampleRate(16000)
+        // を呼んでいて、録音中の recorder セッション (mode: .default, hwRate)
+        // を上書きして AVAudioRecorder を壊していた。
+        // 今は何も触らず、AVAudioEngine の入力タップだけ張って、
+        // ハードウェア形式のまま受け取って AVAudioConverter で 16kHz に落とす。
         let input = engine.inputNode
         let hwFormat = input.inputFormat(forBus: 0)
 
@@ -71,7 +71,8 @@ final class DeepgramAudioCapture {
     func stop() {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        // AVAudioSession.setActive(false) は呼ばない。
+        // RecordingService がまだセッションを使っている可能性があるため。
     }
 
     private func convertAndEmit(buffer: AVAudioPCMBuffer) {
@@ -105,7 +106,12 @@ final class DeepgramAudioCapture {
 
         // UIスレッドではなく、コールバック内で同期的に送信（WebSocket I/Oは別Task）
         Task { @MainActor [weak self] in
-            self?.onChunk?(data)
+            guard let self else { return }
+            if !self.didLogFirstChunk {
+                self.didLogFirstChunk = true
+                AppLogger.info("Deepgram: first audio chunk emitted (\(byteCount) bytes, \(frames) frames @16kHz)", category: .transcription)
+            }
+            self.onChunk?(data)
         }
     }
 }
