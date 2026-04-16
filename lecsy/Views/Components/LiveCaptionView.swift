@@ -2,19 +2,34 @@
 //  LiveCaptionView.swift
 //  lecsy
 //
-//  リアルタイム字幕パネル。過去セグメントも全て保持しスクロールで遡れる。
-//  最新1行はテレプロンプター式に大きく強調、古いものはフェードしつつ読める。
+//  リアルタイム字幕パネル。
+//
+//  デザインの指針 (Apple Live Captions / Otter.ai / Rev.ai の研究より):
+//   1. 最新行を圧倒的に支配的にする (teleprompter 原則)
+//   2. interim と final の視覚差を最小化してシームレスに感じさせる
+//      (同じ font size、weight とカーソルだけで "確定度" を表現)
+//   3. 新しい final には軽い触覚 (Apple の音声入力と同じ作法)
+//   4. 古い行は opacity で decay、ユーザーが遡れるよう履歴は残す
+//   5. Chrome は最小限。スクロールインジケータもカウントも出さない
 //
 
 import SwiftUI
+import UIKit
 
 struct LiveCaptionView: View {
 
     @ObservedObject var coordinator: TranscriptionCoordinator
     @State private var pulse: Bool = false
     @State private var cursorOn: Bool = true
+    @State private var lastHapticSegmentCount: Int = 0
 
-    // prepare 中は "Connecting"、接続済で字幕あり/なしで "LIVE"/"Listening" 表記を切替。
+    /// 触覚フィードバック用の generator は事前 prepare で応答速度を稼ぐ
+    private let lightHaptic: UIImpactFeedbackGenerator = {
+        let g = UIImpactFeedbackGenerator(style: .light)
+        g.prepare()
+        return g
+    }()
+
     private enum Phase { case connecting, listening, live }
     private var phase: Phase {
         if coordinator.isPreparing && !coordinator.isLiveActive { return .connecting }
@@ -30,7 +45,7 @@ struct LiveCaptionView: View {
                 .padding(.top, 14)
                 .padding(.bottom, 10)
 
-            Divider().opacity(0.25)
+            Divider().opacity(0.22)
 
             content
         }
@@ -54,10 +69,19 @@ struct LiveCaptionView: View {
         )
         .onAppear {
             pulse = true
-            // カーソル点滅 (interim テキスト用)
             withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
                 cursorOn.toggle()
             }
+            lastHapticSegmentCount = coordinator.liveSegments.count
+        }
+        // 新しい final segment が入ったら軽く触覚フィードバック。
+        // 無音レーザーのように途切れなく字幕が流れてもうるさくならない強度。
+        .onChange(of: coordinator.liveSegments.count) { _, newCount in
+            if newCount > lastHapticSegmentCount, phase == .live {
+                lightHaptic.impactOccurred(intensity: 0.45)
+                lightHaptic.prepare()
+            }
+            lastHapticSegmentCount = newCount
         }
     }
 
@@ -88,7 +112,7 @@ struct LiveCaptionView: View {
         }
     }
 
-    /// 接続状態のピル。CONNECTING→青、LIVE→赤、LISTENING→赤（発話待ち）。
+    /// カプセル型のステータスピル。count バッジなど情報ノイズは入れない。
     private var statusPill: some View {
         HStack(spacing: 6) {
             ZStack {
@@ -107,12 +131,6 @@ struct LiveCaptionView: View {
                 .font(.caption.weight(.heavy))
                 .foregroundStyle(statusTint)
                 .tracking(1.4)
-
-            if phase == .live, !coordinator.liveSegments.isEmpty {
-                Text("· \(coordinator.liveSegments.count)")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
@@ -123,11 +141,7 @@ struct LiveCaptionView: View {
     }
 
     private var statusLabel: String {
-        switch phase {
-        case .connecting: return "CONNECTING"
-        case .listening:  return "LIVE"
-        case .live:       return "LIVE"
-        }
+        phase == .connecting ? "CONNECTING" : "LIVE"
     }
 
     private var statusTint: Color {
@@ -150,7 +164,6 @@ struct LiveCaptionView: View {
 
     // MARK: - Empty states
 
-    /// prepare 中: 接続中であることを明確に、安心感を与える視覚
     private var connectingState: some View {
         VStack(spacing: 14) {
             ZStack {
@@ -186,7 +199,6 @@ struct LiveCaptionView: View {
         .padding(.vertical, 20)
     }
 
-    /// 接続済だが発話まだ: 聞き取り可能を明示、話しかけるよう促す
     private var listeningState: some View {
         VStack(spacing: 14) {
             HStack(spacing: 6) {
@@ -226,8 +238,8 @@ struct LiveCaptionView: View {
         let hasInterim = !coordinator.interimText.isEmpty
 
         return ScrollViewReader { proxy in
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 14) {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
                     ForEach(Array(all.enumerated()), id: \.element.id) { pair in
                         let (idx, seg) = pair
                         let isLatestFinal = (idx == lastFinalIndex) && !hasInterim
@@ -237,7 +249,7 @@ struct LiveCaptionView: View {
                         )
                         .id(seg.id)
                         .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .bottom)),
+                            insertion: .opacity.combined(with: .offset(y: 8)),
                             removal: .identity
                         ))
                     }
@@ -248,12 +260,13 @@ struct LiveCaptionView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.vertical, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 22)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 320)
+            .frame(maxHeight: 380)
             .onChange(of: coordinator.liveSegments.count) { _, _ in
-                withAnimation(.easeOut(duration: 0.35)) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                     if let last = coordinator.liveSegments.last {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }
@@ -271,13 +284,11 @@ struct LiveCaptionView: View {
     // MARK: - Caption line styling
 
     enum Emphasis {
-        case latest    // 最新確定: 大きく濃く
-        case recent    // 直近数行: 中
-        case older     // 更に古い: 読めるが淡い
+        case latest    // 最新確定: 大きく、白強
+        case recent    // 直近2行: 中、わずかに薄い
+        case older     // それ以前: 小さく、淡く
     }
 
-    /// 最新が latest、その前2行が recent、それより古いは older。
-    /// 履歴は全て可読性を保つ（displayWindow による非表示はしない）。
     private func emphasis(for idx: Int, total: Int, isLatestFinal: Bool) -> Emphasis {
         if isLatestFinal { return .latest }
         let distanceFromEnd = (total - 1) - idx
@@ -289,34 +300,43 @@ struct LiveCaptionView: View {
     private func captionLine(text: String, emphasis: Emphasis) -> some View {
         switch emphasis {
         case .latest:
+            // 最新は 22pt semibold、読者の視線の終着点
             Text(text)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.primary)
-                .lineSpacing(4)
+                .lineSpacing(5)
+                .fixedSize(horizontal: false, vertical: true)
         case .recent:
             Text(text)
-                .font(.system(size: 17))
-                .foregroundStyle(Color.primary.opacity(0.78))
+                .font(.system(size: 17, weight: .regular, design: .rounded))
+                .foregroundStyle(Color.primary.opacity(0.72))
                 .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
         case .older:
             Text(text)
-                .font(.system(size: 15))
-                .foregroundStyle(Color.primary.opacity(0.55))
+                .font(.system(size: 14, weight: .regular, design: .rounded))
+                .foregroundStyle(Color.primary.opacity(0.45))
                 .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    /// interim: italic + 点滅カーソル。 "今まさに喋られている" 視覚的サイン。
+    // MARK: - Interim (active utterance)
+
+    /// 今まさに喋られている最中のテキスト。
+    /// final と同じ 22pt だが weight を regular に落として "未確定" を表現。
+    /// 最後にカーソルが点滅 → "生きてる" 感を出す。
+    /// final 化する時に同じ位置・同じサイズなので視覚的な "ジャンプ" が無い。
     private var interimLine: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 2) {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
             Text(coordinator.interimText)
-                .font(.system(size: 17))
-                .italic()
-                .foregroundStyle(Color.secondary.opacity(0.8))
-                .lineSpacing(3)
+                .font(.system(size: 22, weight: .regular, design: .rounded))
+                .foregroundStyle(Color.primary.opacity(0.82))
+                .lineSpacing(5)
+                .fixedSize(horizontal: false, vertical: true)
             Rectangle()
-                .fill(Color.secondary.opacity(0.8))
-                .frame(width: 2, height: 18)
+                .fill(Color.red.opacity(0.85))
+                .frame(width: 2, height: 22)
                 .opacity(cursorOn ? 1.0 : 0.0)
         }
     }
