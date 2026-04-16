@@ -218,10 +218,15 @@ struct LiveCaptionView: View {
                         )
                         .id("interim")
                     }
+
+                    // アクティブ行の下に余白を確保するためのスペーサー。
+                    // これが無いと content が viewport より小さい時に
+                    // scrollTo の anchor が効かず latest が上に寄らない。
+                    Color.clear.frame(height: 180)
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 6)
-                .padding(.bottom, 24)
+                .padding(.bottom, 0)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             // 高さを固定帯にする。minHeight を入れないと content が小さい時に
@@ -247,16 +252,16 @@ struct LiveCaptionView: View {
                 // くらいのテンポに。キビキビし過ぎると慌ただしく感じる。
                 withAnimation(.spring(response: 0.75, dampingFraction: 0.88)) {
                     if hasInterim {
-                        proxy.scrollTo("interim", anchor: UnitPoint(x: 0.5, y: 0.38))
+                        proxy.scrollTo("interim", anchor: UnitPoint(x: 0.5, y: 0.22))
                     } else if let last = coordinator.liveSegments.last {
-                        proxy.scrollTo(last.id, anchor: UnitPoint(x: 0.5, y: 0.38))
+                        proxy.scrollTo(last.id, anchor: UnitPoint(x: 0.5, y: 0.22))
                     }
                 }
             }
             .onChange(of: coordinator.interimText) { _, newValue in
                 guard !newValue.isEmpty else { return }
                 withAnimation(.easeOut(duration: 0.35)) {
-                    proxy.scrollTo("interim", anchor: UnitPoint(x: 0.5, y: 0.38))
+                    proxy.scrollTo("interim", anchor: UnitPoint(x: 0.5, y: 0.22))
                 }
             }
         }
