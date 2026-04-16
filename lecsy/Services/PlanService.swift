@@ -191,6 +191,19 @@ final class PlanService: ObservableObject {
             }
             b2cCheckoutEnabled = flagRows.first?.enabled ?? false
             lastRefreshed = Date()
+
+            // Pro が確認できたら Deepgram websocket を裏で暖機。
+            // これをしないと: cold launch → 即 record タップのケースで iOS の
+            // stale HTTP/3 socket 検出に 4-5 秒持っていかれて、最初の字幕までに
+            // 9 秒待たされる（実ユーザー報告）。認証直後＝最もクリーンな接続
+            // タイミングで一度張っておけば、ユーザーの record タップ時には
+            // preparedSession があるので即 handoff。
+            // TranscriptionCoordinator.prepare() は dedup / 30秒で再張り付け済。
+            if currentPlan == .pro {
+                Task { @MainActor in
+                    await TranscriptionCoordinator.shared.prepare()
+                }
+            }
         } catch {
             AppLogger.warning("PlanService refresh failed (keeping cached plan=\(currentPlan.rawValue)): \(error.localizedDescription)", category: .general)
         }
