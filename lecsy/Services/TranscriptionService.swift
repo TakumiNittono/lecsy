@@ -125,8 +125,22 @@ class TranscriptionService: ObservableObject {
         if isModelBundled {
             cleanUpOldCacheIfNeeded()
         }
-        // Preload model into memory immediately — don't wait for UI
-        prepareModelInBackground(force: true)
+        // WhisperKit preload policy:
+        //  - Cached Free plan → preload immediately (they rely on it)
+        //  - Cached Pro plan → defer 15s so Deepgram warm-up / recording startup
+        //    doesn't compete with 80s of GPU activity. Pro users only hit
+        //    WhisperKit if Deepgram streaming AND batch both fail.
+        //  - Unknown (first launch, no cached plan) → preload immediately
+        //    to be safe.
+        let cachedPlan = UserDefaults.standard.string(forKey: "lecsy.cachedPlan")
+        if cachedPlan == "pro" {
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                self?.prepareModelInBackground(force: true)
+            }
+        } else {
+            prepareModelInBackground(force: true)
+        }
         // Observe foreground/background transitions so the chunked
         // transcription loop can pause when iOS revokes GPU access.
         setupAppStateObservers()
