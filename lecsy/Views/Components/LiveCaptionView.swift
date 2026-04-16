@@ -5,12 +5,17 @@
 //  Apple Music 時間同期歌詞のデザイン言語を live transcription に移植。
 //
 //  原則:
-//   1. 超大型 rounded semibold タイポ → 一文字一文字が "歌詞" のように見える
-//   2. アクティブ行（最新 final または interim）が画面を支配、過去行は opacity decay
-//   3. 上部に fade グラデーションマスク → 古い行がふわっと消える
-//   4. interim は word-by-word で fade-in (カラオケ風、FlowLayout で折返し)
-//   5. chrome をほぼ排除、`.ultraThinMaterial` の背景のみ
-//   6. spring auto-scroll で Apple Music 同等のヌルヌル感
+//   1. 28pt rounded semibold のアクティブ行が画面を支配。
+//      過去行は depth に応じて縮小・opacity decay。
+//   2. アクティブ行はスクロール上 y=0.22 に pin（顔の高さに置く）。
+//      下に 180pt の空白スペーサーを持たせてスクロール余地と
+//      "呼吸" の空間を両立する。
+//   3. interim は単一 Text + `.contentTransition(.opacity)` で
+//      クロスフェード更新。ForEach で単語を keyed にするより滑らか。
+//   4. 上端だけ薄い fade マスクで edge を柔らかくする（hard な角を隠す程度、
+//      content を見えなくはしない）。
+//   5. `.ultraThinMaterial` 背景 + 柔らかいシャドウで浮遊感。
+//   6. 新しい final 毎に light haptic (Apple 音声入力系の作法)。
 //
 
 import SwiftUI
@@ -63,19 +68,19 @@ struct LiveCaptionView: View {
                 .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
         )
         .onAppear {
-                pulse = true
-                withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
-                    cursorOn.toggle()
-                }
-                lastHapticSegmentCount = coordinator.liveSegments.count
+            pulse = true
+            withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
+                cursorOn.toggle()
             }
-            .onChange(of: coordinator.liveSegments.count) { _, newCount in
-                if newCount > lastHapticSegmentCount, phase == .live {
-                    lightHaptic.impactOccurred(intensity: 0.45)
-                    lightHaptic.prepare()
-                }
-                lastHapticSegmentCount = newCount
+            lastHapticSegmentCount = coordinator.liveSegments.count
+        }
+        .onChange(of: coordinator.liveSegments.count) { _, newCount in
+            if newCount > lastHapticSegmentCount, phase == .live {
+                lightHaptic.impactOccurred(intensity: 0.45)
+                lightHaptic.prepare()
             }
+            lastHapticSegmentCount = newCount
+        }
     }
 
     // MARK: - Status pill
@@ -219,26 +224,26 @@ struct LiveCaptionView: View {
                         .id("interim")
                     }
 
-                    // アクティブ行の下に余白を確保するためのスペーサー。
-                    // これが無いと content が viewport より小さい時に
-                    // scrollTo の anchor が効かず latest が上に寄らない。
+                    // アクティブ行の下に常に呼吸を確保するスペーサー。
+                    // viewport より content を確実に高くするので、scrollTo の
+                    // anchor が効いてアクティブ行が正しく上寄りに配置される。
                     Color.clear.frame(height: 180)
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 6)
-                .padding(.bottom, 0)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            // 高さを固定帯にする。minHeight を入れないと content が小さい時に
-            // カードが shrink し、latest が常に「カード最下段」に貼り付いて見える。
+            // 300-380pt の固定帯。maxHeight だけだと content に shrink して
+            // アクティブ行が枠の最下段に貼り付いて見えるので minHeight も必須。
             .frame(minHeight: 300, maxHeight: 380)
-            // 上部 fade グラデ: 古い行が消えていくように見せる (Apple Music 歌詞)
+            // 上端の硬い境界だけ柔らかくするための微かなマスク。
+            // 以前は top 18% まで fade していて sparse な履歴が見えなくなる
+            // バグがあったので 6% まで縮めた。
             .mask(
                 LinearGradient(
                     stops: [
-                        .init(color: .clear, location: 0.0),
-                        .init(color: .black.opacity(0.4), location: 0.04),
-                        .init(color: .black, location: 0.18),
+                        .init(color: .black.opacity(0.4), location: 0.0),
+                        .init(color: .black, location: 0.06),
                         .init(color: .black, location: 1.0)
                     ],
                     startPoint: .top,
@@ -246,10 +251,9 @@ struct LiveCaptionView: View {
                 )
             )
             .onChange(of: coordinator.liveSegments.count) { _, _ in
-                // アクティブ行を視覚中心から少し上 (y=0.38) に固定する。
-                // 下寄せだと「枠の最下段」に字幕が貼り付いて視線が下がる。
-                // スプリングを緩め (response 0.75) にして "音楽の小節が切り替わる"
-                // くらいのテンポに。キビキビし過ぎると慌ただしく感じる。
+                // アクティブ行をスクロール上 y=0.22 (上から 22%) に固定。
+                // "顔の高さ" に置くのが Apple Music 歌詞と同じ鉄則。
+                // スプリングは response 0.75 / damping 0.88 — 小節切替テンポ。
                 withAnimation(.spring(response: 0.75, dampingFraction: 0.88)) {
                     if hasInterim {
                         proxy.scrollTo("interim", anchor: UnitPoint(x: 0.5, y: 0.22))
