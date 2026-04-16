@@ -217,7 +217,16 @@ struct RecordView: View {
             recordingService.prepareAudioSession()
 
             // プラン判定を最新化（JWT更新直後 / 長時間放置後など）
-            Task { await PlanService.shared.refresh() }
+            Task {
+                await PlanService.shared.refresh()
+                // Pro ユーザーは録音画面を開いた瞬間に Deepgram websocket を暖機する。
+                // ユーザーがボタンを押した時に iOS の stale HTTP/3 検出で 4-5秒
+                // 吹っ飛ぶのを防ぐ（その間 m4a には音声が入ってるが字幕は出ない）。
+                // prepare() は二重起動ガード付き、30秒放置で自動再張り替え。
+                if PlanService.shared.isPaid, !recordingService.isRecording {
+                    await TranscriptionCoordinator.shared.prepare()
+                }
+            }
 
             if !hasCheckedRecovery {
                 hasCheckedRecovery = true
