@@ -95,13 +95,17 @@ final class DeepgramBatchService {
         req.httpMethod = "POST"
         req.setValue("Token \(token)", forHTTPHeaderField: "Authorization")
         req.setValue(mimeType(for: audioURL), forHTTPHeaderField: "Content-Type")
-        req.httpBody = try Data(contentsOf: audioURL)
         req.timeoutInterval = 600
+
+        // URLSession.upload(for:from:) は upload task を作るため、req.httpBody を
+        // セットすると CFNetwork -994 "should not contain a body" で即失敗する。
+        // body は from: 引数だけで渡す。
+        let bodyData = try Data(contentsOf: audioURL)
 
         let started = Date()
         let (data, response) = try await URLSession.shared.upload(
             for: req,
-            from: req.httpBody ?? Data()
+            from: bodyData
         )
 
         guard let http = response as? HTTPURLResponse else {
