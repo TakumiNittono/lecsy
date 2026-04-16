@@ -47,6 +47,8 @@ final class TranscriptionCoordinator: ObservableObject {
     /// これを await してから liveSegments を読むことで、Deepgram の最終 final を
     /// 取りこぼさない。
     private var pendingFlush: Task<Void, Never>?
+    /// startLive の connect 中フラグ。prepare と startLive の二重接続を防ぐ。
+    private var isStartingLive: Bool = false
 
     private init() {
         setupNetworkMonitor()
@@ -95,8 +97,8 @@ final class TranscriptionCoordinator: ObservableObject {
               AuthService.shared.isAuthenticated,
               PlanService.shared.isPaid else { return }
 
-        // 既に進行中の prepare があれば重複しない
-        guard !isPreparing else { return }
+        // 既に進行中の prepare / startLive があれば重複しない
+        guard !isPreparing, !isStartingLive else { return }
 
         // stream 使用中（録音中）なら何もしない
         guard stream == nil else { return }
@@ -112,7 +114,6 @@ final class TranscriptionCoordinator: ObservableObject {
         if preparedSession != nil { return }
 
         isPreparing = true
-        defer { isPreparing = false }
 
         liveError = nil
         liveSegments = []
@@ -132,19 +133,24 @@ final class TranscriptionCoordinator: ObservableObject {
 
         do {
             try await session.connect()
-            // 接続完了時点で既に録音が始まっていたら、そのまま startLive へハンドオフ
-            if RecordingService.shared.isRecording && stream == nil {
-                self.preparedSession = session
-                self.preparedAt = Date()
-                await startLive()
-            } else {
-                preparedSession = session
-                preparedAt = Date()
-            }
+            preparedSession = session
+            preparedAt = Date()
             AppLogger.info("Deepgram preconnected", category: .transcription)
         } catch {
             AppLogger.warning("Deepgram preconnect failed: \(error.localizedDescription)", category: .transcription)
             liveError = error.localizedDescription
+            isPreparing = false
+            return
+        }
+
+        // isPreparing をクリアしてから handoff しないと、startLive の
+        // `if isPreparing { return }` で弾かれる。
+        isPreparing = false
+
+        // prepare 中にユーザーが録音ボタンを押して isRecording=true に
+        // なっていたら、そのまま startLive にハンドオフする。
+        if RecordingService.shared.isRecording && stream == nil && !isStartingLive {
+            await startLive()
         }
     }
 
@@ -157,13 +163,19 @@ final class TranscriptionCoordinator: ObservableObject {
             AppLogger.info("Live caption skipped: free plan (using WhisperKit)", category: .transcription)
             return
         }
-        // 二重起動ガード：すでに capture 中 or prepare 中なら何もしない
+        // 二重起動ガード：すでに capture 中 / prepare 中 / 別の startLive が connect 中なら何もしない
         guard stream == nil else { return }
         if isPreparing {
-            // prepare が接続完了後に自分で startLive を呼ぶので、ここでは何もせず任せる
+            // prepare が完了次第、自分で handoff してくれる
             AppLogger.info("Live caption deferred: prepare() in-flight", category: .transcription)
             return
         }
+        guard !isStartingLive else {
+            AppLogger.info("Live caption deferred: another startLive in flight", category: .transcription)
+            return
+        }
+
+        isStartingLive = true
 
         // prepare() 済みなら再利用。そうでなければその場で接続（後方互換）
         let session: DeepgramStreamSession
@@ -193,6 +205,7 @@ final class TranscriptionCoordinator: ObservableObject {
             } catch {
                 AppLogger.warning("Deepgram connect failed: \(error.localizedDescription)", category: .transcription)
                 liveError = error.localizedDescription
+                isStartingLive = false
                 return
             }
             session = newSession
@@ -200,6 +213,7 @@ final class TranscriptionCoordinator: ObservableObject {
 
         self.stream = session
         isLiveActive = true
+        isStartingLive = false
 
         let capture = DeepgramAudioCapture()
         capture.onChunk = { [weak session] data in
