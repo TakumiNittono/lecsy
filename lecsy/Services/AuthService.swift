@@ -138,11 +138,13 @@ class AuthService: NSObject, ObservableObject {
         // Restore hasSkippedLogin state
         hasSkippedLogin = UserDefaults.standard.bool(forKey: hasSkippedLoginKey)
 
-        // Restore saved session on launch, THEN start listening for auth state changes
+        // Restore saved session on launch, THEN start listening for auth state changes.
+        // Perf: restoreSessionIfNeeded already sets currentUser/isAuthenticated from
+        // Keychain + calls setSession. The previous checkSession() right after was a
+        // redundant SDK round-trip. Org membership is refreshed in the background so
+        // the UI doesn't block on it during cold launch.
         Task {
             await restoreSessionIfNeeded()
-            await checkSession()
-            await refreshOrgMembership()
             isInitialized = true
 
             // Start monitoring auth state changes AFTER session is restored
@@ -154,6 +156,10 @@ class AuthService: NSObject, ObservableObject {
                     await handleAuthStateChange(change.event, session: change.session)
                 }
             }
+
+            // Non-blocking: org membership determines isOrgMember (feature gate),
+            // not login gating. Safe to run after the listener is live.
+            Task { await refreshOrgMembership() }
         }
     }
     
@@ -188,10 +194,13 @@ class AuthService: NSObject, ObservableObject {
                 resetSkipLogin()
             }
             await checkSession()
-            await refreshOrgMembership()
+            // Non-blocking: these do not gate UI dismissal of LoginView. Running
+            // them sequentially made sign-in feel sluggish because the listener
+            // handler stayed busy until both finished.
+            Task { await refreshOrgMembership() }
             // Auto-backfill local lectures to Supabase on first sign-in.
             // Idempotent server-side; flagged per-user in UserDefaults.
-            await CloudSyncService.shared.backfillAllLocalLecturesIfNeeded(store: LectureStore.shared)
+            Task { await CloudSyncService.shared.backfillAllLocalLecturesIfNeeded(store: LectureStore.shared) }
         case .signedOut:
             AppLogger.info("AuthService: Signed out event received", category: .auth)
             isLoading = false
@@ -758,43 +767,54 @@ class AuthService: NSObject, ObservableObject {
             } else {
                 sessionFullName = nil
             }
+            // Resolve the effective display name before persisting / publishing.
+            // On first-ever Apple sign-in, `fullName` is the only source — the
+            // session's user_metadata is still empty until we push it up.
+            let applePickedName: String? = fullName.flatMap { fn in
+                let joined = [fn.givenName, fn.familyName]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+                return joined.isEmpty ? nil : joined
+            }
+            let effectiveName = applePickedName ?? sessionFullName
+
             persistSession(
                 accessToken: session.accessToken,
                 refreshToken: session.refreshToken,
                 userId: userId,
                 email: session.user.email,
-                name: sessionFullName
+                name: effectiveName
             )
-            
-            // 初回サインイン時のみ、fullNameを保存
-            if let fullName = fullName {
-                let name = [fullName.givenName, fullName.familyName]
-                    .compactMap { $0 }
-                    .joined(separator: " ")
-                
-                if !name.isEmpty {
-                    // ユーザーメタデータを更新（エラーが発生しても続行）
+
+            // Set auth state directly from the session we just received — mirrors
+            // the Google OAuth callback path. Previously this awaited checkSession()
+            // (another round-trip to supabase.auth.session), which delayed LoginView
+            // dismissal. The .signedIn listener still fires and reconciles state.
+            isAuthenticated = true
+            currentUser = LecsyUser(
+                id: userId,
+                email: session.user.email,
+                name: effectiveName
+            )
+            isLoading = false
+            errorMessage = nil
+            AppLogger.info("AuthService: Appleサインイン成功", category: .auth)
+
+            // Push the Apple-provided name to Supabase user_metadata in the
+            // background so we don't block login dismissal on another round-trip.
+            if let applePickedName {
+                Task { [weak self] in
+                    guard let self else { return }
                     do {
-                        _ = try await supabase.auth.update(user: UserAttributes(data: ["full_name": AnyJSON.string(name)]))
-                        AppLogger.info("AuthService: ユーザーメタデータ更新成功", category: .auth)
-                        // 名前を更新して永続化
-                        persistSession(
-                            accessToken: session.accessToken,
-                            refreshToken: session.refreshToken,
-                            userId: userId,
-                            email: session.user.email,
-                            name: name
+                        _ = try await self.supabase.auth.update(
+                            user: UserAttributes(data: ["full_name": AnyJSON.string(applePickedName)])
                         )
+                        AppLogger.info("AuthService: ユーザーメタデータ更新成功", category: .auth)
                     } catch {
                         AppLogger.warning("AuthService: ユーザーメタデータ更新エラー（無視） - \(error.localizedDescription)", category: .auth)
                     }
                 }
             }
-
-            isLoading = false
-            errorMessage = nil
-            AppLogger.info("AuthService: Appleサインイン成功", category: .auth)
-            await checkSession()
         } catch {
             isLoading = false
             AppLogger.error("AuthService: Appleサインイン処理エラー - \(error.localizedDescription)", category: .auth)
