@@ -133,6 +133,15 @@ final class TranscriptionCoordinator: ObservableObject {
 
         do {
             try await session.connect()
+            // connect() は await するので、その間に startLive が別の経路で
+            // stream を立ち上げている可能性がある（PlanService.refresh と
+            // RecordView.onAppear が近い時刻で prepare を呼ぶケース）。
+            // その場合は今 connect した session を捨てて orphan を残さない。
+            if stream != nil {
+                await session.finish()
+                isPreparing = false
+                return
+            }
             preparedSession = session
             preparedAt = Date()
             AppLogger.info("Deepgram preconnected", category: .transcription)
