@@ -38,19 +38,31 @@ struct LiveCaptionView: View {
     }
 
     var body: some View {
-        content
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
-            )
-            .overlay(alignment: .topLeading) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
                 statusPill
-                    .padding(.top, 14)
-                    .padding(.leading, 16)
+                Spacer()
+                if phase == .live {
+                    HStack(spacing: 4) {
+                        Image(systemName: "globe").font(.caption2)
+                        Text("Auto").font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(.tertiary)
+                }
             }
-            .onAppear {
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+
+            content
+        }
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
+        )
+        .onAppear {
                 pulse = true
                 withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
                     cursorOn.toggle()
@@ -66,28 +78,28 @@ struct LiveCaptionView: View {
             }
     }
 
-    // MARK: - Status pill (minimal, floats in corner)
+    // MARK: - Status pill
 
     private var statusPill: some View {
         HStack(spacing: 6) {
             ZStack {
                 Circle()
                     .fill(statusTint.opacity(0.25))
-                    .frame(width: 12, height: 12)
+                    .frame(width: 14, height: 14)
                     .scaleEffect(pulse ? 1.3 : 0.7)
                     .opacity(pulse ? 0.0 : 1.0)
                     .animation(.easeOut(duration: 1.2).repeatForever(autoreverses: false), value: pulse)
                 Circle()
                     .fill(statusTint)
-                    .frame(width: 6, height: 6)
+                    .frame(width: 7, height: 7)
             }
             Text(statusLabel)
-                .font(.caption2.weight(.heavy))
+                .font(.caption.weight(.heavy))
                 .foregroundStyle(statusTint)
-                .tracking(1.5)
+                .tracking(1.4)
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
         .background(Capsule(style: .continuous).fill(statusTint.opacity(0.12)))
     }
 
@@ -183,9 +195,6 @@ struct LiveCaptionView: View {
         return ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 26) {
-                    // 上部の status pill と重ならない余白
-                    Color.clear.frame(height: 12)
-
                     ForEach(Array(all.enumerated()), id: \.element.id) { pair in
                         let (idx, seg) = pair
                         let isActive = (idx == lastFinalIndex) && !hasInterim
@@ -196,8 +205,9 @@ struct LiveCaptionView: View {
                         )
                         .id(seg.id)
                         .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .offset(y: 20)),
-                            removal: .opacity
+                            insertion: .opacity.combined(with: .offset(y: 12))
+                                .animation(.easeOut(duration: 0.45)),
+                            removal: .opacity.animation(.easeIn(duration: 0.2))
                         ))
                     }
 
@@ -210,11 +220,13 @@ struct LiveCaptionView: View {
                     }
                 }
                 .padding(.horizontal, 22)
-                .padding(.top, 14)
-                .padding(.bottom, 32)
+                .padding(.top, 6)
+                .padding(.bottom, 24)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 420)
+            // 高さを固定帯にする。minHeight を入れないと content が小さい時に
+            // カードが shrink し、latest が常に「カード最下段」に貼り付いて見える。
+            .frame(minHeight: 300, maxHeight: 380)
             // 上部 fade グラデ: 古い行が消えていくように見せる (Apple Music 歌詞)
             .mask(
                 LinearGradient(
@@ -229,18 +241,22 @@ struct LiveCaptionView: View {
                 )
             )
             .onChange(of: coordinator.liveSegments.count) { _, _ in
-                withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
+                // アクティブ行を視覚中心から少し上 (y=0.38) に固定する。
+                // 下寄せだと「枠の最下段」に字幕が貼り付いて視線が下がる。
+                // スプリングを緩め (response 0.75) にして "音楽の小節が切り替わる"
+                // くらいのテンポに。キビキビし過ぎると慌ただしく感じる。
+                withAnimation(.spring(response: 0.75, dampingFraction: 0.88)) {
                     if hasInterim {
-                        proxy.scrollTo("interim", anchor: .bottom)
+                        proxy.scrollTo("interim", anchor: UnitPoint(x: 0.5, y: 0.38))
                     } else if let last = coordinator.liveSegments.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
+                        proxy.scrollTo(last.id, anchor: UnitPoint(x: 0.5, y: 0.38))
                     }
                 }
             }
             .onChange(of: coordinator.interimText) { _, newValue in
                 guard !newValue.isEmpty else { return }
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                    proxy.scrollTo("interim", anchor: .bottom)
+                withAnimation(.easeOut(duration: 0.35)) {
+                    proxy.scrollTo("interim", anchor: UnitPoint(x: 0.5, y: 0.38))
                 }
             }
         }
@@ -263,89 +279,40 @@ struct LiveCaptionView: View {
             .foregroundStyle(Color.primary.opacity(opacity))
             .lineSpacing(size * 0.22)
             .fixedSize(horizontal: false, vertical: true)
+            // 過去行が "格下げ" される時 (latest → recent → older) にフォントサイズ・
+            // 色が跳ねず、やわらかく縮んでいくようにする。
+            .animation(.easeInOut(duration: 0.45), value: isActive)
+            .animation(.easeInOut(duration: 0.45), value: depth)
     }
 }
 
-// MARK: - Interim (karaoke-style word reveal)
+// MARK: - Interim (smooth cross-fade update)
 
-/// 喋られている途中のテキストを単語ごとに fade-in で出す。
-/// Deepgram の interim は cumulative なので、単語数が増えるたびに
-/// 新しく追加された単語だけがトランジションで入ってくる。
+/// 喋られている途中のテキスト。Deepgram は interim を高頻度で投げてきて
+/// (100-200ms 間隔)、その都度 ForEach で単語を keyed にすると
+/// SwiftUI の再計算コストでチカチカして見える。
+/// 単一 Text + `.contentTransition(.opacity)` で文字列全体を滑らかに
+/// クロスフェードさせる方が Apple Music 歌詞の "テキストがにじみ出る"
+/// 感覚に近い。
 private struct InterimLyricLine: View {
     let text: String
     let cursorOn: Bool
 
     var body: some View {
-        let words = text
-            .split(separator: " ", omittingEmptySubsequences: true)
-            .map(String.init)
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(text)
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.primary.opacity(0.92))
+                .lineSpacing(6)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+                .animation(.easeOut(duration: 0.22), value: text)
 
-        FlowLayout(hSpacing: 7, vSpacing: 4) {
-            ForEach(Array(words.enumerated()), id: \.offset) { _, word in
-                Text(word)
-                    .font(.system(size: 28, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.primary.opacity(0.92))
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .offset(y: 8)).animation(.easeOut(duration: 0.28)),
-                        removal: .opacity.animation(.easeIn(duration: 0.12))
-                    ))
-            }
-            // 末尾の blinking cursor
             Rectangle()
                 .fill(Color.red.opacity(0.85))
                 .frame(width: 2.5, height: 28)
                 .opacity(cursorOn ? 1.0 : 0.0)
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: words.count)
-    }
-}
-
-// MARK: - FlowLayout
-
-/// SwiftUI 標準には無い "折返しする HStack"。
-/// 単語単位で Text を並べたい interim 表示に使う。
-private struct FlowLayout: Layout {
-    var hSpacing: CGFloat = 6
-    var vSpacing: CGFloat = 4
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        return layout(sizes: sizes, maxWidth: maxWidth).size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let maxWidth = proposal.width ?? .infinity
-        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let result = layout(sizes: sizes, maxWidth: maxWidth)
-        for i in subviews.indices {
-            let p = result.offsets[i]
-            subviews[i].place(
-                at: CGPoint(x: bounds.minX + p.x, y: bounds.minY + p.y),
-                proposal: ProposedViewSize(sizes[i])
-            )
-        }
-    }
-
-    private func layout(sizes: [CGSize], maxWidth: CGFloat) -> (size: CGSize, offsets: [CGPoint]) {
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        var offsets: [CGPoint] = []
-        var totalMaxX: CGFloat = 0
-
-        for size in sizes {
-            if x + size.width > maxWidth && x > 0 {
-                x = 0
-                y += lineHeight + vSpacing
-                lineHeight = 0
-            }
-            offsets.append(CGPoint(x: x, y: y))
-            x += size.width + hSpacing
-            lineHeight = max(lineHeight, size.height)
-            totalMaxX = max(totalMaxX, x - hSpacing)
-        }
-
-        return (CGSize(width: max(totalMaxX, 0), height: y + lineHeight), offsets)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
