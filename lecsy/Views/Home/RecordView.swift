@@ -70,8 +70,9 @@ struct RecordView: View {
 
                 Spacer()
 
-                // 中央: リアルタイム字幕
-                if recordingService.isRecording && liveCoordinator.isLiveActive {
+                // 中央: リアルタイム字幕。prepare 中（接続待ち）も表示して "Connecting…" を出す
+                if recordingService.isRecording &&
+                   (liveCoordinator.isLiveActive || liveCoordinator.isPreparing) {
                     LiveCaptionView(coordinator: liveCoordinator)
                         .padding(.horizontal, 16)
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -196,7 +197,9 @@ struct RecordView: View {
         }
         .sheet(isPresented: $showTitleSheet) {
             TitleInputSheet(defaultTitle: defaultRecordingTitle()) { title, courseName in
-                saveLecture(title: title, courseName: courseName)
+                Task { @MainActor in
+                    await saveLecture(title: title, courseName: courseName)
+                }
             }
         }
         .sheet(isPresented: $showRecoverySheet) {
@@ -665,10 +668,12 @@ struct RecordView: View {
                 return
             }
 
-            // Pro (org member): 録音開始前に Deepgram websocket を先行接続して
-            // 最初の発話から字幕が出るようにする。接続失敗しても録音自体は続行（WhisperKit fallback）。
+            // Pro (org member): Deepgram websocket 接続を並行で投げる。await しないので
+            // ユーザーはボタンを押した瞬間に録音が始まる。字幕は接続完了後に追いついて
+            // 流れ始める（この間の音声は m4a には確実に入る → 抜け落ちない）。
+            // 接続失敗時も録音自体は続行し、録音後 WhisperKit fallback で文字起こしされる。
             if PlanService.shared.isPaid {
-                await liveCoordinator.prepare()
+                Task { @MainActor in await liveCoordinator.prepare() }
             }
 
             do {
@@ -697,11 +702,12 @@ struct RecordView: View {
         showTitleSheet = true
     }
 
-    private func saveLecture(title: String, courseName: String?) {
+    private func saveLecture(title: String, courseName: String?) async {
         guard let audioURL = pendingAudioURL else { return }
 
         // Live字幕で文字起こし済みなら、Deepgramの結果をそのまま採用してWhisperKit処理を省略
-        let liveResult = liveCoordinator.consumeFinalizedTranscript()
+        // consume は内部で Deepgram の flush (最大1.5s) を待つので、停止直後に保存しても欠けない
+        let liveResult = await liveCoordinator.consumeFinalizedTranscript()
 
         var lecture = Lecture(
             title: title,

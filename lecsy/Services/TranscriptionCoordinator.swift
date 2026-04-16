@@ -43,6 +43,10 @@ final class TranscriptionCoordinator: ObservableObject {
     private let monitorQueue = DispatchQueue(label: "lecsy.coordinator.network")
 
     private var captureStartRecordingOffset: TimeInterval = 0
+    /// stopLive() が起こした flush 待ち Task。consumeFinalizedTranscript は
+    /// これを await してから liveSegments を読むことで、Deepgram の最終 final を
+    /// 取りこぼさない。
+    private var pendingFlush: Task<Void, Never>?
 
     private init() {
         setupNetworkMonitor()
@@ -100,7 +104,7 @@ final class TranscriptionCoordinator: ObservableObject {
         // 既に prepare 済だが古すぎる場合は破棄して張り直す
         if let existing = preparedSession, let at = preparedAt,
            Date().timeIntervalSince(at) > preparedSessionMaxAge {
-            existing.finish()
+            await existing.finish()
             preparedSession = nil
             preparedAt = nil
         }
@@ -214,20 +218,36 @@ final class TranscriptionCoordinator: ObservableObject {
         }
     }
 
+    /// Deepgram から pending の final が flush されきるまで（最大1.5秒）待ってから切断する。
+    /// RecordView は停止直後に TitleSheet を表示 → ユーザーがタイトル入力する間にこの flush が走る。
+    /// consumeFinalizedTranscript はタイトル保存後に呼ばれるので、通常は flush 完了済みで読まれる。
     func stopLive() {
         capture?.stop()
-        stream?.finish()
-        preparedSession?.finish()
         capture = nil
+        isLiveActive = false
+
+        let closingStream = stream
+        let closingPrepared = preparedSession
         stream = nil
         preparedSession = nil
         preparedAt = nil
-        isLiveActive = false
+
+        pendingFlush?.cancel()
+        pendingFlush = Task { @MainActor in
+            await closingStream?.finish()
+            await closingPrepared?.finish()
+        }
     }
 
     // MARK: - Consume for persistence
 
-    func consumeFinalizedTranscript(processingTime: TimeInterval = 0) -> TranscriptionResult? {
+    /// 録音終了後のトランスクリプト取り出し。Deepgram の最終 final flush を最大 1.5秒
+    /// 待ってから読み取る。タイトル入力シート中にユーザーがすぐ保存したケースでも、
+    /// flush 中のセグメントを取りこぼさないためのガード。
+    func consumeFinalizedTranscript(processingTime: TimeInterval = 0) async -> TranscriptionResult? {
+        await pendingFlush?.value
+        pendingFlush = nil
+
         guard !liveSegments.isEmpty else { return nil }
 
         let offset = captureStartRecordingOffset

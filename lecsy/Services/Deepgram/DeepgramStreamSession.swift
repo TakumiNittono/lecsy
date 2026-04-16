@@ -67,6 +67,8 @@ final class DeepgramStreamSession: ObservableObject {
     private var keepAliveTask: Task<Void, Never>?
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 3
+    /// finish() の flush 待ちループで使う。最後に final が届いた時刻。
+    private var lastSegmentAt: Date?
 
     init(
         tokenProvider: DeepgramTokenProviderProtocol,
@@ -98,16 +100,42 @@ final class DeepgramStreamSession: ObservableObject {
         }
     }
 
-    /// 正常終了（Deepgramに`{"type":"CloseStream"}`送ってから切断）
-    func finish() {
+    /// 正常終了。Deepgramに`{"type":"CloseStream"}`を送ったあと、残りの interim を
+    /// finalize して送り返してくるのを最大1.5秒待ってから切断する。
+    /// ここを即時 cancel すると最後の1-2セグメントが落ちて、録音との突き合わせが欠ける。
+    func finish() async {
         guard let task else { return }
         let close = #"{"type":"CloseStream"}"#
-        task.send(.string(close)) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.task?.cancel(with: .normalClosure, reason: nil)
-                self?.cleanup(finalState: .closed(code: 1000))
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            task.send(.string(close)) { _ in cont.resume() }
+        }
+
+        // flush 完了を検知する手段が無いので固定の grace period を置く。
+        // Deepgram 経験則: CloseStream 後 200-800ms 以内に最終 Results / Metadata を
+        // 送ってくる。1.5秒で打ち切る。
+        let graceNanos: UInt64 = 1_500_000_000
+        let flushStart = Date()
+        let segmentsAtStart = finalizedSegments.count
+        while Date().timeIntervalSince(flushStart) * 1_000_000_000 < Double(graceNanos) {
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            // 新しい final が200ms間来なければ打ち切り（早期終了で UX 改善）
+            if finalizedSegments.count > segmentsAtStart,
+               let last = lastSegmentAt,
+               Date().timeIntervalSince(last) > 0.2 {
+                break
             }
         }
+
+        // 残っている interim は final として採用する。発話の途中で stop した場合の救済。
+        if !interimText.isEmpty {
+            finalizedSegments.append(
+                .init(text: interimText, start: 0, end: 0, language: nil)
+            )
+            interimText = ""
+        }
+
+        self.task?.cancel(with: .normalClosure, reason: nil)
+        cleanup(finalState: .closed(code: 1000))
     }
 
     // MARK: - Socket
@@ -213,13 +241,22 @@ final class DeepgramStreamSession: ObservableObject {
         let start       = (obj["start"]    as? Double) ?? 0
         let duration    = (obj["duration"] as? Double) ?? 0
 
-        if isFinal && speechFinal {
+        // Deepgram `interim_results=true` のセマンティクス:
+        //   is_final=false                → interim（次のメッセージで置き換えられる）
+        //   is_final=true,  speech_final=false → 確定した1塊（まだ発話継続中）
+        //   is_final=true,  speech_final=true  → 確定 + 文末区切り
+        // 以前は `is_final && speech_final` だけ追加していて、speech_final=false の
+        // 確定セグメントが丸ごと捨てられていた（=録音の中盤が抜ける現象）。
+        // is_final=true ならすべて保存する。speech_final はここでは使わない。
+        _ = speechFinal
+        if isFinal {
             let lang = (first["languages"] as? [String])?.first
             finalizedSegments.append(
                 .init(text: transcript, start: start, end: start + duration, language: lang)
             )
             interimText = ""
-        } else if !isFinal {
+            lastSegmentAt = Date()
+        } else {
             interimText = transcript
         }
     }

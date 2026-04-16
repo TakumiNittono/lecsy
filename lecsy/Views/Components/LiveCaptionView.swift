@@ -38,18 +38,27 @@ struct LiveCaptionView: View {
 
     // MARK: - Status bar
 
+    /// prepare 中は "Connecting"、接続済で字幕あり/なしで "LIVE"/"Listening" 表記を切替。
+    private enum Phase { case connecting, listening, live }
+    private var phase: Phase {
+        if coordinator.isPreparing && !coordinator.isLiveActive { return .connecting }
+        return coordinator.liveSegments.isEmpty && coordinator.interimText.isEmpty
+            ? .listening
+            : .live
+    }
+
     private var statusBar: some View {
         HStack(spacing: 10) {
             Circle()
-                .fill(Color.red)
+                .fill(phase == .connecting ? Color.blue : Color.red)
                 .frame(width: 8, height: 8)
                 .scaleEffect(pulse ? 1.0 : 0.6)
                 .opacity(pulse ? 1.0 : 0.4)
                 .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
 
-            Text("LIVE")
+            Text(phase == .connecting ? "CONNECTING" : "LIVE")
                 .font(.caption.weight(.bold))
-                .foregroundStyle(.red)
+                .foregroundStyle(phase == .connecting ? Color.blue : Color.red)
                 .tracking(1.2)
 
             if !coordinator.liveSegments.isEmpty {
@@ -182,13 +191,21 @@ struct LiveCaptionView: View {
 
     private var emptyState: some View {
         HStack(spacing: 10) {
-            Image(systemName: "waveform")
-                .font(.body)
-                .foregroundStyle(.tertiary)
-                .symbolEffect(.variableColor.iterative, options: .repeating)
-            Text("Listening…")
-                .font(.system(size: 16))
-                .foregroundStyle(.tertiary)
+            if phase == .connecting {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Connecting captions…")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.tertiary)
+            } else {
+                Image(systemName: "waveform")
+                    .font(.body)
+                    .foregroundStyle(.tertiary)
+                    .symbolEffect(.variableColor.iterative, options: .repeating)
+                Text("Listening…")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.tertiary)
+            }
         }
         .frame(maxWidth: .infinity, minHeight: 120)
     }
