@@ -183,10 +183,13 @@ final class DeepgramStreamSession: ObservableObject {
         receiveTask?.cancel()
         receiveTask = Task { @MainActor [weak self] in
             while let self, let task = self.task {
+                if Task.isCancelled { return }
                 do {
                     let message = try await task.receive()
+                    if Task.isCancelled { return }
                     self.handleMessage(message)
                 } catch {
+                    if Task.isCancelled { return }
                     self.handleSocketError(error)
                     break
                 }

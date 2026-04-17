@@ -228,6 +228,11 @@ final class TranscriptionCoordinator: ObservableObject {
         capture.onChunk = { [weak session] data in
             session?.send(audio: data)
         }
+        capture.onSilenceFailure = { [weak self] in
+            guard let self else { return }
+            self.liveError = "Microphone tap returned no audio. Live transcription stopped."
+            self.stopLive()
+        }
         self.capture = capture
 
         do {

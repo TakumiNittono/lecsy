@@ -29,6 +29,8 @@ export const metadata: Metadata = {
     url: "https://www.lecsy.app/schools",
     type: "website",
   },
+  // B2B is private-beta / direct-outreach only — keep it off search results.
+  robots: { index: false, follow: false, nocache: true },
 };
 
 export default function SchoolsLayout({

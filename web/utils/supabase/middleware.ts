@@ -44,6 +44,16 @@ export async function updateSession(request: NextRequest) {
     '/ai-note-taking-for-international-students',
     '/otter-alternative-for-lectures',
     '/how-to-record-lectures-legally',
+    // Crawler / static assets — must be reachable without a session,
+    // otherwise Googlebot gets 307→/login and can't index the site.
+    '/sitemap.xml',
+    '/robots.txt',
+    '/icon.png',
+    '/apple-icon.png',
+    '/og-image.jpg',
+    '/opengraph-image',
+    '/manifest.webmanifest',
+    '/manifest.json',
   ])
   if (
     publicPages.has(path) ||

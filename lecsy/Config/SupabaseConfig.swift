@@ -23,23 +23,27 @@ struct SupabaseConfig {
     }()
     
     private init() {
-        // Info.plist から読み込み（xcconfig経由で設定される）
-        guard let urlString = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
-              !urlString.isEmpty,
-              !urlString.hasPrefix("$("),  // 未展開の変数をチェック
-              let url = URL(string: urlString) else {
+        // Info.plist から読み込み（xcconfig経由で設定される）。
+        // Release ビルドで値が欠けていた場合は、起動クラッシュさせず
+        // プレースホルダに落として後続のネットワーク呼び出しで失敗させる。
+        // （App Store 審査で設定事故があっても即リジェクトされない保険）
+        let urlString = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String
+        if let urlString, !urlString.isEmpty, !urlString.hasPrefix("$("), let url = URL(string: urlString) {
+            self.supabaseURL = url
+        } else {
             AppLogger.error("SUPABASE_URL is not configured. Please set it in xcconfig.", category: .general)
-            preconditionFailure("SUPABASE_URL is not configured. Please set it in xcconfig.")
+            assertionFailure("SUPABASE_URL is not configured. Please set it in xcconfig.")
+            self.supabaseURL = URL(string: "https://invalid.supabase.local")!
         }
-        self.supabaseURL = url
 
-        guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String,
-              !key.isEmpty,
-              !key.hasPrefix("$(") else {  // 未展開の変数をチェック
+        let keyString = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String
+        if let keyString, !keyString.isEmpty, !keyString.hasPrefix("$(") {
+            self.supabaseAnonKey = keyString
+        } else {
             AppLogger.error("SUPABASE_ANON_KEY is not configured. Please set it in xcconfig.", category: .general)
-            preconditionFailure("SUPABASE_ANON_KEY is not configured. Please set it in xcconfig.")
+            assertionFailure("SUPABASE_ANON_KEY is not configured. Please set it in xcconfig.")
+            self.supabaseAnonKey = ""
         }
-        self.supabaseAnonKey = key
 
         AppLogger.debug("Supabase config loaded", category: .general)
     }

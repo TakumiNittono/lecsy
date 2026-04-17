@@ -141,22 +141,9 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ━━━ B2B BANNER (thin) ━━━ */}
-      <div className="fixed top-14 w-full z-40 bg-[#0B1E3F] text-white text-[13px]">
-        <div className="max-w-6xl mx-auto px-5 h-9 flex items-center justify-center gap-2">
-          <span className="text-[#C8D1E0] hidden sm:inline">For schools and ESL programs —</span>
-          <Link href="/schools" className="font-medium text-[#F5C96B] hover:text-white transition-colors inline-flex items-center gap-1">
-            Lecsy for Schools
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-            </svg>
-          </Link>
-        </div>
-      </div>
-
       {/* ━━━ HERO ━━━ */}
       {/* ━━━ COMING SOON BIG ANNOUNCEMENT ━━━ */}
-      <section className="relative pt-[8.25rem] pb-6 overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-700">
+      <section className="relative pt-24 pb-6 overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-700">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.15),transparent_60%)]" />
         <div className="relative max-w-6xl mx-auto px-5 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 border border-white/30 backdrop-blur-sm mb-4">
@@ -363,25 +350,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* B2B school CTA */}
-          <div className="bg-gray-900 rounded-3xl p-8 lg:p-12 text-center">
-            <span className="inline-block px-3 py-1 mb-4 text-xs font-semibold uppercase tracking-wider text-blue-300 bg-blue-900/40 rounded-full">
-              For ESL programs &amp; university ISSO
-            </span>
-            <h3 className="font-[family-name:var(--font-display)] text-2xl lg:text-3xl font-bold text-white mb-3">
-              Help your international students keep up
-            </h3>
-            <p className="text-gray-400 max-w-xl mx-auto mb-6">
-              Free pilot for one semester. We don&apos;t store audio. We don&apos;t train on student data. FERPA-aligned.
-            </p>
-            <a
-              href="mailto:hello@lecsy.app?subject=ESL%20pilot%20program%20inquiry"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-full hover:bg-blue-400 transition-colors"
-            >
-              Request a pilot
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-            </a>
-          </div>
         </div>
       </section>
 

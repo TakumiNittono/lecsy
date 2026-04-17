@@ -24,6 +24,10 @@ final class DeepgramAudioCapture {
     /// 変換済みチャンク（16kHz mono Int16 LE）が到着した時
     var onChunk: ((Data) -> Void)?
 
+    /// 10秒以上 chunk が届かず tap が dead と判断された時に呼ぶ。
+    /// 呼び出し元は画面にエラーを出して停止する責務を持つ。
+    var onSilenceFailure: (() -> Void)?
+
     private let engine = AVAudioEngine()
     private var converter: AVAudioConverter?
     private var didLogFirstChunk = false
@@ -78,18 +82,28 @@ final class DeepgramAudioCapture {
             self?.convertAndEmit(buffer: buffer)
         }
 
-        // 3秒経っても chunk が届かなければ警告。
-        // tap の silent failure（AVAudioRecorder と hardware input を取り合って
-        // buffer が来ないケース）を検知するため。
+        // 3秒経っても chunk が届かなければ警告。10秒で fatal 扱いにして
+        // 停止させる（警告だけだと無音のまま Deepgram にゴミを流し続ける）。
         didLogFirstChunk = false
         chunkWatchdog?.cancel()
         chunkWatchdog = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 3_000_000_000)
-            guard let self, !Task.isCancelled else { return }
-            await MainActor.run {
-                if !self.didLogFirstChunk {
+            guard !Task.isCancelled, let self else { return }
+            let stillSilentAt3s: Bool = await MainActor.run {
+                let silent = !self.didLogFirstChunk
+                if silent {
                     AppLogger.warning("Deepgram: no audio chunk after 3s — tap may be silent (AVAudioRecorder conflict?)", category: .transcription)
                 }
+                return silent
+            }
+            guard stillSilentAt3s else { return }
+
+            try? await Task.sleep(nanoseconds: 7_000_000_000)
+            guard !Task.isCancelled, let self else { return }
+            await MainActor.run {
+                guard !self.didLogFirstChunk else { return }
+                AppLogger.error("Deepgram: no audio chunk after 10s — aborting live transcription", category: .transcription)
+                self.onSilenceFailure?()
             }
         }
     }
