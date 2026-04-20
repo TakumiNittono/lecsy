@@ -14,7 +14,7 @@ export default function TermsPage() {
           <h1 className="text-3xl font-bold text-gray-900 mb-8">Terms of Service</h1>
 
           <p className="text-gray-600 mb-6">
-            Last updated: April 14, 2026
+            Last updated: April 19, 2026
           </p>
 
           <section className="mb-8">
@@ -39,20 +39,37 @@ export default function TermsPage() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">3. Pricing &amp; Subscriptions</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
-              All features are free through June 1, 2026. No ads, no subscription, no credit card required.
+              Lecsy is currently free to download and use via the App Store. The core Free tier &mdash;
+              lecture recording, on-device transcription, and basic AI Study Guide &mdash; requires no payment
+              and no subscription.
             </p>
             <p className="text-gray-700 leading-relaxed mb-4">
-              From June 1, 2026 onward:
+              Additional tiers are offered under two distinct paths:
             </p>
             <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4 mb-4">
-              <li><strong>Free</strong>: Limited recording minutes per month, batch transcription only.</li>
-              <li><strong>Pro</strong> &mdash; $12.99 / month or $109 / year. Real-time bilingual captions, AI Study Guide, unlimited lectures.</li>
-              <li><strong>Student</strong> &mdash; $6.99 / month or $59 / year. Same as Pro; verified .edu email required.</li>
+              <li>
+                <strong>Organization plans</strong> (schools, universities, language institutes): provided
+                under a separate written agreement between Lecsy and the institution. Pricing is negotiated
+                per pilot or license and invoiced directly to the organization. See{' '}
+                <Link href="/schools" className="text-blue-600 hover:underline">
+                  lecsy.app/schools
+                </Link>
+                .
+              </li>
+              <li>
+                <strong>Individual paid tiers</strong> (Student / Pro / Power): currently in development. No
+                in-app purchase path is available at this time. Indicative pricing is shown on{' '}
+                <Link href="/pricing" className="text-blue-600 hover:underline">
+                  lecsy.app/pricing
+                </Link>{' '}
+                for planning purposes only and is subject to change before release.
+              </li>
             </ul>
             <p className="text-gray-700 leading-relaxed">
-              Subscriptions are processed by Stripe and are billed in advance on a recurring basis. You may cancel anytime
-              from Settings &rarr; Manage Subscription, which opens the Stripe Customer Portal. Cancellation takes effect
-              at the end of the current billing period; we do not issue prorated refunds.
+              When individual paid tiers launch, subscription billing will be handled by Stripe and will
+              always be optional &mdash; the Free tier will remain available. Subscribers will be able to
+              cancel at any time from Settings &rarr; Manage Subscription; cancellation takes effect at the
+              end of the current billing period and we do not issue prorated refunds.
             </p>
           </section>
 
@@ -139,7 +156,7 @@ export default function TermsPage() {
               <li>Negotiate Zero Data Retention with Deepgram for sensitive deployments</li>
             </ul>
             <p className="text-gray-700 leading-relaxed mt-4">
-              Contact <a href="mailto:nittonotakumi@gmail.com" className="text-blue-600 hover:underline">nittonotakumi@gmail.com</a> for institutional inquiries.
+              Contact <a href="mailto:support@lecsy.app" className="text-blue-600 hover:underline">support@lecsy.app</a> for institutional inquiries.
             </p>
           </section>
 

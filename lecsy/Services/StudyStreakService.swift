@@ -7,7 +7,8 @@
 
 import Foundation
 import Combine
-import UserNotifications
+// UNUserNotificationCenter は Sendable 未対応のため preconcurrency import で警告抑止
+@preconcurrency import UserNotifications
 
 @MainActor
 class StudyStreakService: ObservableObject {

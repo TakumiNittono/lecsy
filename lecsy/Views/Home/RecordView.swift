@@ -15,6 +15,7 @@ struct RecordView: View {
     @StateObject private var orgService = OrganizationService.shared
     @StateObject private var authService = AuthService.shared
     @StateObject private var liveCoordinator = TranscriptionCoordinator.shared
+    @StateObject private var ferpaConsent = FERPAConsentService.shared
     @State private var showLoginSheet = false
     @State private var currentLanguageDisplay: String = TranscriptionService.shared.transcriptionLanguage.displayName
     @AppStorage("lecsy.hasAcceptedAIConsent") private var hasAcceptedAIConsent = false
@@ -76,6 +77,22 @@ struct RecordView: View {
                     LiveCaptionView(coordinator: liveCoordinator)
                         .padding(.horizontal, 16)
                         .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                // 再接続中バナー（ネット断・電話・background 復帰などで session 張り直し中）
+                if recordingService.isRecording && liveCoordinator.isReconnectingLive {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                        Text("ライブ字幕を再接続中…")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.secondary.opacity(0.1))
+                    .clipShape(Capsule())
+                    .transition(.opacity)
                 }
 
                 Spacer()
@@ -141,6 +158,12 @@ struct RecordView: View {
             }
             .interactiveDismissDisabled()
         }
+        .sheet(isPresented: $ferpaConsent.shouldPromptConsent) {
+            FERPAConsentView(orgName: orgService.currentOrganization?.name ?? "your organization") {
+                // Consent persisted; service flips shouldPromptConsent to false
+                // and the sheet dismisses via the binding.
+            }
+        }
         .onChange(of: recordingService.recordingDuration) { _, _ in
             guard recordingService.isRecording, !recordingService.isPaused else {
                 lowAudioSeconds = 0
@@ -187,18 +210,21 @@ struct RecordView: View {
             LanguagePickerSheet(
                 selectedLanguage: transcriptionService.transcriptionLanguage,
                 onSelect: { language in
-                    transcriptionService.setLanguage(language)
-                    currentLanguageDisplay = language.displayName
-                    showLanguagePicker = false
+                    // view update 中の @Published 書き換えを避ける
+                    DispatchQueue.main.async {
+                        transcriptionService.setLanguage(language)
+                        currentLanguageDisplay = language.displayName
+                        showLanguagePicker = false
+                    }
                 }
             )
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showTitleSheet) {
-            TitleInputSheet(defaultTitle: defaultRecordingTitle()) { title, courseName in
+            TitleInputSheet(defaultTitle: defaultRecordingTitle()) { title, courseName, classId in
                 Task { @MainActor in
-                    await saveLecture(title: title, courseName: courseName)
+                    await saveLecture(title: title, courseName: courseName, classId: classId)
                 }
             }
         }
@@ -216,14 +242,30 @@ struct RecordView: View {
         .onAppear {
             recordingService.prepareAudioSession()
 
-            // プラン判定を最新化（JWT更新直後 / 長時間放置後など）
+            // 教室パイロットでは Record ボタンを押した瞬間に system 権限ダイアログが
+            // 出ると、慌てて「Don't Allow」を押してしまう学生が必ず出る。
+            // 表示直後に非同期で要求しておけば、赤ボタンを押す頃には既に
+            // 権限が確定している (許可なら即録音、拒否なら設定遷移ボタンが出る)。
+            // 既に許可/拒否済みの場合 system は何も出さないので副作用はない。
+            if AVAudioSession.sharedInstance().recordPermission == .undetermined {
+                Task { _ = await recordingService.requestMicrophonePermission() }
+            }
+
+            // Deepgram 先行接続を即座にキック。PlanService はキャッシュ済 plan を
+            // 起動時 UserDefaults から読んでいるので同期で判定できる。
+            // refresh() を await してから prepare すると 500ms-2s 遅れて
+            // 「録音画面開いてから字幕 ready までラグがある」感になる。
+            // prepare() は二重起動ガード付き、30秒放置で自動再張替え、失敗しても throw しない。
+            if PlanService.shared.isPaid, !recordingService.isRecording {
+                Task { await TranscriptionCoordinator.shared.prepare() }
+            }
+
+            // plan を最新化（JWT 更新直後 / 長時間放置後などで変化する可能性）。
+            // prepare と並列に走らせる。refresh の結果 Pro になった場合のみ追加で prepare。
             Task {
+                let wasPaidBefore = PlanService.shared.isPaid
                 await PlanService.shared.refresh()
-                // Pro ユーザーは録音画面を開いた瞬間に Deepgram websocket を暖機する。
-                // ユーザーがボタンを押した時に iOS の stale HTTP/3 検出で 4-5秒
-                // 吹っ飛ぶのを防ぐ（その間 m4a には音声が入ってるが字幕は出ない）。
-                // prepare() は二重起動ガード付き、30秒放置で自動再張り替え。
-                if PlanService.shared.isPaid, !recordingService.isRecording {
+                if !wasPaidBefore, PlanService.shared.isPaid, !recordingService.isRecording {
                     await TranscriptionCoordinator.shared.prepare()
                 }
             }
@@ -663,6 +705,13 @@ struct RecordView: View {
                 return
             }
 
+            // B2B gate: org members must stamp FERPA consent before the first
+            // recording. Non-org users (B2C) are unaffected — the service's
+            // shouldPromptConsent stays false when activeOrgId is nil.
+            if ferpaConsent.shouldPromptConsent {
+                return
+            }
+
             let permissionStatus = AVAudioSession.sharedInstance().recordPermission
             if permissionStatus == .undetermined {
                 let granted = await recordingService.requestMicrophonePermission()
@@ -711,12 +760,23 @@ struct RecordView: View {
         showTitleSheet = true
     }
 
-    private func saveLecture(title: String, courseName: String?) async {
+    private func saveLecture(title: String, courseName: String?, classId: UUID?) async {
         guard let audioURL = pendingAudioURL else { return }
 
         // Live字幕で文字起こし済みなら、Deepgramの結果をそのまま採用してWhisperKit処理を省略
         // consume は内部で Deepgram の flush (最大1.5s) を待つので、停止直後に保存しても欠けない
         let liveResult = await liveCoordinator.consumeFinalizedTranscript()
+
+        // B2B: thread the selected class through OrganizationContext so the
+        // cloud-sync call emits class_id (and visibility='class') on the
+        // Supabase transcript row. Org admins' usage dashboard aggregates on
+        // this. Context is sticky: the next recording inherits this class
+        // until the user picks a different one in TitleInputSheet — matches
+        // the natural "I'm in Math 101 today" UX.
+        if OrganizationContext.shared.activeOrgId != nil {
+            OrganizationContext.shared.classId = classId?.uuidString
+            OrganizationContext.shared.visibility = classId != nil ? .class : .private_
+        }
 
         var lecture = Lecture(
             title: title,
@@ -806,7 +866,10 @@ struct RecordView: View {
         // Free プランは WhisperKit にフォールバック（= 旧フロー完全復元）
         if AuthService.shared.isAuthenticated && PlanService.shared.isPaid {
             do {
-                let dgResult = try await DeepgramBatchService.shared.transcribe(audioURL: audioURL)
+                let dgResult = try await DeepgramBatchService.shared.transcribe(
+                    audioURL: audioURL,
+                    language: transcriptionService.transcriptionLanguage.deepgramCode
+                )
                 guard var latest = store.getLecture(by: lectureId) else { return }
                 latest.transcriptText = dgResult.text
                 latest.transcriptSegments = dgResult.segments

@@ -163,7 +163,7 @@ export default function Home() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
             <a
-              href="mailto:nittonotakumi@gmail.com?subject=Lecsy%20Beta%20Waitlist"
+              href="mailto:support@lecsy.app?subject=Lecsy%20Beta%20Waitlist"
               className="inline-flex items-center gap-2 h-12 px-6 rounded-xl bg-white text-blue-700 font-bold text-sm hover:bg-blue-50 transition-all shadow-lg"
             >
               Join the waitlist
@@ -300,18 +300,6 @@ export default function Home() {
           {/* Bilingual notes mockup */}
           <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-12">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-              <div className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-3">日本語 AI Summary</div>
-              <p className="text-sm text-gray-800 leading-relaxed mb-4">
-                今回の講義では、細胞分裂のメカニズムと、それが多細胞生物の発達においてどう機能するかを説明しました。特に有糸分裂と減数分裂の違いがポイントです。
-              </p>
-              <div className="text-xs font-semibold text-gray-500 mb-2">Key Points</div>
-              <ul className="space-y-1 text-sm text-gray-700">
-                <li>• 有糸分裂 = 同じ DNA を持つ 2 つの娘細胞</li>
-                <li>• 減数分裂 = 配偶子形成、染色体半減</li>
-                <li>• チェックポイントが分裂の質を保証</li>
-              </ul>
-            </div>
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
               <div className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-3">English Transcript</div>
               <p className="text-sm text-gray-800 leading-relaxed mb-4">
                 This lecture covered the mechanism of cell division and how it functions in the development of multicellular organisms, with particular focus on the difference between mitosis and meiosis.
@@ -321,6 +309,18 @@ export default function Home() {
                 <li>• Mitosis = two daughter cells with identical DNA</li>
                 <li>• Meiosis = gamete formation, chromosome halving</li>
                 <li>• Checkpoints ensure division quality</li>
+              </ul>
+            </div>
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+              <div className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-3">Resumen en Español</div>
+              <p className="text-sm text-gray-800 leading-relaxed mb-4">
+                Esta clase explicó el mecanismo de la división celular y cómo funciona en el desarrollo de organismos multicelulares, con especial atención a la diferencia entre la mitosis y la meiosis.
+              </p>
+              <div className="text-xs font-semibold text-gray-500 mb-2">Puntos clave</div>
+              <ul className="space-y-1 text-sm text-gray-700">
+                <li>• Mitosis = dos células hijas con ADN idéntico</li>
+                <li>• Meiosis = formación de gametos, reducción cromosómica</li>
+                <li>• Los puntos de control aseguran la calidad</li>
               </ul>
             </div>
           </div>
@@ -752,7 +752,7 @@ export default function Home() {
               </div>
 
               <a
-                href="mailto:nittonotakumi@gmail.com?subject=Lecsy%20Beta%20Waitlist"
+                href="mailto:support@lecsy.app?subject=Lecsy%20Beta%20Waitlist"
                 className="block w-full text-center h-12 leading-[3rem] rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-sm font-semibold hover:opacity-90 transition-opacity"
               >
                 Join the Waitlist
@@ -930,6 +930,11 @@ export default function Home() {
                 <li>
                   <Link href="/terms" className="hover:text-gray-900 transition-colors">
                     Terms of Service
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/support" className="hover:text-gray-900 transition-colors">
+                    Support
                   </Link>
                 </li>
                 <li>

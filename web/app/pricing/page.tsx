@@ -1,14 +1,15 @@
-// /pricing - Lecsy Pro / Student プラン契約ページ
+// /pricing - Lecsy plan overview (B2B first, individual Pro in development)
 // 参照: Deepgram/EXECUTION_PLAN.md W06
 //
-// キャンペーン期間中（2026-06-01まで）は「全員Pro無料開放」バナー表示。
-// それ以降は通常の課金フロー。
+// 2026-06-01 ローンチ時点の想定:
+//   - 個人向け Pro は iOS 内に課金導線なし (waitlist のみ)
+//   - Organization プランは /schools から営業契約で提供
+//   - ここの Paid プラン数字は目安 (final pricing TBD)
 
 'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CAMPAIGN_END_ISO, isCampaignActive } from '@/utils/isPro'
 
 type Plan = 'free' | 'student' | 'pro' | 'power'
 type PaidPlan = 'student' | 'pro' | 'power'
@@ -91,7 +92,7 @@ export default function PricingPage() {
   const [cycle, setCycle] = useState<Cycle>('monthly')
   const [loading, setLoading] = useState<Plan | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const campaignActive = false  // memo.md フェーズ1: 全員Pro無料開放は撤廃
+  const campaignActive = false
 
   async function startCheckout(plan: PaidPlan) {
     setError(null)
@@ -132,14 +133,21 @@ export default function PricingPage() {
 
           <div className="mx-auto mt-6 max-w-2xl rounded-xl bg-gradient-to-r from-indigo-50 to-blue-50 px-5 py-3 ring-1 ring-indigo-200">
             <p className="text-sm font-semibold text-indigo-900">
-              🚀 Paid plans (Student / Pro / Power) are <span className="underline">coming soon</span> with Deepgram-powered live captions.
-              &nbsp;
-              <a href="mailto:nittonotakumi@gmail.com?subject=Lecsy%20Beta%20Waitlist" className="text-indigo-700 hover:text-indigo-900">
-                Join the waitlist →
-              </a>
+              🌱 The <strong>Free</strong> plan (on-device transcription) is available today on the App Store.
             </p>
-            <p className="mt-1 text-xs text-indigo-700">
-              The <strong>Free</strong> plan (on-device WhisperKit) is available today.
+            <p className="mt-2 text-sm text-indigo-900">
+              🏫 For schools &amp; universities, Organization plans are available under a separate pilot or license agreement &mdash;{' '}
+              <Link href="/schools" className="font-semibold text-indigo-700 hover:text-indigo-900 underline">
+                see the schools page
+              </Link>
+              .
+            </p>
+            <p className="mt-2 text-xs text-indigo-700">
+              Individual Student / Pro / Power tiers shown below are in development. No in-app purchase path at this time &mdash;{' '}
+              <a href="mailto:support@lecsy.app?subject=Lecsy%20Beta%20Waitlist" className="text-indigo-700 hover:text-indigo-900 underline">
+                join the waitlist
+              </a>{' '}
+              to be notified.
             </p>
           </div>
 
@@ -228,24 +236,11 @@ export default function PricingPage() {
                   </Link>
                 ) : (
                   <a
-                    href="mailto:nittonotakumi@gmail.com?subject=Lecsy%20Beta%20Waitlist%20-%20{p.name}"
+                    href={`mailto:support@lecsy.app?subject=Lecsy%20Beta%20Waitlist%20-%20${p.name}`}
                     className="mt-8 block w-full rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-3 text-center text-sm font-semibold text-white hover:opacity-90 transition"
                   >
                     Notify me
                   </a>
-                )}
-                {false && (
-                  <button
-                    onClick={() => startCheckout(p.plan as PaidPlan)}
-                    disabled={loading !== null}
-                    className={`mt-8 w-full rounded-lg px-4 py-3 text-sm font-semibold transition disabled:opacity-50 ${
-                      p.highlight
-                        ? 'bg-blue-600 text-white hover:bg-blue-700'
-                        : 'bg-gray-900 text-white hover:bg-gray-800'
-                    }`}
-                  >
-                    {loading === p.plan ? 'Loading…' : campaignActive ? 'Reserve' : `Start ${p.name}`}
-                  </button>
                 )}
               </article>
             )
@@ -262,7 +257,7 @@ export default function PricingPage() {
           </p>
           <p className="mt-2">
             Need an organization plan?{' '}
-            <a href="mailto:nittonotakumi@gmail.com" className="font-semibold text-blue-600 hover:underline">
+            <a href="mailto:support@lecsy.app" className="font-semibold text-blue-600 hover:underline">
               Contact us
             </a>
             .

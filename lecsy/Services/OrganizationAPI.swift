@@ -94,6 +94,23 @@ final class OrganizationAPI {
         _ = try await URLSession.shared.data(for: req)
     }
 
+    // MARK: - Classes (teacher+)
+
+    /// List active (non-archived) classes for an org.
+    /// RLS: any active org member can read; only teacher+ can modify.
+    func listClasses(orgId: String) async throws -> [OrgClassRow] {
+        try await sb.restGET(
+            "/org_classes",
+            query: [
+                "select": "id,org_id,name,language,semester,teacher_id,archived",
+                "org_id": "eq.\(orgId)",
+                "archived": "eq.false",
+                "order": "name.asc",
+                "limit": "200"
+            ]
+        )
+    }
+
     // MARK: - Super admin (Edge Functions)
 
     struct CreateOrgPayload: Encodable {
@@ -178,4 +195,14 @@ struct MemberRow: Decodable, Identifiable {
     let role: String
     let status: String
     let joined_at: String?
+}
+
+struct OrgClassRow: Decodable, Identifiable {
+    let id: String
+    let org_id: String
+    let name: String
+    let language: String?
+    let semester: String?
+    let teacher_id: String?
+    let archived: Bool?
 }

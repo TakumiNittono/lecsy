@@ -14,30 +14,25 @@ enum TranscriptionLanguage: String, Codable, CaseIterable {
     case japanese = "ja"
 
     // Extended languages (require multilingual kit / small model)
-    case korean = "ko"
-    case chinese = "zh"
+    // Nova-3 Multilingual サポート対象のみ。ko/zh/ar は Nova-3 で language= 単独指定不可のため除外。
     case spanish = "es"
     case french = "fr"
     case german = "de"
     case portuguese = "pt"
     case italian = "it"
     case russian = "ru"
-    case arabic = "ar"
     case hindi = "hi"
 
     var displayName: String {
         switch self {
         case .english: return "English"
         case .japanese: return "日本語"
-        case .korean: return "한국어"
-        case .chinese: return "中文"
         case .spanish: return "Español"
         case .french: return "Français"
         case .german: return "Deutsch"
         case .portuguese: return "Português"
         case .italian: return "Italiano"
         case .russian: return "Русский"
-        case .arabic: return "العربية"
         case .hindi: return "हिन्दी"
         }
     }
@@ -46,15 +41,12 @@ enum TranscriptionLanguage: String, Codable, CaseIterable {
         switch self {
         case .english: return "🇺🇸"
         case .japanese: return "🇯🇵"
-        case .korean: return "🇰🇷"
-        case .chinese: return "🇨🇳"
         case .spanish: return "🇪🇸"
         case .french: return "🇫🇷"
         case .german: return "🇩🇪"
         case .portuguese: return "🇧🇷"
         case .italian: return "🇮🇹"
         case .russian: return "🇷🇺"
-        case .arabic: return "🇸🇦"
         case .hindi: return "🇮🇳"
         }
     }
@@ -63,21 +55,25 @@ enum TranscriptionLanguage: String, Codable, CaseIterable {
         switch self {
         case .english: return "ENG"
         case .japanese: return "日本語"
-        case .korean: return "한국어"
-        case .chinese: return "中文"
         case .spanish: return "ESP"
         case .french: return "FRA"
         case .german: return "DEU"
         case .portuguese: return "POR"
         case .italian: return "ITA"
         case .russian: return "РУС"
-        case .arabic: return "عربي"
         case .hindi: return "हिंदी"
         }
     }
 
     /// WhisperKit language code
     var whisperLanguage: String? {
+        return rawValue
+    }
+
+    /// Deepgram (Nova-3) `language=` query parameter.
+    /// 言語固定で送ることで、現場でユーザーが選んだ言語が無視される問題（旧 "multi" 固定）を回避する。
+    /// enum の全ケースが Nova-3 Multilingual サポート対象（en, ja, es, fr, de, pt, it, ru, hi）。
+    var deepgramCode: String {
         return rawValue
     }
 
@@ -98,10 +94,6 @@ enum TranscriptionLanguage: String, Codable, CaseIterable {
             return " This is a university lecture. Academic terminology, proper nouns, and technical vocabulary may be used."
         case .japanese:
             return " これは大学の講義です。学術用語、専門用語、固有名詞が使われることがあります。"
-        case .korean:
-            return " 이것은 대학 강의입니다. 학술 용어, 고유명사, 전문 용어가 사용될 수 있습니다."
-        case .chinese:
-            return " 这是一场大学讲座。可能会使用学术术语、专有名词和技术词汇。"
         case .spanish:
             return " Esta es una clase universitaria. Se pueden usar términos académicos, nombres propios y vocabulario técnico."
         case .french:
@@ -114,8 +106,6 @@ enum TranscriptionLanguage: String, Codable, CaseIterable {
             return " Questa è una lezione universitaria. Possono essere utilizzati termini accademici, nomi propri e vocabolario tecnico."
         case .russian:
             return " Это университетская лекция. Могут использоваться академические термины, имена собственные и техническая лексика."
-        case .arabic:
-            return " هذه محاضرة جامعية. قد تُستخدم مصطلحات أكاديمية وأسماء علم ومفردات تقنية."
         case .hindi:
             return " यह एक विश्वविद्यालय व्याख्यान है। शैक्षणिक शब्दावली, व्यक्तिवाचक संज्ञा और तकनीकी शब्दावली का उपयोग किया जा सकता है।"
         }
@@ -128,6 +118,6 @@ enum TranscriptionLanguage: String, Codable, CaseIterable {
 
     /// Languages that require the multilingual kit
     static var extendedLanguages: [TranscriptionLanguage] {
-        [.japanese, .korean, .chinese, .spanish, .french, .german, .portuguese, .italian, .russian, .arabic, .hindi]
+        [.japanese, .spanish, .french, .german, .portuguese, .italian, .russian, .hindi]
     }
 }

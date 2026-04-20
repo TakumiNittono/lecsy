@@ -12,37 +12,38 @@ import Foundation
 struct TranscriptionLanguageTests {
 
     @Test func allCasesCount() {
-        #expect(TranscriptionLanguage.allCases.count == 12)
+        #expect(TranscriptionLanguage.allCases.count == 9)
     }
 
     @Test func rawValues() {
         #expect(TranscriptionLanguage.english.rawValue == "en")
         #expect(TranscriptionLanguage.japanese.rawValue == "ja")
-        #expect(TranscriptionLanguage.korean.rawValue == "ko")
-        #expect(TranscriptionLanguage.chinese.rawValue == "zh")
         #expect(TranscriptionLanguage.spanish.rawValue == "es")
         #expect(TranscriptionLanguage.french.rawValue == "fr")
         #expect(TranscriptionLanguage.german.rawValue == "de")
         #expect(TranscriptionLanguage.portuguese.rawValue == "pt")
         #expect(TranscriptionLanguage.italian.rawValue == "it")
         #expect(TranscriptionLanguage.russian.rawValue == "ru")
-        #expect(TranscriptionLanguage.arabic.rawValue == "ar")
         #expect(TranscriptionLanguage.hindi.rawValue == "hi")
     }
 
     @Test func displayNames() {
         #expect(TranscriptionLanguage.english.displayName == "English")
         #expect(TranscriptionLanguage.japanese.displayName == "日本語")
-        #expect(TranscriptionLanguage.korean.displayName == "한국어")
-        #expect(TranscriptionLanguage.chinese.displayName == "中文")
         #expect(TranscriptionLanguage.spanish.displayName == "Español")
+        #expect(TranscriptionLanguage.hindi.displayName == "हिन्दी")
     }
 
     @Test func flags() {
         #expect(TranscriptionLanguage.english.flag == "🇺🇸")
         #expect(TranscriptionLanguage.japanese.flag == "🇯🇵")
-        #expect(TranscriptionLanguage.korean.flag == "🇰🇷")
-        #expect(TranscriptionLanguage.chinese.flag == "🇨🇳")
+        #expect(TranscriptionLanguage.spanish.flag == "🇪🇸")
+    }
+
+    @Test func deepgramCodeMatchesRawValue() {
+        for language in TranscriptionLanguage.allCases {
+            #expect(language.deepgramCode == language.rawValue)
+        }
     }
 
     @Test func shortNames() {
@@ -61,8 +62,8 @@ struct TranscriptionLanguageTests {
         #expect(TranscriptionLanguage.english.requiresMultilingualKit == false)
 
         let extendedLanguages: [TranscriptionLanguage] = [
-            .japanese, .korean, .chinese, .spanish, .french,
-            .german, .portuguese, .italian, .russian, .arabic, .hindi
+            .japanese, .spanish, .french, .german,
+            .portuguese, .italian, .russian, .hindi
         ]
         for lang in extendedLanguages {
             #expect(lang.requiresMultilingualKit == true,
@@ -78,10 +79,9 @@ struct TranscriptionLanguageTests {
 
     @Test func extendedLanguages() {
         let extended = TranscriptionLanguage.extendedLanguages
-        #expect(extended.count == 11)
+        #expect(extended.count == 8)
         #expect(!extended.contains(.english))
         #expect(extended.contains(.japanese))
-        #expect(extended.contains(.korean))
         #expect(extended.contains(.hindi))
     }
 

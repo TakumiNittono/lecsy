@@ -20,6 +20,10 @@ struct lecsyApp: App {
     // Phase 1.5 #2: instantiate PostLoginCoordinator at launch so its
     // NotificationCenter observers are registered before any sign-in event.
     @MainActor private let postLoginCoordinator = PostLoginCoordinator.shared
+    // TranscriptionCoordinator を launch 時に初期化して AuthService / PlanService を
+    // 購読開始させる。これで「ログイン完了 → Pro 判定 → Deepgram 事前接続」が
+    // RecordView を開く前に走り、録音開始時のラグを体感ゼロにできる。
+    @MainActor private let transcriptionCoordinator = TranscriptionCoordinator.shared
 
     var body: some Scene {
         WindowGroup {

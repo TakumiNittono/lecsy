@@ -65,7 +65,7 @@ final class SummaryService {
             switch self {
             case .notSignedIn:
                 return "Please sign in to use AI summary."
-            case .uploadFailed(let msg):
+            case .uploadFailed:
                 return "Failed to save transcript. Please check your connection and try again."
             case .summarizeFailed(let msg):
                 return Self.userFriendlyMessage(from: msg)

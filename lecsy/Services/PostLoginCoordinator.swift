@@ -109,6 +109,14 @@ final class PostLoginCoordinator {
                     // Adopt org context for new recordings (Phase 1.5 #4).
                     OrganizationContext.shared.adoptDefaultContext(orgId: org.id)
                     AppLogger.info("Org context adopted: \(org.id) (\(org.name))", category: .auth)
+                    // B2B minimum-data: hydrate the class picker shown in
+                    // TitleInputSheet. Fire-and-forget — failure just hides the
+                    // picker rather than blocking recording.
+                    Task { await OrganizationService.shared.loadRealClasses(orgId: org.id) }
+                    // B2B minimum-data: check whether this user already
+                    // stamped FERPA consent for this org. If not, RecordView
+                    // will surface the consent sheet on next launch.
+                    Task { await FERPAConsentService.shared.refreshConsentStatus(orgId: org.id) }
                 } else {
                     AppLogger.debug("No active org memberships found", category: .auth)
                 }

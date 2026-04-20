@@ -39,6 +39,7 @@ export async function updateSession(request: NextRequest) {
     '/privacy',
     '/terms',
     '/pricing',
+    '/support',
     '/ai-transcription-for-students',
     '/lecture-recording-app-college',
     '/ai-note-taking-for-international-students',
@@ -59,7 +60,8 @@ export async function updateSession(request: NextRequest) {
     publicPages.has(path) ||
     path.startsWith('/login') ||
     path.startsWith('/auth') ||
-    path.startsWith('/schools')
+    path.startsWith('/schools') ||
+    path.startsWith('/join')
   ) {
     return supabaseResponse
   }

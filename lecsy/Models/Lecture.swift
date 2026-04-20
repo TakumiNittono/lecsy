@@ -111,7 +111,15 @@ struct Lecture: Identifiable, Codable, Equatable {
         transcriptText = try container.decodeIfPresent(String.self, forKey: .transcriptText)
         transcriptSegments = try container.decodeIfPresent([TranscriptionResult.TranscriptionSegment].self, forKey: .transcriptSegments)
         transcriptStatus = try container.decodeIfPresent(TranscriptionStatus.self, forKey: .transcriptStatus) ?? .notStarted
-        language = try container.decodeIfPresent(TranscriptionLanguage.self, forKey: .language) ?? .english
+        // 旧バージョンで保存された未サポート言語（ko/zh/ar 等）は .english にフォールバック。
+        // Decode が失敗する（未知の rawValue）ケースは raw を掘り直してログする。
+        do {
+            language = try container.decodeIfPresent(TranscriptionLanguage.self, forKey: .language) ?? .english
+        } catch {
+            let rawValue = (try? container.decodeIfPresent(String.self, forKey: .language)) ?? nil
+            AppLogger.warning("Lecture: unsupported language '\(rawValue ?? "unknown")' → fallback to .english", category: .general)
+            language = .english
+        }
         bookmarks = try container.decodeIfPresent([LectureBookmark].self, forKey: .bookmarks) ?? []
         courseName = try container.decodeIfPresent(String.self, forKey: .courseName)
         lastPlaybackPosition = try container.decodeIfPresent(TimeInterval.self, forKey: .lastPlaybackPosition)

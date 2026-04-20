@@ -12,6 +12,7 @@ struct SettingsView: View {
     @StateObject private var authService = AuthService.shared
     @StateObject private var transcriptionService = TranscriptionService.shared
     @StateObject private var planService = PlanService.shared
+    @ObservedObject private var recordingService = RecordingService.shared
     @State private var translationTarget: TranslationTargetLanguage = .current
     @AppStorage(PlanService.forceLocalKey) private var forceLocalTranscription: Bool = false
 
@@ -35,13 +36,27 @@ struct SettingsView: View {
                     // Dropdown picker (Menu style) — single row instead of long list
                     Picker("Language", selection: Binding(
                         get: { transcriptionService.transcriptionLanguage },
-                        set: { transcriptionService.setLanguage($0) }
+                        // SwiftUI の view update 中に @Published を書き換えると
+                        // "Publishing changes from within view updates" 警告が出るため
+                        // 次の run loop にずらす
+                        set: { newLang in
+                            DispatchQueue.main.async {
+                                transcriptionService.setLanguage(newLang)
+                            }
+                        }
                     )) {
                         ForEach(availableLanguages, id: \.self) { language in
                             Text(language.displayName).tag(language)
                         }
                     }
                     .pickerStyle(.menu)
+                    .disabled(recordingService.isRecording)
+
+                    if recordingService.isRecording {
+                        Text("録音中は言語を変更できません")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
 
                     // Multilingual kit download / status
                     if transcriptionService.isDownloadingMultilingualKit {
@@ -81,7 +96,7 @@ struct SettingsView: View {
                                         Text(transcriptionService.multilingualKitDownloadFailed ? "Retry Download" : "Add More Languages")
                                             .font(.subheadline.weight(.semibold))
                                             .foregroundColor(transcriptionService.multilingualKitDownloadFailed ? .orange : .blue)
-                                        Text("日本語, 한국어, 中文, Español and more")
+                                        Text("日本語, Español, Français, Deutsch and more")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }
@@ -120,7 +135,11 @@ struct SettingsView: View {
                             Toggle("", isOn: $forceLocalTranscription)
                                 .labelsHidden()
                                 .onChange(of: forceLocalTranscription) { _, _ in
-                                    planService.objectWillChange.send()
+                                    // objectWillChange.send を view update 中に呼ぶと
+                                    // "Publishing changes from within view updates" 警告が出る
+                                    DispatchQueue.main.async {
+                                        planService.objectWillChange.send()
+                                    }
                                 }
                         }
                     } header: {

@@ -15,7 +15,7 @@ export default function PrivacyPage() {
           <h1 className="text-4xl font-bold text-gray-900 mb-4">Privacy Policy</h1>
 
           <p className="text-gray-600 mb-8 text-sm">
-            <strong>Last Updated:</strong> April 14, 2026
+            <strong>Last Updated:</strong> April 19, 2026
           </p>
 
           <section className="mb-10">
@@ -416,12 +416,58 @@ export default function PrivacyPage() {
           </section>
 
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">17. FERPA (Educational Records)</h2>
+            <h2 className="text-2xl font-semibold text-gray-800 mb-4">17. For Schools &amp; Organizations</h2>
+            <p className="text-gray-700 leading-relaxed mb-4">
+              When Lecsy is provided to a school, university, language program, or other educational
+              institution under a written pilot or license agreement, the following commitments apply in
+              addition to the rest of this policy:
+            </p>
+            <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4 mb-4">
+              <li>
+                <strong>FERPA &ldquo;school official&rdquo;:</strong> Lecsy operates as a school official with a
+                legitimate educational interest, processing student data only as directed by the institution.
+                We do not disclose personally identifiable information from education records to third
+                parties except as permitted by FERPA or with consent.
+              </li>
+              <li>
+                <strong>Lecsy never stores audio:</strong> Audio is streamed only during recording for
+                real-time transcription. The local .m4a file remains on the student&apos;s device.
+              </li>
+              <li>
+                <strong>Deepgram retention &amp; Zero Data Retention (ZDR):</strong> By default, Deepgram
+                automatically deletes processed audio within 30 days. For institutional deployments we will
+                negotiate a Zero Data Retention agreement with Deepgram on request, so audio is discarded
+                after transcription with no retention window.
+              </li>
+              <li>
+                <strong>Transcript storage:</strong> Transcript text is stored in encrypted Supabase
+                Postgres with row-level security scoped so that only members of the institution&apos;s
+                organization can access its data. Audio is never persisted on Lecsy infrastructure.
+              </li>
+              <li>
+                <strong>Student consent:</strong> Before a student records under an organization, the iOS
+                client surfaces a FERPA-aligned consent prompt. The acknowledgement timestamp is written to
+                the student&apos;s organization membership record so administrators can produce evidence of
+                consent. Consent can be withdrawn by emailing the school&apos;s Lecsy administrator or
+                <a href="mailto:privacy@lecsy.app" className="text-blue-600 hover:underline"> privacy@lecsy.app</a>.
+              </li>
+              <li>
+                <strong>No model training on student data:</strong> Neither Lecsy nor our sub-processors
+                (Deepgram, OpenAI) use institutional audio or transcripts to train AI models, per their API
+                terms.
+              </li>
+              <li>
+                <strong>Compliance documentation on request:</strong> We provide a Data Processing Addendum
+                (DPA) with Standard Contractual Clauses for cross-border transfers, and HECVAT-Lite
+                responses for institutional security reviews.
+              </li>
+            </ul>
             <p className="text-gray-700 leading-relaxed">
-              When Lecsy is provided to a school under a written agreement, it operates as a
-              &ldquo;school official&rdquo; with &ldquo;legitimate educational interest&rdquo; under FERPA, processing student
-              data only as directed by the school. We do not disclose personally identifiable information from
-              education records to third parties without consent or as permitted by FERPA.
+              Institutional inquiries:{' '}
+              <a href="mailto:support@lecsy.app" className="text-blue-600 hover:underline">
+                support@lecsy.app
+              </a>
+              .
             </p>
           </section>
 
@@ -511,7 +557,7 @@ export default function PrivacyPage() {
 
           <div className="border-t pt-8 mt-8">
             <p className="text-gray-600 text-sm mb-4 italic">
-              This Privacy Policy is effective as of April 14, 2026.
+              This Privacy Policy is effective as of April 19, 2026.
             </p>
             <Link href="/" className="text-blue-600 hover:text-blue-800 font-medium inline-flex items-center">
               <span>&larr;</span>

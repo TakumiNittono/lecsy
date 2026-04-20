@@ -86,6 +86,13 @@ class RecordingService: NSObject, ObservableObject {
     }
 
     /// Listen for app lifecycle and audio interruption notifications
+    ///
+    /// `NotificationCenter.addObserver(forName:queue:using:)` に渡すクロージャは
+    /// `@Sendable` 相当で non-isolated。クラス本体は `@MainActor` なので
+    /// クロージャ内部から self.isRecording 等の MainActor プロパティを参照すると
+    /// Swift 6 strict で "cannot be referenced from a Sendable closure" になる。
+    /// `queue: .main` 指定により main thread 配送されることが保証されているので、
+    /// iOS 17+ の `MainActor.assumeIsolated` で isolation を表明してアクセスする。
     private func setupNotifications() {
         let nc = NotificationCenter.default
 
@@ -97,67 +104,75 @@ class RecordingService: NSObject, ObservableObject {
         // UIBackgroundModes: audio + an active AVAudioRecorder — the task is
         // only a safety net for the transition window.
         nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self = self, self.isRecording else { return }
-            self.setupBackgroundTask()
+            MainActor.assumeIsolated {
+                guard let self = self, self.isRecording else { return }
+                self.setupBackgroundTask()
+            }
         }
         nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.endBackgroundTask()
+            MainActor.assumeIsolated {
+                self?.endBackgroundTask()
+            }
         }
 
         // Restore audio session and metering when app returns to foreground
         nc.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self = self, self.isRecording else { return }
-            // Only re-activate (don't setCategory — it causes audio glitches)
-            try? AVAudioSession.sharedInstance().setActive(true, options: [])
+            MainActor.assumeIsolated {
+                guard let self = self, self.isRecording else { return }
+                // Only re-activate (don't setCategory — it causes audio glitches)
+                try? AVAudioSession.sharedInstance().setActive(true, options: [])
 
-            // Wall-clock check: Timer is suspended in background, so the max-duration
-            // check may have been skipped. Catch it immediately on foreground return.
-            let elapsed = self.currentDuration
-            if elapsed >= self.maxRecordingDuration {
-                AppLogger.info("Foreground return: recording exceeded max duration (\(Int(elapsed))s), auto-saving", category: .recording)
-                self.stoppedAtMaxDuration = true
-                self.autoSaveAndNotify()
-                return
-            }
-            // Update warning state if approaching limit
-            let remaining = self.maxRecordingDuration - elapsed
-            if remaining <= self.warningBeforeMax {
-                self.showMaxDurationWarning = true
-                self.remainingSecondsBeforeAutoStop = Int(remaining)
-            }
+                // Wall-clock check: Timer is suspended in background, so the max-duration
+                // check may have been skipped. Catch it immediately on foreground return.
+                let elapsed = self.currentDuration
+                if elapsed >= self.maxRecordingDuration {
+                    AppLogger.info("Foreground return: recording exceeded max duration (\(Int(elapsed))s), auto-saving", category: .recording)
+                    self.stoppedAtMaxDuration = true
+                    self.autoSaveAndNotify()
+                    return
+                }
+                // Update warning state if approaching limit
+                let remaining = self.maxRecordingDuration - elapsed
+                if remaining <= self.warningBeforeMax {
+                    self.showMaxDurationWarning = true
+                    self.remainingSecondsBeforeAutoStop = Int(remaining)
+                }
 
-            self.ensureRecorderIsRunning()
-            self.restartMeteringTimerIfNeeded()
+                self.ensureRecorderIsRunning()
+                self.restartMeteringTimerIfNeeded()
+            }
         }
 
         // Handle audio session interruptions (phone calls, Siri, etc.)
         nc.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] notification in
-            guard let self = self, self.isRecording else { return }
-            guard let info = notification.userInfo,
-                  let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
-                  let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+            // userInfo を MainActor 外で先に取り出す（Notification は non-Sendable）
+            let rawType = (notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) ?? UInt.max
+            MainActor.assumeIsolated {
+                guard let self = self, self.isRecording else { return }
+                guard let type = AVAudioSession.InterruptionType(rawValue: rawType) else { return }
 
-            if type == .began {
-                AppLogger.debug("Audio interruption began (phone call, Siri, etc.)", category: .recording)
-                // Persist state in case we get killed during interruption
-                self.persistRecordingState()
-            } else if type == .ended {
-                AppLogger.debug("Audio interruption ended, attempting resume", category: .recording)
-                // If mic permission was revoked during the interruption, bail out safely.
-                if AVAudioSession.sharedInstance().recordPermission != .granted {
-                    AppLogger.error("Mic permission revoked during interruption — auto-saving", category: .recording)
-                    self.autoSaveAndNotify()
-                    return
+                if type == .began {
+                    AppLogger.debug("Audio interruption began (phone call, Siri, etc.)", category: .recording)
+                    // Persist state in case we get killed during interruption
+                    self.persistRecordingState()
+                } else if type == .ended {
+                    AppLogger.debug("Audio interruption ended, attempting resume", category: .recording)
+                    // If mic permission was revoked during the interruption, bail out safely.
+                    if AVAudioSession.sharedInstance().recordPermission != .granted {
+                        AppLogger.error("Mic permission revoked during interruption — auto-saving", category: .recording)
+                        self.autoSaveAndNotify()
+                        return
+                    }
+                    // Re-activate session after interruption (category is still correct)
+                    self.restoreAudioSessionIfNeeded()
+                    if !self.isPaused {
+                        let remaining = max(1, self.maxRecordingDuration - self.recordingDuration)
+                        self.audioRecorder?.record(forDuration: remaining)
+                    }
+                    // Hard-verify the recorder actually came back; restart if not.
+                    self.ensureRecorderIsRunning()
+                    self.persistRecordingState()
                 }
-                // Re-activate session after interruption (category is still correct)
-                self.restoreAudioSessionIfNeeded()
-                if !self.isPaused {
-                    let remaining = max(1, self.maxRecordingDuration - self.recordingDuration)
-                    self.audioRecorder?.record(forDuration: remaining)
-                }
-                // Hard-verify the recorder actually came back; restart if not.
-                self.ensureRecorderIsRunning()
-                self.persistRecordingState()
             }
         }
 
@@ -165,85 +180,101 @@ class RecordingService: NSObject, ObservableObject {
         // session, but verify the recorder is still producing data. If iOS paused
         // us, kick it back on.
         nc.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self = self, self.isRecording, !self.isPaused else { return }
-            self.ensureRecorderIsRunning()
-            self.persistRecordingState()
+            MainActor.assumeIsolated {
+                guard let self = self, self.isRecording, !self.isPaused else { return }
+                self.ensureRecorderIsRunning()
+                self.persistRecordingState()
+            }
         }
 
         // Media services reset (rare but fatal): iOS has torn down the audio stack.
         // We must re-prepare the session and recreate the recorder pointing at the
         // *same* file so existing audio is preserved — AVAudioRecorder will append.
         nc.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self = self, self.isRecording else { return }
-            AppLogger.error("mediaServicesWereReset — persisting & attempting recovery", category: .recording)
-            self.persistRecordingState()
-            self.isAudioSessionPrepared = false
-            self.restoreAudioSessionIfNeeded()
-            // Last-resort: auto-save whatever we have so the user never loses the take.
-            // A fresh recording can be started manually — partial data is safe on disk.
-            self.autoSaveAndNotify()
+            MainActor.assumeIsolated {
+                guard let self = self, self.isRecording else { return }
+                AppLogger.error("mediaServicesWereReset — persisting & attempting recovery", category: .recording)
+                self.persistRecordingState()
+                self.isAudioSessionPrepared = false
+                self.restoreAudioSessionIfNeeded()
+                // Last-resort: auto-save whatever we have so the user never loses the take.
+                // A fresh recording can be started manually — partial data is safe on disk.
+                self.autoSaveAndNotify()
+            }
         }
 
         // Thermal state: on serious/critical, checkpoint aggressively so a forced
         // shutdown by the OS still leaves a recoverable file.
         nc.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self = self, self.isRecording else { return }
-            let state = ProcessInfo.processInfo.thermalState
-            AppLogger.warning("Thermal state changed: \(state.rawValue)", category: .recording)
-            if state == .serious || state == .critical {
-                // Drop metering overhead and checkpoint immediately.
-                self.meteringTimer?.invalidate()
-                self.meteringTimer = nil
-                self.audioLevelHistory = []
-                self.audioLevel = 0
-                self.persistRecordingState()
+            MainActor.assumeIsolated {
+                guard let self = self, self.isRecording else { return }
+                let state = ProcessInfo.processInfo.thermalState
+                AppLogger.warning("Thermal state changed: \(state.rawValue)", category: .recording)
+                if state == .serious || state == .critical {
+                    // Drop metering overhead and checkpoint immediately.
+                    self.meteringTimer?.invalidate()
+                    self.meteringTimer = nil
+                    self.audioLevelHistory = []
+                    self.audioLevel = 0
+                    self.persistRecordingState()
+                }
             }
         }
 
         // Device locked with "Require Password Immediately" — file protection may
         // pull the rug out. Checkpoint so recoverOrphanedRecording() can save us.
         nc.addObserver(forName: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self = self, self.isRecording else { return }
-            AppLogger.warning("Protected data becoming unavailable — checkpointing", category: .recording)
-            self.persistRecordingState()
+            MainActor.assumeIsolated {
+                guard let self = self, self.isRecording else { return }
+                AppLogger.warning("Protected data becoming unavailable — checkpointing", category: .recording)
+                self.persistRecordingState()
+            }
         }
         nc.addObserver(forName: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self = self, self.isRecording else { return }
-            self.ensureRecorderIsRunning()
+            MainActor.assumeIsolated {
+                guard let self = self, self.isRecording else { return }
+                self.ensureRecorderIsRunning()
+            }
         }
 
         // Handle memory warnings — reduce non-essential work but keep recording
         nc.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self = self, self.isRecording else { return }
-            AppLogger.warning("Memory warning during recording — reducing overhead", category: .recording)
-            // Stop metering to free CPU/memory, recording continues
-            self.meteringTimer?.invalidate()
-            self.meteringTimer = nil
-            self.audioLevelHistory = []
-            self.audioLevel = 0
+            MainActor.assumeIsolated {
+                guard let self = self, self.isRecording else { return }
+                AppLogger.warning("Memory warning during recording — reducing overhead", category: .recording)
+                // Stop metering to free CPU/memory, recording continues
+                self.meteringTimer?.invalidate()
+                self.meteringTimer = nil
+                self.audioLevelHistory = []
+                self.audioLevel = 0
+            }
         }
 
         // Reduce resource usage when entering background to avoid iOS killing us
         nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self = self, self.isRecording else { return }
-            self.persistRecordingState()
+            MainActor.assumeIsolated {
+                guard let self = self, self.isRecording else { return }
+                self.persistRecordingState()
 
-            // Stop the 12Hz metering timer — it wastes CPU in background and can
-            // cause iOS to deprioritize/kill our process. Recording continues fine
-            // without it. We'll restart metering when we return to foreground.
-            self.meteringTimer?.invalidate()
-            self.meteringTimer = nil
-            AppLogger.debug("Suspended metering timer for background efficiency", category: .recording)
+                // Stop the 12Hz metering timer — it wastes CPU in background and can
+                // cause iOS to deprioritize/kill our process. Recording continues fine
+                // without it. We'll restart metering when we return to foreground.
+                self.meteringTimer?.invalidate()
+                self.meteringTimer = nil
+                AppLogger.debug("Suspended metering timer for background efficiency", category: .recording)
+            }
         }
 
         // Persist state when app might be terminated
         nc.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self = self, self.isRecording else { return }
-            // AVAudioRecorder auto-flushes to disk, so the file is safe
-            self.isStoppingIntentionally = true
-            self.audioRecorder?.stop()
-            self.persistRecordingState()
-            AppLogger.warning("App terminating during recording — file preserved for recovery", category: .recording)
+            MainActor.assumeIsolated {
+                guard let self = self, self.isRecording else { return }
+                // AVAudioRecorder auto-flushes to disk, so the file is safe
+                self.isStoppingIntentionally = true
+                self.audioRecorder?.stop()
+                self.persistRecordingState()
+                AppLogger.warning("App terminating during recording — file preserved for recovery", category: .recording)
+            }
         }
     }
 

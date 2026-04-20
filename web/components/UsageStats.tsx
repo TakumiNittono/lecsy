@@ -16,6 +16,17 @@ interface MemberUsage {
   total_duration: number
   last_used: string | null
   languages: string[]
+  summaries_generated: number
+  ferpa_consented_at: string | null
+}
+
+interface ClassBreakdown {
+  class_id: string
+  name: string
+  archived: boolean
+  recordings: number
+  total_duration: number
+  active_users: number
 }
 
 interface UsageData {
@@ -25,11 +36,14 @@ interface UsageData {
     active_users: number
     total_users: number
     avg_duration_per_user: number
+    total_summaries: number
+    consented_users: number
   }
   members: MemberUsage[]
+  classes: ClassBreakdown[]
 }
 
-type SortKey = 'name' | 'email' | 'role' | 'recordings' | 'total_duration' | 'last_used' | 'languages'
+type SortKey = 'name' | 'email' | 'role' | 'recordings' | 'total_duration' | 'last_used' | 'languages' | 'summaries_generated' | 'ferpa_consented_at'
 type SortDir = 'asc' | 'desc'
 
 type Period = 'this_week' | 'this_month' | 'last_month'
@@ -131,6 +145,12 @@ export default function UsageStats({ slug, role }: UsageStatsProps) {
         case 'languages':
           cmp = a.languages.join(',').localeCompare(b.languages.join(','))
           break
+        case 'summaries_generated':
+          cmp = a.summaries_generated - b.summaries_generated
+          break
+        case 'ferpa_consented_at':
+          cmp = (a.ferpa_consented_at || '').localeCompare(b.ferpa_consented_at || '')
+          break
       }
       return sortDir === 'asc' ? cmp : -cmp
     })
@@ -148,15 +168,17 @@ export default function UsageStats({ slug, role }: UsageStatsProps) {
 
   const handleExportCSV = () => {
     if (!data) return
-    const headers = ['Name', 'Email', 'Role', 'Recordings', 'Total Duration (s)', 'Last Used', 'Languages']
+    const headers = ['Name', 'Email', 'Role', 'Recordings', 'Total Duration (s)', 'AI Summaries', 'Last Used', 'Languages', 'FERPA Consent']
     const rows = sortedMembers.map((m) => [
       m.name,
       m.email,
       m.role,
       String(m.recordings),
       String(Math.round(m.total_duration)),
+      String(m.summaries_generated),
       m.last_used ? new Date(m.last_used).toLocaleDateString() : '',
       m.languages.join('; '),
+      m.ferpa_consented_at ? new Date(m.ferpa_consented_at).toISOString() : 'Pending',
     ])
 
     const csvContent = [headers, ...rows]
@@ -228,7 +250,7 @@ export default function UsageStats({ slug, role }: UsageStatsProps) {
       {data && !loading && (
         <>
           {/* Summary cards */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-medium text-gray-500">Total Recordings</h2>
@@ -278,7 +300,73 @@ export default function UsageStats({ slug, role }: UsageStatsProps) {
               </div>
               <p className="text-3xl font-bold text-gray-900">{formatDuration(data.summary.avg_duration_per_user)}</p>
             </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-medium text-gray-500">AI Summaries</h2>
+                <div className="w-10 h-10 bg-pink-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-3xl font-bold text-gray-900">{data.summary.total_summaries}</p>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-medium text-gray-500">FERPA Consent</h2>
+                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-3xl font-bold text-gray-900">
+                {data.summary.consented_users} <span className="text-lg font-normal text-gray-400">/ {data.summary.total_users}</span>
+              </p>
+            </div>
           </div>
+
+          {/* Per-class breakdown */}
+          {data.classes.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">Usage by Class</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Recordings attached to each class during this period.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left px-6 py-3 font-medium text-gray-500">Class</th>
+                      <th className="text-left px-6 py-3 font-medium text-gray-500">Recordings</th>
+                      <th className="text-left px-6 py-3 font-medium text-gray-500">Total Time</th>
+                      <th className="text-left px-6 py-3 font-medium text-gray-500">Active Users</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.classes.map((c) => (
+                      <tr key={c.class_id || 'unassigned'} className="border-b border-gray-50">
+                        <td className="px-6 py-3">
+                          <div className="font-medium text-gray-900">{c.name}</div>
+                          {c.archived && (
+                            <span className="text-xs text-gray-400">Archived</span>
+                          )}
+                          {!c.class_id && (
+                            <span className="text-xs text-amber-600">Not tied to a class</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-3 text-gray-700">{c.recordings}</td>
+                        <td className="px-6 py-3 text-gray-700">{formatDuration(c.total_duration)}</td>
+                        <td className="px-6 py-3 text-gray-700">{c.active_users || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Actions row */}
           <div className="flex justify-end mb-4">
@@ -304,8 +392,10 @@ export default function UsageStats({ slug, role }: UsageStatsProps) {
                       ['role', 'Role'],
                       ['recordings', 'Recordings'],
                       ['total_duration', 'Total Time'],
+                      ['summaries_generated', 'AI Summaries'],
                       ['last_used', 'Last Used'],
                       ['languages', 'Languages'],
+                      ['ferpa_consented_at', 'FERPA Consent'],
                     ] as [SortKey, string][]).map(([key, label]) => (
                       <th
                         key={key}
@@ -321,7 +411,7 @@ export default function UsageStats({ slug, role }: UsageStatsProps) {
                 <tbody>
                   {sortedMembers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                         No usage data for this period
                       </td>
                     </tr>
@@ -339,6 +429,7 @@ export default function UsageStats({ slug, role }: UsageStatsProps) {
                         </td>
                         <td className="px-6 py-3 text-gray-700">{member.recordings}</td>
                         <td className="px-6 py-3 text-gray-700">{formatDuration(member.total_duration)}</td>
+                        <td className="px-6 py-3 text-gray-700">{member.summaries_generated}</td>
                         <td className="px-6 py-3 text-gray-500">
                           {member.last_used
                             ? new Date(member.last_used).toLocaleDateString('en-US', {
@@ -361,6 +452,23 @@ export default function UsageStats({ slug, role }: UsageStatsProps) {
                                 ))
                               : <span className="text-gray-400">-</span>}
                           </div>
+                        </td>
+                        <td className="px-6 py-3">
+                          {member.ferpa_consented_at ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium"
+                              title={new Date(member.ferpa_consented_at).toLocaleString()}
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Consented
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-xs font-medium">
+                              Pending
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))

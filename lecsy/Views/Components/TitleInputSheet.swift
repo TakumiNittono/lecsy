@@ -9,13 +9,18 @@ import SwiftUI
 
 struct TitleInputSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var orgService = OrganizationService.shared
     @State private var title: String
     @State private var courseName: String = ""
     @State private var showCourseSuggestions = false
+    @State private var selectedClassId: UUID?
     let existingCourses: [String]
-    let onSave: (String, String?) -> Void
+    let onSave: (_ title: String, _ courseName: String?, _ classId: UUID?) -> Void
 
-    init(defaultTitle: String, onSave: @escaping (String, String?) -> Void) {
+    init(
+        defaultTitle: String,
+        onSave: @escaping (_ title: String, _ courseName: String?, _ classId: UUID?) -> Void
+    ) {
         _title = State(initialValue: defaultTitle)
         self.existingCourses = LectureStore.shared.allCourseNames()
         self.onSave = onSave
@@ -24,6 +29,17 @@ struct TitleInputSheet: View {
     var filteredCourses: [String] {
         if courseName.isEmpty { return existingCourses }
         return existingCourses.filter { $0.localizedCaseInsensitiveContains(courseName) }
+    }
+
+    /// Show the class picker only for org members whose org has at least one
+    /// active class. B2C users never see it.
+    private var showClassPicker: Bool {
+        orgService.isInOrganization && !orgService.classes.isEmpty
+    }
+
+    private var selectedClassName: String? {
+        guard let id = selectedClassId else { return nil }
+        return orgService.classes.first(where: { $0.id == id })?.name
     }
 
     var body: some View {
@@ -37,6 +53,11 @@ struct TitleInputSheet: View {
                     TextField("Lecture title", text: $title)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 500)
+
+                    if showClassPicker {
+                        classPicker
+                            .frame(maxWidth: 500)
+                    }
 
                     TextField("Subject (optional)", text: $courseName)
                         .textFieldStyle(.roundedBorder)
@@ -118,12 +139,40 @@ struct TitleInputSheet: View {
         .interactiveDismissDisabled()
     }
 
+    // MARK: - Class picker
+
+    private var classPicker: some View {
+        Menu {
+            Button("None") { selectedClassId = nil }
+            ForEach(orgService.classes) { orgClass in
+                Button(orgClass.name) { selectedClassId = orgClass.id }
+            }
+        } label: {
+            HStack {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.blue)
+                Text(selectedClassName ?? "Class (optional)")
+                    .foregroundColor(selectedClassName == nil ? .secondary : .primary)
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.secondary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
     private func save() {
         let finalTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalCourse = courseName.trimmingCharacters(in: .whitespacesAndNewlines)
         onSave(
             finalTitle.isEmpty ? defaultTitle() : finalTitle,
-            finalCourse.isEmpty ? nil : finalCourse
+            finalCourse.isEmpty ? nil : finalCourse,
+            selectedClassId
         )
         dismiss()
     }

@@ -342,8 +342,8 @@ class OrganizationService: ObservableObject {
                 term: "Paraphrase",
                 definition: "Express the meaning using different words",
                 example: "Can you paraphrase what the lecturer said?",
-                targetLanguage: .chinese,
-                translation: "释义",
+                targetLanguage: .japanese,
+                translation: "言い換え",
                 difficulty: .intermediate,
                 createdAt: Calendar.current.date(byAdding: .day, value: -5, to: Date()) ?? Date()
             ),
@@ -362,8 +362,8 @@ class OrganizationService: ObservableObject {
                 term: "Morpheme",
                 definition: "The smallest meaningful unit of a language",
                 example: "The word 'unhappiness' contains three morphemes: un-, happy, -ness.",
-                targetLanguage: .korean,
-                translation: "형태소",
+                targetLanguage: .hindi,
+                translation: "रूपिम",
                 difficulty: .advanced,
                 createdAt: Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
             ),
@@ -397,6 +397,37 @@ class OrganizationService: ObservableObject {
 
     private func loadClassesForCurrentOrg() {
         // In production, fetch from Supabase
+    }
+
+    // MARK: - Real Supabase wiring
+
+    /// Fetch the real org_classes list from Supabase and publish them.
+    /// Safe to call multiple times; the latest result wins. Used by
+    /// PostLoginCoordinator after org context is adopted so the Record
+    /// screen's class picker can show real classes.
+    ///
+    /// Skipped when `isDemoMode` is true (demo data owns `classes`).
+    func loadRealClasses(orgId: String) async {
+        guard !isDemoMode else { return }
+        do {
+            let rows = try await OrganizationAPI.shared.listClasses(orgId: orgId)
+            let orgUUID = UUID(uuidString: orgId) ?? UUID()
+            self.classes = rows.map { row in
+                OrganizationClass(
+                    id: UUID(uuidString: row.id) ?? UUID(),
+                    organizationId: orgUUID,
+                    name: row.name,
+                    language: TranscriptionLanguage(rawValue: row.language ?? "en") ?? .english,
+                    semester: row.semester ?? "",
+                    teacherId: row.teacher_id.flatMap { UUID(uuidString: $0) },
+                    studentIds: []
+                )
+            }
+            AppLogger.info("Loaded \(self.classes.count) org_classes for \(orgId)", category: .general)
+        } catch {
+            // Non-fatal: class picker just won't show entries.
+            AppLogger.warning("loadRealClasses failed: \(error)", category: .general)
+        }
     }
 
     // MARK: - Usage Stats (Mock)
