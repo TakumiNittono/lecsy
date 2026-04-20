@@ -20,22 +20,22 @@ export default async function AppPage() {
       redirect('/login')
     }
 
-  // Pro 判定: whitelist / 個人 sub / 組織所属 (任意の有料プラン) のいずれか
-  const proStatus = await getProStatus(supabase, user)
+  // Pro 判定 / 組織一覧 / 講義一覧は auth.getUser() 完了後は互いに独立。
+  // 以前は3つ直列だったのを Promise.all で並列化 (-600〜1000ms)。
+  const [proStatus, userOrgs, transcriptsRes] = await Promise.all([
+    getProStatus(supabase, user),
+    getUserOrganizations(),
+    supabase
+      .from('transcripts')
+      .select('id, title, content, created_at, updated_at, duration, word_count, language')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false }),
+  ])
   const isWhitelisted = proStatus.source === 'whitelist'
   const isProViaOrg = proStatus.source === 'organization'
   const subscription = proStatus.subscription
   const effectiveStatus = proStatus.isPro ? 'active' : (subscription?.status || null)
-
-  // ユーザーの組織を取得
-  const userOrgs = await getUserOrganizations()
-
-  // 講義一覧を取得
-  const { data: transcriptsRaw, error: transcriptsError } = await supabase
-    .from('transcripts')
-    .select('id, title, content, created_at, updated_at, duration, word_count, language')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
+  const { data: transcriptsRaw, error: transcriptsError } = transcriptsRes
 
   // durationを数値に変換（NUMERIC型は文字列として返される可能性がある）
   const transcripts = transcriptsRaw?.map(t => {

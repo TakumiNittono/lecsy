@@ -20,34 +20,99 @@ export default async function OrgDashboardPage({
   const supabase = createAdminClient()
   const { orgId, org, role } = membership
 
-  // ---------- Queries ----------
+  // ---------- Queries (all fan-out in parallel) ----------
+  // All transcript stats are filtered strictly by organization_id.
+  // We deliberately do NOT use `user_id IN (members)` — that would leak
+  // personal pre-membership recordings (organization_id IS NULL) into
+  // org-scoped dashboards.
+  //
+  // Before: 8 queries awaited serially + up to 10 serial getUserById calls
+  // meant the dashboard blocked for ~6 s on the server before emitting
+  // any HTML. Running them in Promise.all makes wall time ≈ slowest query.
 
-  // Total members
-  const { count: totalMembers } = await supabase
-    .from('organization_members')
-    .select('*', { count: 'exact', head: true })
-    .eq('org_id', orgId)
-
-  // Current month boundaries
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
-  // Previous month boundaries
   const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
   const prevMonthEnd = monthStart
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
 
-  // Monthly recordings count
-  let monthlyRecordings = 0
-  let prevMonthlyRecordings = 0
-  // Monthly total duration (seconds)
-  let monthlyDuration = 0
-  let prevMonthlyDuration = 0
-  // Active users (last 7 days)
-  let activeUsers = 0
-  let prevActiveUsers = 0
-  // New members this month
-  let newMembersThisMonth = 0
-  // Recent activity
+  const [
+    totalMembersRes,
+    monthlyRecCountRes,
+    monthlyDurationRes,
+    activeDataRes,
+    prevMonthlyRecCountRes,
+    prevMonthlyDurationRes,
+    prevActiveDataRes,
+    recentTranscriptsRes,
+  ] = await Promise.all([
+    supabase
+      .from('organization_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('org_id', orgId),
+    supabase
+      .from('transcripts')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .gte('created_at', monthStart)
+      .lt('created_at', monthEnd),
+    supabase
+      .from('transcripts')
+      .select('duration')
+      .eq('organization_id', orgId)
+      .gte('created_at', monthStart)
+      .lt('created_at', monthEnd),
+    supabase
+      .from('transcripts')
+      .select('user_id')
+      .eq('organization_id', orgId)
+      .gte('created_at', sevenDaysAgo),
+    supabase
+      .from('transcripts')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .gte('created_at', prevMonthStart)
+      .lt('created_at', prevMonthEnd),
+    supabase
+      .from('transcripts')
+      .select('duration')
+      .eq('organization_id', orgId)
+      .gte('created_at', prevMonthStart)
+      .lt('created_at', prevMonthEnd),
+    supabase
+      .from('transcripts')
+      .select('user_id')
+      .eq('organization_id', orgId)
+      .gte('created_at', fourteenDaysAgo)
+      .lt('created_at', sevenDaysAgo),
+    supabase
+      .from('transcripts')
+      .select('id, title, created_at, duration, language, user_id')
+      .eq('organization_id', orgId)
+      .order('created_at', { ascending: false })
+      .limit(10),
+  ])
+
+  const totalMembers = totalMembersRes.count ?? 0
+  const monthlyRecordings = monthlyRecCountRes.count || 0
+  const prevMonthlyRecordings = prevMonthlyRecCountRes.count || 0
+
+  const sumDuration = (rows: Array<{ duration: any }> | null | undefined) =>
+    (rows || []).reduce((sum, t) => {
+      const d = t.duration != null ? (typeof t.duration === 'string' ? parseFloat(t.duration) : t.duration) : 0
+      return sum + (isNaN(d) ? 0 : d)
+    }, 0)
+
+  const monthlyDuration = sumDuration(monthlyDurationRes.data)
+  const prevMonthlyDuration = sumDuration(prevMonthlyDurationRes.data)
+  const activeUsers = new Set((activeDataRes.data || []).map((t) => t.user_id)).size
+  const prevActiveUsers = new Set((prevActiveDataRes.data || []).map((t) => t.user_id)).size
+
+  // Recent activity: transcripts already fetched above. Fan out getUserById
+  // in parallel (was a serial loop that blocked up to ~2 s on its own).
+  const recentTranscripts = recentTranscriptsRes.data || []
   let recentActivity: Array<{
     id: string
     title: string | null
@@ -57,115 +122,27 @@ export default async function OrgDashboardPage({
     user_email: string
   }> = []
 
-  {
-    // All transcript stats are filtered strictly by organization_id.
-    // We deliberately do NOT use `user_id IN (members)` — that would leak
-    // personal pre-membership recordings (organization_id IS NULL) into
-    // org-scoped dashboards.
-
-    // Monthly recordings
-    const { count: recCount } = await supabase
-      .from('transcripts')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .gte('created_at', monthStart)
-      .lt('created_at', monthEnd)
-    monthlyRecordings = recCount || 0
-
-    // Monthly duration
-    const { data: durationData } = await supabase
-      .from('transcripts')
-      .select('duration')
-      .eq('organization_id', orgId)
-      .gte('created_at', monthStart)
-      .lt('created_at', monthEnd)
-
-    if (durationData) {
-      monthlyDuration = durationData.reduce((sum, t) => {
-        const d = t.duration != null ? (typeof t.duration === 'string' ? parseFloat(t.duration) : t.duration) : 0
-        return sum + (isNaN(d) ? 0 : d)
-      }, 0)
-    }
-
-    // Active users (last 7 days)
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: activeData } = await supabase
-      .from('transcripts')
-      .select('user_id')
-      .eq('organization_id', orgId)
-      .gte('created_at', sevenDaysAgo)
-
-    if (activeData) {
-      const uniqueUsers = new Set(activeData.map((t) => t.user_id))
-      activeUsers = uniqueUsers.size
-    }
-
-    // --- Previous month data for trends ---
-    const { count: prevRecCount } = await supabase
-      .from('transcripts')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .gte('created_at', prevMonthStart)
-      .lt('created_at', prevMonthEnd)
-    prevMonthlyRecordings = prevRecCount || 0
-
-    const { data: prevDurationData } = await supabase
-      .from('transcripts')
-      .select('duration')
-      .eq('organization_id', orgId)
-      .gte('created_at', prevMonthStart)
-      .lt('created_at', prevMonthEnd)
-
-    if (prevDurationData) {
-      prevMonthlyDuration = prevDurationData.reduce((sum, t) => {
-        const d = t.duration != null ? (typeof t.duration === 'string' ? parseFloat(t.duration) : t.duration) : 0
-        return sum + (isNaN(d) ? 0 : d)
-      }, 0)
-    }
-
-    // Previous 7-day active users (apples-to-apples with the 7d "this week" card)
-    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: prevActiveData } = await supabase
-      .from('transcripts')
-      .select('user_id')
-      .eq('organization_id', orgId)
-      .gte('created_at', fourteenDaysAgo)
-      .lt('created_at', sevenDaysAgo)
-
-    if (prevActiveData) {
-      prevActiveUsers = new Set(prevActiveData.map((t) => t.user_id)).size
-    }
-
-    // Recent activity (last 10 transcripts with user emails)
-    const { data: recentTranscripts } = await supabase
-      .from('transcripts')
-      .select('id, title, created_at, duration, language, user_id')
-      .eq('organization_id', orgId)
-      .order('created_at', { ascending: false })
-      .limit(10)
-
-    if (recentTranscripts && recentTranscripts.length > 0) {
-      // admin clientでauth.usersからメールを取得
-      const userIds = [...new Set(recentTranscripts.map((t) => t.user_id))]
-      const emailMap = new Map<string, string>()
-
-      // service_roleならauth.admin.listUsersが使える
-      for (const uid of userIds) {
+  if (recentTranscripts.length > 0) {
+    const userIds = [...new Set(recentTranscripts.map((t) => t.user_id))]
+    const emailEntries = await Promise.all(
+      userIds.map(async (uid) => {
         const { data } = await supabase.auth.admin.getUserById(uid)
-        if (data?.user?.email) {
-          emailMap.set(uid, data.user.email)
-        }
-      }
-
-      recentActivity = recentTranscripts.map((t) => ({
-        id: t.id,
-        title: t.title,
-        created_at: t.created_at,
-        duration: t.duration != null ? (typeof t.duration === 'string' ? parseFloat(t.duration) : t.duration) : null,
-        language: t.language,
-        user_email: emailMap.get(t.user_id) || t.user_id.slice(0, 8) + '...',
-      }))
+        return [uid, data?.user?.email ?? null] as const
+      })
+    )
+    const emailMap = new Map<string, string>()
+    for (const [uid, email] of emailEntries) {
+      if (email) emailMap.set(uid, email)
     }
+
+    recentActivity = recentTranscripts.map((t) => ({
+      id: t.id,
+      title: t.title,
+      created_at: t.created_at,
+      duration: t.duration != null ? (typeof t.duration === 'string' ? parseFloat(t.duration) : t.duration) : null,
+      language: t.language,
+      user_email: emailMap.get(t.user_id) || t.user_id.slice(0, 8) + '...',
+    }))
   }
 
   // Format monthly duration
