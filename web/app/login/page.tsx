@@ -20,6 +20,12 @@ function LoginForm() {
   const [otpCodeInput, setOtpCodeInput] = useState("");
   const [magicLinkStage, setMagicLinkStage] = useState<"email" | "code">("email");
 
+  // Invite code (classroom pilot) — bypasses email entirely. Teacher hands
+  // out a 6-char code on paper / QR; student types it → we do
+  // signInAnonymously() + redeem_invite_code RPC. See
+  // supabase/migrations/20260420000000_invite_codes.sql for the backend.
+  const [inviteCodeInput, setInviteCodeInput] = useState("");
+
   // Session check は middleware が担当するので client 側ではやらない。
   // 以前は useEffect で Supabase client を動的 import → getSession() →
   // redirect していたため /login 開いてから 3秒以上ボタンが出なかった。
@@ -30,6 +36,80 @@ function LoginForm() {
       setError(decodeURIComponent(errorParam));
     }
   }, [searchParams]);
+
+  const handleJoinWithInviteCode = async () => {
+    setError(null);
+    const normalized = inviteCodeInput
+      .trim()
+      .replace(/[\s-]/g, "")
+      .toUpperCase();
+    if (normalized.length < 4) {
+      setError("Please enter the 6-character code on your card.");
+      return;
+    }
+    try {
+      setLoading(true);
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+
+      // 1. Anonymous sign-in so the RPC call is authenticated.
+      const { error: anonError } = await supabase.auth.signInAnonymously();
+      if (anonError) {
+        setError(`Couldn't start a session: ${anonError.message}`);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Redeem the code. The RPC attaches the anon user to the org.
+      const { data, error: rpcError } = await supabase.rpc("redeem_invite_code", {
+        p_code: normalized,
+      });
+      if (rpcError) {
+        // Clean up anonymous session to avoid zombie accounts.
+        await supabase.auth.signOut();
+        setError(`Invite code error: ${rpcError.message}`);
+        setLoading(false);
+        return;
+      }
+      const result = (data ?? {}) as {
+        ok?: boolean;
+        error?: string;
+        org_id?: string;
+        role?: string;
+        label?: string;
+      };
+      if (result.error) {
+        await supabase.auth.signOut();
+        const userMsg =
+          result.error === "code_not_found"
+            ? "We couldn't find that code. Double-check the letters."
+            : result.error === "code_already_used"
+            ? "This code has already been used. Ask your teacher for a new one."
+            : result.error === "code_expired"
+            ? "This code has expired."
+            : `Invite code error: ${result.error}`;
+        setError(userMsg);
+        setLoading(false);
+        return;
+      }
+      if (result.ok !== true) {
+        await supabase.auth.signOut();
+        setError("Could not redeem invite code. Please try again.");
+        setLoading(false);
+        return;
+      }
+      // Success — org_id is in result.org_id. Navigate straight to that
+      // org's dashboard if they're staff; otherwise the generic /app.
+      if (result.role && result.role !== "student" && result.org_id) {
+        // We don't have the slug here, so fall back to /app which the
+        // layout will route into the right org automatically.
+      }
+      window.location.href = redirectTo;
+    } catch (err: any) {
+      setError(`Invite code failed: ${err?.message || "unexpected error"}`);
+      setLoading(false);
+    }
+  };
 
   const handleSendMagicLink = async () => {
     setError(null);
@@ -289,8 +369,55 @@ function LoginForm() {
             は残すので、このフラグを外すだけで復活できる。
           */}
 
-          {/* ── Primary: Magic Link (.edu 用) ── */}
+          {/* ── Primary: Invite code (classroom pilot) ── */}
           <div className="rounded-2xl border-2 border-blue-600 bg-blue-50/40 p-5 mb-5">
+            <div className="flex items-center gap-2 mb-1">
+              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+              </svg>
+              <h2 className="font-semibold text-gray-900 text-base">
+                Have an invite code?
+              </h2>
+            </div>
+            <p className="text-xs text-gray-600 mb-3">
+              Type the 6-character code your teacher handed you.
+            </p>
+            <input
+              type="text"
+              inputMode="text"
+              autoComplete="one-time-code"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="XXXXXX"
+              value={inviteCodeInput}
+              onChange={(e) =>
+                setInviteCodeInput(
+                  e.target.value.replace(/[\s-]/g, "").toUpperCase().slice(0, 12)
+                )
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && inviteCodeInput.length >= 4 && !loading) {
+                  handleJoinWithInviteCode();
+                }
+              }}
+              disabled={loading}
+              className="w-full h-14 rounded-lg border border-gray-300 bg-white text-gray-900 text-2xl font-mono tracking-[0.5em] text-center uppercase focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+            />
+            <button
+              onClick={handleJoinWithInviteCode}
+              disabled={loading || inviteCodeInput.length < 4}
+              className="mt-3 w-full h-12 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+              {loading ? "Joining..." : "Join class"}
+            </button>
+          </div>
+
+          {/* ── Secondary: Magic Link (.edu 用) ── */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 mb-5">
             {magicLinkStage === "email" ? (
               <>
                 <div className="mb-3">

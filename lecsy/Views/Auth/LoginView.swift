@@ -26,6 +26,11 @@ struct LoginView: View {
     @FocusState private var emailFieldFocused: Bool
     @FocusState private var otpFieldFocused: Bool
 
+    // Invite code (classroom pilot path — see AuthService.signInWithInviteCode
+    // for why email can't be the primary flow at FMCC / Santa Fe).
+    @State private var inviteCodeInput: String = ""
+    @FocusState private var inviteCodeFieldFocused: Bool
+
     private enum MagicLinkStage {
         case email     // Show email field + Send Code button
         case codeEntry // Show OTP field + Verify button (after email sent)
@@ -57,6 +62,25 @@ struct LoginView: View {
                 
                 // ログインボタン
                 VStack(spacing: 16) {
+                    // ── Invite code (classroom pilot primary path) ──
+                    // メールが届かない / 学校 Microsoft 365 が Junk に飛ばす
+                    // 問題を回避するため、教員が紙 or QR で配る 6-char コードで
+                    // anonymous サインイン + org 参加を一発で済ませる。
+                    inviteCodeSection
+                        .padding(.bottom, 4)
+
+                    HStack {
+                        Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
+                        Text("OR SIGN IN")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(.secondary)
+                            .kerning(1.0)
+                            .padding(.horizontal, 8)
+                        Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
+                    }
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                    .padding(.vertical, 4)
+
                     // Microsoft ボタンは一時非表示。
                     // US 大学 / コミカレ (Santa Fe, FMCC 等) の Entra ID テナントは
                     // 「未検証 multitenant アプリへの end-user consent をブロック」が
@@ -201,6 +225,66 @@ struct LoginView: View {
         .padding()
     }
     
+    @ViewBuilder
+    private var inviteCodeSection: some View {
+        VStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: "ticket.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.blue)
+                    Text("Have an invite code?")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(.primary)
+                }
+                Text("Type the 6-character code on your card.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+
+            TextField("XXXXXX", text: $inviteCodeInput)
+                .textContentType(.oneTimeCode)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.characters)
+                .multilineTextAlignment(.center)
+                .font(.system(size: 24, weight: .semibold, design: .monospaced))
+                .tracking(4)
+                .focused($inviteCodeFieldFocused)
+                .padding(.horizontal, 16)
+                .frame(height: 56)
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+                .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                .onChange(of: inviteCodeInput) { _, newValue in
+                    // Normalize on the fly: uppercase, strip whitespace/dashes
+                    let cleaned = newValue
+                        .replacingOccurrences(of: " ", with: "")
+                        .replacingOccurrences(of: "-", with: "")
+                        .uppercased()
+                    if cleaned != newValue { inviteCodeInput = cleaned }
+                }
+
+            Button {
+                Task { await joinWithInviteCode() }
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.right.circle.fill").font(.system(size: 16))
+                    Text("Join class").font(.headline)
+                }
+                .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                .frame(height: 50)
+                .background(
+                    inviteCodeInput.count >= 4 ? Color.blue : Color.blue.opacity(0.4)
+                )
+                .foregroundColor(.white)
+                .cornerRadius(12)
+            }
+            .disabled(authService.isLoading || inviteCodeInput.count < 4)
+        }
+    }
+
     @ViewBuilder
     private var magicLinkSection: some View {
         VStack(spacing: 12) {
@@ -370,6 +454,15 @@ struct LoginView: View {
         errorMessage = nil
         do {
             try await authService.signInWithMicrosoft()
+        } catch {
+            errorMessage = ErrorMessages.friendly(error)
+        }
+    }
+
+    private func joinWithInviteCode() async {
+        errorMessage = nil
+        do {
+            try await authService.signInWithInviteCode(inviteCodeInput)
         } catch {
             errorMessage = ErrorMessages.friendly(error)
         }

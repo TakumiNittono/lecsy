@@ -1195,6 +1195,137 @@ class AuthService: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Invite Codes (classroom pilot)
+    //
+    // US 大学 / コミカレ (FMCC, Santa Fe 等) の Microsoft 365 テナントは
+    // 新規ドメインからの OTP メールを Junk / 3 分遅延に落とすため、
+    // 教室パイロットでは Magic Link が間に合わない。代わりに教員が紙 /
+    // QR で配布する 6-char コードを使って anonymous サインイン + org 参加を
+    // 1 アクションで完了する。詳細は
+    // supabase/migrations/20260420000000_invite_codes.sql。
+
+    /// Redeem a paper / QR invite code. Flow:
+    ///   1. `signInAnonymously()` で empty auth.users 行 + セッション発行
+    ///   2. `redeem_invite_code(p_code)` RPC で organization_members に active 追加
+    ///   3. currentUser / isAuthenticated を populate → RecordView が org を見る
+    ///
+    /// 失敗時 (コード誤入力など) は作成した anon セッションを signOut して
+    /// ゾンビアカウントを残さない。再入力するとまた新しい anon 行ができる。
+    func signInWithInviteCode(_ rawCode: String) async throws {
+        let normalized = rawCode
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .uppercased()
+        guard !normalized.isEmpty else {
+            throw AuthError.signInFailed("Please enter your invite code")
+        }
+
+        AppLogger.info("AuthService: 招待コード引き換え開始", category: .auth)
+
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+
+        do {
+            // 1. Anonymous sign-in
+            let anonSession = try await supabase.auth.signInAnonymously()
+            cachedAccessToken = anonSession.accessToken
+            cachedRefreshToken = anonSession.refreshToken
+            KeychainService.save(key: accessTokenKey, value: anonSession.accessToken)
+            KeychainService.save(key: refreshTokenKey, value: anonSession.refreshToken)
+            AppLogger.info(
+                "AuthService: 匿名セッション作成 (User ID: \(anonSession.user.id))",
+                category: .auth
+            )
+
+            // 2. Redeem via RPC. Result is a jsonb object; decode it flexibly.
+            struct RedeemResponse: Decodable {
+                let ok: Bool?
+                let error: String?
+                let org_id: String?
+                let role: String?
+                let label: String?
+                let already_redeemed: Bool?
+            }
+
+            let result: RedeemResponse = try await LecsyAPIClient.shared.rpc(
+                "redeem_invite_code",
+                params: ["p_code": normalized]
+            )
+
+            if let errMsg = result.error {
+                // Redeem failed — clean up the anon session so we don't leave
+                // a zombie user. The code stays unused for the next retry.
+                try? await supabase.auth.signOut()
+                cachedAccessToken = nil
+                cachedRefreshToken = nil
+                KeychainService.delete(key: accessTokenKey)
+                KeychainService.delete(key: refreshTokenKey)
+                await MainActor.run {
+                    isLoading = false
+                    isAuthenticated = false
+                    currentUser = nil
+                }
+                let userMessage: String
+                switch errMsg {
+                case "code_not_found":
+                    userMessage = "We couldn't find that code. Double-check the letters."
+                case "code_already_used":
+                    userMessage = "This code has already been used. Ask your teacher for a new one."
+                case "code_expired":
+                    userMessage = "This code has expired. Ask your teacher for a new one."
+                case "code_empty", "not_authenticated":
+                    userMessage = "Please enter the 6-character code on your card."
+                default:
+                    userMessage = "Invite code error: \(errMsg)"
+                }
+                AppLogger.warning("AuthService: 招待コード拒否 - \(errMsg)", category: .auth)
+                throw AuthError.signInFailed(userMessage)
+            }
+
+            guard result.ok == true else {
+                try? await supabase.auth.signOut()
+                cachedAccessToken = nil
+                cachedRefreshToken = nil
+                await MainActor.run { isLoading = false }
+                throw AuthError.signInFailed("Could not redeem invite code")
+            }
+
+            AppLogger.info(
+                "AuthService: 招待コード引き換え成功 (org: \(result.org_id ?? "?") role: \(result.role ?? "?"))",
+                category: .auth
+            )
+
+            // 3. Promote anon session to signed-in state. No email — use the
+            //    admin-provided label ("Student 01" 等) as the display name
+            //    so the account chip shows something meaningful.
+            let userId = UUID(uuidString: anonSession.user.id.uuidString) ?? UUID()
+            await MainActor.run {
+                isLoading = false
+                isAuthenticated = true
+                currentUser = LecsyUser(
+                    id: userId,
+                    email: nil,
+                    name: result.label
+                )
+            }
+
+            await refreshOrgMembership()
+        } catch {
+            await MainActor.run {
+                isLoading = false
+                errorMessage = error.localizedDescription
+            }
+            AppLogger.error(
+                "AuthService: 招待コード引き換え失敗 - \(error.localizedDescription)",
+                category: .auth
+            )
+            throw error
+        }
+    }
+
     /// Refresh `isOrgMember` by querying organization_members for the
     /// current user. Called automatically after sign-in. Safe to call any
     /// time; failures default to false.
