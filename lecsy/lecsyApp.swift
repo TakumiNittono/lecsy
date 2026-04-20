@@ -55,10 +55,51 @@ struct lecsyApp: App {
 
 
     private func handleIncomingURL(_ url: URL) {
-        if url.scheme == "lecsy" {
-            if url.host == "auth" || url.path.contains("callback") {
-                Task { @MainActor in
-                    await AuthService.shared.handleOAuthCallbackURL(url)
+        // Custom scheme: lecsy://... (QR codes, iOS app-to-app links)
+        // Universal Link: https://www.lecsy.app/... (falls through here via
+        // onContinueUserActivity when AASA is configured).
+        let isCustomScheme = (url.scheme == "lecsy")
+        let isUniversalLink = (url.host == "lecsy.app" || url.host == "www.lecsy.app")
+
+        guard isCustomScheme || isUniversalLink else { return }
+
+        // OAuth callback from Google / Azure / Apple sign-in flows.
+        if isCustomScheme && (url.host == "auth" || url.path.contains("callback")) {
+            Task { @MainActor in
+                await AuthService.shared.handleOAuthCallbackURL(url)
+            }
+            return
+        }
+
+        // Invite code entry: classroom pilot QR / tap link.
+        //   lecsy://invite?code=FDDAD9
+        //   https://www.lecsy.app/join/fmcc-pilot?code=FDDAD9
+        // Kim prints a QR with either form; scanning opens the app straight
+        // into "redeeming code..." without the student having to find and
+        // tap the invite-code field.
+        let pathLooksLikeInvite = url.host == "invite" ||
+            url.path.hasPrefix("/invite") ||
+            url.path.hasPrefix("/join")
+        if pathLooksLikeInvite {
+            let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let code = comps?.queryItems?.first(where: { $0.name == "code" })?.value
+            guard let code, !code.isEmpty else {
+                AppLogger.warning("lecsy invite URL without code: \(url)", category: .auth)
+                return
+            }
+            // Already signed in? Skip redemption — trying again would error
+            // with code_already_used (or worse, blow away the existing
+            // session by creating a new anon user).
+            if AuthService.shared.isAuthenticated {
+                AppLogger.info("Invite deep-link received while already signed in — ignoring", category: .auth)
+                return
+            }
+            Task { @MainActor in
+                do {
+                    try await AuthService.shared.signInWithInviteCode(code)
+                    AppLogger.info("Invite deep-link redeem succeeded", category: .auth)
+                } catch {
+                    AppLogger.error("Invite deep-link redeem failed: \(error.localizedDescription)", category: .auth)
                 }
             }
         }

@@ -1,16 +1,17 @@
 // /join/[slug] — QR code landing page used in classroom pilots.
 //
-// Flow: Kim's class scans a QR pointing at lecsy.app/join/fmcc-pilot →
-//   1) page resolves the org name from Supabase (public read, no auth needed)
-//   2) shows "You've been invited to {Org Name}" + clear 3-step instructions
-//   3) one big App Store button + "I'm already installed" sign-in link
+// Two flows:
+//   (a) Plain /join/fmcc-pilot  — install + sign-in instructions
+//   (b) /join/fmcc-pilot?code=FDDAD9  — specific invite code from a printed
+//       card. Shows the code + a `lecsy://invite?code=...` deep link button
+//       so one tap on a phone with Lecsy installed jumps straight into the
+//       redeem flow inside the app (see lecsyApp.swift handleIncomingURL).
 //
-// Org membership is wired up server-side: students whose emails were
-// pre-registered into organization_members (status='pending') by the org
-// admin are auto-activated by PostLoginCoordinator on first sign-in. So
-// this page does NOT need to deep-link into the iOS app or carry org context
-// — it's a plain marketing/instruction page that exists to make the
-// classroom moment less confusing.
+// The deep-link button on its own works even without Apple's Universal Link
+// (AASA) plumbing because `lecsy://` is registered as a custom URL scheme
+// in Info.plist — any QR scanner that opens links will trigger the "Open in
+// Lecsy?" iOS prompt. If Lecsy isn't installed the deep link silently
+// fails, which is why we also surface the App Store link right below.
 
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -22,6 +23,7 @@ export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: { slug: string }
+  searchParams: { code?: string }
 }
 
 async function getOrg(slug: string) {
@@ -44,9 +46,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
-export default async function JoinPage({ params }: PageProps) {
+export default async function JoinPage({ params, searchParams }: PageProps) {
   const org = await getOrg(params.slug)
   if (!org) notFound()
+
+  const rawCode = (searchParams.code || '').trim().toUpperCase().replace(/[\s-]/g, '')
+  const code = /^[A-Z0-9]{4,12}$/.test(rawCode) ? rawCode : null
+  const deepLink = code ? `lecsy://invite?code=${encodeURIComponent(code)}` : null
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-white">
@@ -80,6 +86,30 @@ export default async function JoinPage({ params }: PageProps) {
           </p>
         </div>
 
+        {/* Code-specific card (only when ?code=XXX is in the URL) */}
+        {code && deepLink && (
+          <div className="bg-white rounded-2xl border-2 border-blue-600 shadow-sm p-6 sm:p-8 mb-6 text-center">
+            <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2">
+              Your invite code
+            </p>
+            <p
+              className="text-4xl font-bold tracking-[0.4em] font-mono text-gray-900 mb-5 select-all"
+              aria-label={`Invite code ${code.split('').join(' ')}`}
+            >
+              {code}
+            </p>
+            <a
+              href={deepLink}
+              className="block w-full text-center h-14 leading-[3.5rem] rounded-2xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
+            >
+              Open in Lecsy
+            </a>
+            <p className="mt-3 text-xs text-gray-500">
+              Tap above if Lecsy is already installed. Otherwise download first.
+            </p>
+          </div>
+        )}
+
         {/* Step list */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 sm:p-8 mb-6">
           <ol className="space-y-5">
@@ -97,10 +127,13 @@ export default async function JoinPage({ params }: PageProps) {
                 2
               </span>
               <div>
-                <h2 className="font-semibold text-gray-900 mb-1">Sign in with your school email</h2>
+                <h2 className="font-semibold text-gray-900 mb-1">
+                  {code ? 'Tap "Open in Lecsy" above' : 'Tap "Have an invite code?"'}
+                </h2>
                 <p className="text-sm text-gray-600">
-                  Use the same email address {org.name} has on file. Apple, Google, and Magic Link sign-in
-                  all work — pick whichever is fastest.
+                  {code
+                    ? 'Lecsy will take the code automatically and sign you in.'
+                    : `Type the 6-character code on your card. You'll be signed in to ${org.name} instantly.`}
                 </p>
               </div>
             </li>
@@ -129,9 +162,15 @@ export default async function JoinPage({ params }: PageProps) {
         </a>
         <p className="mt-4 text-center text-sm text-gray-500">
           Already installed?{' '}
-          <Link href="/login" className="text-blue-600 font-medium hover:underline">
-            Open the web app
-          </Link>
+          {code && deepLink ? (
+            <a href={deepLink} className="text-blue-600 font-medium hover:underline">
+              Open with code {code}
+            </a>
+          ) : (
+            <Link href="/login" className="text-blue-600 font-medium hover:underline">
+              Open the web app
+            </Link>
+          )}
         </p>
 
         {/* Privacy note — required for ESL/FERPA contexts */}
