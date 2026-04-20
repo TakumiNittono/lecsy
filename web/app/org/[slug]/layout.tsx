@@ -14,13 +14,17 @@ export default async function OrgLayout({
   children: React.ReactNode
   params: { slug: string }
 }) {
-  const membership = await getOrgMembership(params.slug)
+  // 並列実行: getOrgMembership と getUserOrganizations は独立しているので
+  // 直列 await だと Supabase への往復が2回シリアルになる (+300〜400ms)。
+  // どちらも cache() 済みなので getCachedUser の呼び出しは1回に合算される。
+  const [membership, userOrgs] = await Promise.all([
+    getOrgMembership(params.slug),
+    getUserOrganizations(),
+  ])
 
   if (!membership || membership.role === 'student') {
     redirect('/app')
   }
-
-  const userOrgs = await getUserOrganizations()
 
   const handleSignOut = async () => {
     'use server'

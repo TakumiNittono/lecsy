@@ -82,44 +82,19 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // /org/[slug]/** : 非メンバーは /app へ追い返す（防御の二段目）
-  // ページ側でも getOrgMembership で再チェックされるが、ここで先に弾く。
-  // /org/create など slug を持たないトップレベルは除外する。
-  const orgMatch = path.match(/^\/org\/([^/]+)(?:\/|$)/)
-  if (orgMatch) {
-    const slug = orgMatch[1]
-    // slug が予約語（create, new など）の場合はスキップ
-    const reserved = new Set(['create', 'new'])
-    if (!reserved.has(slug)) {
-      // RLS 経由で organizations + 自分の active membership をチェック。
-      // anon キー + ユーザーセッション cookie で動作するので、
-      // is_org_member() RLS を信頼する。
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('id')
-        .eq('slug', slug)
-        .maybeSingle()
-
-      let allowed = false
-      if (org) {
-        const { data: member } = await supabase
-          .from('organization_members')
-          .select('role')
-          .eq('org_id', org.id)
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .maybeSingle()
-        allowed = !!member
-      }
-
-      if (!allowed) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/app'
-        url.search = ''
-        return NextResponse.redirect(url)
-      }
-    }
-  }
+  // NOTE on /org/[slug]/** authorization:
+  // We intentionally do NOT run the "am I a member of this slug" DB check in
+  // middleware. Previous iterations did, but middleware runs on every request
+  // including RSC prefetches + subresources, so /org/* navigations were paying
+  // for a redundant organizations + organization_members round-trip every
+  // time — contributed ~400ms of a ~7s LCP on the members dashboard.
+  //
+  // Authorization is now centralized in:
+  //   - web/app/org/[slug]/layout.tsx → getOrgMembership(slug) (cache()-de-duped)
+  //   - web/app/api/org/[slug]/**      → requireOrgRole(slug, role)
+  // Both redirect non-members to /app, so middleware only needs to ensure the
+  // user is authenticated (handled above) — the membership check above this
+  // comment has been removed deliberately.
 
   return supabaseResponse
 }

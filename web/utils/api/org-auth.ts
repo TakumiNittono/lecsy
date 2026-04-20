@@ -1,8 +1,22 @@
+import { cache } from 'react'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
 
 export type OrgRole = 'owner' | 'admin' | 'teacher' | 'student'
+
+/**
+ * Single-request memoized auth lookup. Server-component render waves routinely
+ * do auth.getUser() three+ times (layout → getOrgMembership → getUserOrganizations
+ * → page → nested pickers), each a network round-trip to Supabase Auth. React
+ * `cache()` de-dupes within one request so downstream callers share the first
+ * lookup for free.
+ */
+const getCachedUser = cache(async () => {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  return user
+})
 
 const ROLE_HIERARCHY: Record<OrgRole, number> = {
   owner: 4,
@@ -37,13 +51,12 @@ export async function requireOrgRole(
   slug: string,
   minimumRole: OrgRole
 ): Promise<OrgAuthResult | NextResponse> {
-  const supabase = createClient()
-  const admin = createAdminClient()
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
+  const user = await getCachedUser()
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const admin = createAdminClient()
 
   const { data: org } = await admin
     .from('organizations')
@@ -83,14 +96,18 @@ export async function requireOrgRole(
 
 /**
  * サーバーコンポーネント用: ユーザーの組織メンバーシップを取得
+ *
+ * `cache()` 化済み: layout と子 page と nested server components が同じ slug で
+ * 呼んでも Supabase への往復は1リクエスト内で1回だけになる。
  */
-export async function getOrgMembership(slug: string) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
+export const getOrgMembership = cache(async (slug: string) => {
+  const user = await getCachedUser()
   if (!user) return null
 
+  const admin = createAdminClient()
+
+  // org + active membership を1往復で引く: join 無しでも2クエリだが、
+  // cache() のおかげで同一リクエスト内では1回で済む。
   const { data: org } = await admin
     .from('organizations')
     .select('id, name, slug, type, plan, max_seats, logo_url, settings, trial_ends_at')
@@ -116,17 +133,16 @@ export async function getOrgMembership(slug: string) {
     role: member.role as OrgRole,
     org,
   }
-}
+})
 
 /**
- * ユーザーが所属する全組織を取得
+ * ユーザーが所属する全組織を取得 (OrgSwitcher 用)
  */
-export async function getUserOrganizations() {
-  const supabase = createClient()
-  const admin = createAdminClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
+export const getUserOrganizations = cache(async () => {
+  const user = await getCachedUser()
   if (!user) return []
+
+  const admin = createAdminClient()
 
   const { data: memberships } = await admin
     .from('organization_members')
@@ -140,4 +156,4 @@ export async function getUserOrganizations() {
     role: m.role as OrgRole,
     org: m.organizations,
   }))
-}
+})
