@@ -43,6 +43,45 @@ function LoginForm() {
     checkSession()
   }, [searchParams, router, redirectTo]);
 
+  const handleMicrosoftLogin = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { createClient } = await import('@/utils/supabase/client')
+      const supabase = createClient()
+
+      const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
+
+      const { data, error: signInError } = await supabase.auth.signInWithOAuth({
+        provider: 'azure',
+        options: {
+          redirectTo: redirectUrl,
+          // 必須: email を含めないと Supabase auth.users.email が空になり、
+          // pending-membership のメアド一致が失敗してorgに自動参加できない。
+          // offline_access は refresh token のため。
+          scopes: 'openid email profile offline_access',
+        },
+      })
+
+      if (signInError) {
+        setError(`ログインエラー: ${signInError.message}`)
+        setLoading(false)
+        return
+      }
+
+      if (data?.url) {
+        window.location.href = data.url
+      } else {
+        setError('認証URLの取得に失敗しました。もう一度お試しください。')
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(`ログインに失敗しました: ${err.message || '予期しないエラーが発生しました'}`);
+      setLoading(false);
+    }
+  };
+
   const handleGoogleLogin = async () => {
     try {
       setLoading(true);
@@ -186,6 +225,26 @@ function LoginForm() {
           )}
 
           <div className="space-y-4">
+            {/* Microsoft Login — placed first so US college students whose
+                school identity runs on Microsoft 365 / Entra ID land here
+                immediately. Pre-registered .edu memberships auto-activate
+                via PostLoginCoordinator once Supabase records the user. */}
+            <button
+              onClick={handleMicrosoftLogin}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-3 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+                <rect x="12" y="1" width="10" height="10" fill="#7FBA00" />
+                <rect x="1" y="12" width="10" height="10" fill="#00A4EF" />
+                <rect x="12" y="12" width="10" height="10" fill="#FFB900" />
+              </svg>
+              <span className="text-gray-700 font-medium">
+                {loading ? "Loading..." : "Continue with Microsoft"}
+              </span>
+            </button>
+
             {/* Google Login */}
             <button
               onClick={handleGoogleLogin}

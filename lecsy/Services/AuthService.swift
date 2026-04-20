@@ -255,6 +255,17 @@ class AuthService: NSObject, ObservableObject {
                 )
                 AppLogger.info("AuthService: セッション復元成功 - User ID: \(session.user.id)", category: .auth)
 
+                // Supabase SDK は setSession 実行時に access token が期限切れなら
+                // refresh token で内部的に更新する。その結果返される `session.accessToken`
+                // が入力と異なることがあるため、必ず返り値で cache を上書きする。
+                // これを怠ると LecsyAPIClient が古い access token を使い続けて
+                // REST/Edge Function が 401 unauthorized で連発する（従来のバグ）。
+                if session.accessToken != savedAccessToken {
+                    AppLogger.info("AuthService: access token was refreshed by SDK — updating cache", category: .auth)
+                }
+                cachedAccessToken = session.accessToken
+                cachedRefreshToken = session.refreshToken
+
                 // ユーザー情報を復元
                 let savedEmail = KeychainService.read(key: userEmailKey)
                 let savedUserIdString = KeychainService.read(key: userIdKey)
@@ -509,7 +520,95 @@ class AuthService: NSObject, ObservableObject {
             throw AuthError.signInFailed(error.localizedDescription)
         }
     }
-    
+
+    /// Microsoft (Azure AD / Entra ID) でサインイン。
+    ///
+    /// 米国の大学・コミカレは student@school.edu を Microsoft 365 で運用している
+    /// ことが多く (FMCC 含む)、Google と同等以上に重要なログイン経路。Supabase
+    /// の OAuth provider 名は "azure" (Microsoft Entra ID 配下)。
+    ///
+    /// scope = "openid email profile offline_access" を必ず要求する:
+    ///   - email がないと auth.users.email が空になり、PostLoginCoordinator の
+    ///     pending-membership 自動アクティベートがメアド一致で失敗する。
+    ///   - offline_access がないと refresh token が返ってこず、JWT 期限後に
+    ///     Supabase 側で再認証が必要になる。
+    ///
+    /// 実装方針は signInWithGoogle() と同一: Supabase Swift SDK の
+    /// signInWithOAuth(provider:) は continuation leak の既知不具合があるため、
+    /// 手動で /auth/v1/authorize URL を組み立てて ASWebAuthenticationSession で
+    /// 開く。callback URL は lecsy://auth/callback、ハンドラは共通の
+    /// handleOAuthCallback。
+    func signInWithMicrosoft() async throws {
+        AppLogger.info("AuthService: Starting Microsoft sign in", category: .auth)
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            let config = SupabaseConfig.shared
+            let redirectURL = "lecsy://auth/callback"
+
+            var components = URLComponents(string: "\(config.supabaseURL.absoluteString)/auth/v1/authorize")!
+            components.queryItems = [
+                URLQueryItem(name: "provider", value: "azure"),
+                URLQueryItem(name: "redirect_to", value: redirectURL),
+                URLQueryItem(name: "apikey", value: config.supabaseAnonKey),
+                URLQueryItem(name: "scopes", value: "openid email profile offline_access"),
+            ]
+
+            guard let authURL = components.url else {
+                throw AuthError.signInFailed("Failed to create auth URL")
+            }
+
+            AppLogger.info("AuthService: Microsoft OAuth URL created", category: .auth)
+
+            let session = ASWebAuthenticationSession(
+                url: authURL,
+                callbackURLScheme: "lecsy"
+            ) { [weak self] callbackURL, error in
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+
+                    if let error = error {
+                        AppLogger.error("AuthService: Microsoft OAuthエラー - \(error.localizedDescription)", category: .auth)
+                        self.oauthSession = nil
+                        self.isLoading = false
+                        self.errorMessage = error.localizedDescription
+                        return
+                    }
+
+                    guard let callbackURL = callbackURL else {
+                        AppLogger.error("AuthService: Microsoft Callback URL is nil", category: .auth)
+                        self.oauthSession = nil
+                        self.isLoading = false
+                        self.errorMessage = "Callback URL is nil"
+                        return
+                    }
+
+                    AppLogger.info("AuthService: Microsoft コールバックURL受信", category: .auth)
+                    self.oauthSession = nil
+                    await self.handleOAuthCallback(callbackURL: callbackURL)
+                }
+            }
+
+            session.presentationContextProvider = self
+            session.prefersEphemeralWebBrowserSession = false
+
+            self.oauthSession = session
+
+            let started = session.start()
+            if !started {
+                throw AuthError.signInFailed("Failed to start Microsoft OAuth session")
+            }
+
+            AppLogger.info("AuthService: Microsoft OAuth session started", category: .auth)
+        } catch {
+            AppLogger.error("AuthService: Microsoft sign in error - \(error.localizedDescription)", category: .auth)
+            isLoading = false
+            errorMessage = error.localizedDescription
+            throw AuthError.signInFailed(error.localizedDescription)
+        }
+    }
+
     /// OAuthコールバックを処理
     private func handleOAuthCallback(callbackURL: URL) async {
         AppLogger.info("AuthService: OAuthコールバック処理開始", category: .auth)
