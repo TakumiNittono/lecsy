@@ -57,38 +57,46 @@ struct LoginView: View {
                 
                 // ログインボタン
                 VStack(spacing: 16) {
-                    // Microsoftログインボタン (FMCC等のコミカレ・大学は student@*.edu を
-                    // Microsoft 365 で運用しているケースが多いため、最上位に配置)
-                    Button(action: {
-                        Task { await signInWithMicrosoft() }
-                    }) {
-                        HStack(spacing: 12) {
-                            // Microsoft 4-color logo (orange / green / blue / yellow squares)
-                            HStack(spacing: 2) {
-                                VStack(spacing: 2) {
-                                    Rectangle().fill(Color(red: 0.95, green: 0.32, blue: 0.13)).frame(width: 9, height: 9)
-                                    Rectangle().fill(Color(red: 0.0, green: 0.65, blue: 0.31)).frame(width: 9, height: 9)
+                    // Microsoft ボタンは一時非表示。
+                    // US 大学 / コミカレ (Santa Fe, FMCC 等) の Entra ID テナントは
+                    // 「未検証 multitenant アプリへの end-user consent をブロック」が
+                    // デフォルト設定のため、学生が押しても admin 承認要求画面に
+                    // 飛んで当日は通らない。admin consent or Verified Publisher 化
+                    // が済んだら下記 `if false` を外して復活。
+                    // AuthService.signInWithMicrosoft() / signInWithMicrosoft() ローカル
+                    // helper の実装は温存 (フリップだけで復活可能)。
+                    if false {
+                        Button(action: {
+                            Task { await signInWithMicrosoft() }
+                        }) {
+                            HStack(spacing: 12) {
+                                // Microsoft 4-color logo (orange / green / blue / yellow squares)
+                                HStack(spacing: 2) {
+                                    VStack(spacing: 2) {
+                                        Rectangle().fill(Color(red: 0.95, green: 0.32, blue: 0.13)).frame(width: 9, height: 9)
+                                        Rectangle().fill(Color(red: 0.0, green: 0.65, blue: 0.31)).frame(width: 9, height: 9)
+                                    }
+                                    VStack(spacing: 2) {
+                                        Rectangle().fill(Color(red: 0.0, green: 0.46, blue: 0.84)).frame(width: 9, height: 9)
+                                        Rectangle().fill(Color(red: 1.0, green: 0.72, blue: 0.0)).frame(width: 9, height: 9)
+                                    }
                                 }
-                                VStack(spacing: 2) {
-                                    Rectangle().fill(Color(red: 0.0, green: 0.46, blue: 0.84)).frame(width: 9, height: 9)
-                                    Rectangle().fill(Color(red: 1.0, green: 0.72, blue: 0.0)).frame(width: 9, height: 9)
-                                }
+                                Text("Continue with Microsoft")
+                                    .font(.headline)
                             }
-                            Text("Continue with Microsoft")
-                                .font(.headline)
+                            .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                            .frame(height: 50)
+                            .background(Color.white)
+                            .foregroundColor(.black)
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
                         }
-                        .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
-                        .frame(height: 50)
-                        .background(Color.white)
-                        .foregroundColor(.black)
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
+                        .disabled(authService.isLoading)
+                        .accessibilityLabel("Sign in with Microsoft")
                     }
-                    .disabled(authService.isLoading)
-                    .accessibilityLabel("Sign in with Microsoft")
 
                     // Appleログインボタン（Appleのデザインガイドラインに準拠）
                     SignInWithAppleButton(

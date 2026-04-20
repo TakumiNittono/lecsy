@@ -12,6 +12,14 @@ function LoginForm() {
   // オープンリダイレクト対策: redirectToを検証
   const redirectTo = getSafeRedirectPath(searchParams.get('redirectTo'), '/app');
 
+  // Magic Link (email OTP) — primary sign-in path for education customers.
+  // Santa Fe / FMCC / ESL schools on Microsoft 365 block OAuth consent by
+  // policy, so we front-load the email-code flow: enter .edu address →
+  // 6-digit code in Outlook → verify → /app.
+  const [emailInput, setEmailInput] = useState("");
+  const [otpCodeInput, setOtpCodeInput] = useState("");
+  const [magicLinkStage, setMagicLinkStage] = useState<"email" | "code">("email");
+
   // Session check は middleware が担当するので client 側ではやらない。
   // 以前は useEffect で Supabase client を動的 import → getSession() →
   // redirect していたため /login 開いてから 3秒以上ボタンが出なかった。
@@ -22,6 +30,81 @@ function LoginForm() {
       setError(decodeURIComponent(errorParam));
     }
   }, [searchParams]);
+
+  const handleSendMagicLink = async () => {
+    setError(null);
+    const email = emailInput.trim();
+    if (!email) {
+      setError("メールアドレスを入力してください");
+      return;
+    }
+    try {
+      setLoading(true);
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          // .edu の初回サインインも許容 (pending-membership は後から activate)
+          shouldCreateUser: true,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+        },
+      });
+      if (otpError) {
+        setError(`コード送信に失敗しました: ${otpError.message}`);
+        return;
+      }
+      setMagicLinkStage("code");
+      setOtpCodeInput("");
+    } catch (err: any) {
+      setError(`コード送信に失敗しました: ${err?.message || "予期しないエラー"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (codeOverride?: string) => {
+    setError(null);
+    const email = emailInput.trim();
+    const token = (codeOverride ?? otpCodeInput).trim();
+    if (token.length !== 6) {
+      setError("6桁のコードを入力してください");
+      return;
+    }
+    try {
+      setLoading(true);
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: "email",
+      });
+      if (verifyError || !data.session) {
+        setError(`コードが一致しません: ${verifyError?.message || "もう一度お試しください"}`);
+        return;
+      }
+      // セッション Cookie が書かれた状態で /app (or redirectTo) に遷移。
+      window.location.href = redirectTo;
+    } catch (err: any) {
+      setError(`認証に失敗しました: ${err?.message || "予期しないエラー"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 6桁入ったら自動確定 (iOS LoginView と同じ UX)
+  useEffect(() => {
+    if (magicLinkStage === "code") {
+      const digits = otpCodeInput.replace(/\D/g, "");
+      if (digits.length >= 6) {
+        const code = digits.slice(0, 6);
+        if (code !== otpCodeInput) setOtpCodeInput(code);
+        handleVerifyOtp(code);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otpCodeInput, magicLinkStage]);
 
   const handleMicrosoftLogin = async () => {
     try {
@@ -196,27 +279,113 @@ function LoginForm() {
             </div>
           )}
 
-          <div className="space-y-4">
-            {/* Microsoft Login — placed first so US college students whose
-                school identity runs on Microsoft 365 / Entra ID land here
-                immediately. Pre-registered .edu memberships auto-activate
-                via PostLoginCoordinator once Supabase records the user. */}
-            <button
-              onClick={handleMicrosoftLogin}
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-3 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg">
-                <rect x="1" y="1" width="10" height="10" fill="#F25022" />
-                <rect x="12" y="1" width="10" height="10" fill="#7FBA00" />
-                <rect x="1" y="12" width="10" height="10" fill="#00A4EF" />
-                <rect x="12" y="12" width="10" height="10" fill="#FFB900" />
-              </svg>
-              <span className="text-gray-700 font-medium">
-                {loading ? "Loading..." : "Continue with Microsoft"}
-              </span>
-            </button>
+          {/*
+            Microsoft (Entra ID) ボタンは一時非表示。US 大学 / コミカレ
+            (Santa Fe College, FMCC 等) の Entra ID テナントは「未検証
+            multitenant アプリへの end-user consent をブロック」がデフォルト。
+            学生が押しても admin 承認要求画面に飛ぶ。本契約フェーズで各校 IT
+            から admin consent をもらうか、Microsoft Verified Publisher 化
+            してから再表示する。handleMicrosoftLogin / signInWithOAuth 実装
+            は残すので、このフラグを外すだけで復活できる。
+          */}
 
+          {/* ── Primary: Magic Link (.edu 用) ── */}
+          <div className="rounded-2xl border-2 border-blue-600 bg-blue-50/40 p-5 mb-5">
+            {magicLinkStage === "email" ? (
+              <>
+                <div className="mb-3">
+                  <h2 className="font-semibold text-gray-900 text-base mb-1">
+                    Sign in with your school email
+                  </h2>
+                  <p className="text-xs text-gray-600">
+                    We&apos;ll email you a 6-digit code — works with any @*.edu address.
+                  </p>
+                </div>
+                <input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="you@school.edu"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && emailInput.trim() && !loading) {
+                      handleSendMagicLink();
+                    }
+                  }}
+                  disabled={loading}
+                  className="w-full h-12 px-4 rounded-lg border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                />
+                <button
+                  onClick={handleSendMagicLink}
+                  disabled={loading || !emailInput.trim()}
+                  className="mt-3 w-full h-12 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  {loading ? "Sending..." : "Send code to email"}
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="mb-3 text-center">
+                  <div className="text-xs text-gray-500 mb-0.5">We sent a 6-digit code to</div>
+                  <div className="text-sm font-semibold text-gray-900 break-all">{emailInput}</div>
+                  <div className="text-xs text-gray-500 mt-2">
+                    Check your inbox and junk folder. Delivery usually takes 10–60 seconds.
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={otpCodeInput}
+                  onChange={(e) => setOtpCodeInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  disabled={loading}
+                  autoFocus
+                  className="w-full h-14 rounded-lg border border-gray-300 bg-white text-gray-900 text-2xl font-mono tracking-[0.5em] text-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                />
+                <div className="mt-3 flex items-center justify-between text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMagicLinkStage("email");
+                      setOtpCodeInput("");
+                      setError(null);
+                    }}
+                    disabled={loading}
+                    className="text-gray-600 hover:text-gray-900 underline disabled:opacity-50"
+                  >
+                    Use a different email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSendMagicLink}
+                    disabled={loading}
+                    className="text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                  >
+                    Resend code
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ── Divider ── */}
+          <div className="flex items-center gap-3 my-4 text-xs text-gray-400 uppercase tracking-wider">
+            <span className="flex-1 h-px bg-gray-200" />
+            or
+            <span className="flex-1 h-px bg-gray-200" />
+          </div>
+
+          <div className="space-y-4">
             {/* Google Login */}
             <button
               onClick={handleGoogleLogin}
