@@ -64,8 +64,12 @@
 4. 設定欄を埋める:
    - **Azure Client ID**: 1-3 でコピーした Application (client) ID
    - **Azure Secret**: 1-4 でコピーした Client Secret Value
-   - **Azure Tenant URL** (任意): 空欄のまま OK
-     - ※何か入れるなら `https://login.microsoftonline.com/common/v2.0` (multitenant + personal)
+   - **Azure Tenant URL**: ★**空欄のまま**にすること★
+     - Supabase が内部で `/oauth2/v2.0/authorize` を自動付加するので、
+       ここに `https://login.microsoftonline.com/common/v2.0` と書くと
+       最終 URL が `/common/v2.0/oauth2/v2.0/authorize` になり Microsoft
+       が **HTTP 404** を返す（既知の落とし穴）。
+     - どうしても明示したい場合は `/v2.0` を付けず `https://login.microsoftonline.com/common` のみ。
    - **Azure Tenant ID** (任意): 空欄のまま OK
 5. **Save** をクリック
 
@@ -159,6 +163,7 @@ Questions? Email Kim or support@lecsy.app
 
 | 症状 | 原因と対応 |
 |---|---|
+| Microsoft ページで「ページが見つかりません / HTTP 404」。URL に `/v2.0/oauth2/v2.0/` と `v2.0` が二重に出る | Supabase Dashboard の **Azure Tenant URL** に `https://login.microsoftonline.com/common/v2.0` を入れている。Supabase が内部で `/oauth2/v2.0/authorize` を自動付加するため重複する。**Azure Tenant URL を空欄にして Save** で解決 |
 | Microsoft 画面で「This app cannot be accessed at this time」 | App registration の Supported account types が Single tenant になっている → Multitenant + personal に変更 |
 | サインイン後 Supabase の user に email が入らない | Supabase provider 設定で scope に `email` が含まれていない → コードで `scopes=openid email profile offline_access` を渡しているので通常 OK。Azure 側 API permissions の `User.Read` 確認 |
 | iOS で「lecsy:// scheme not found」 | Info.plist の `CFBundleURLTypes` に `lecsy` が登録されているか確認 (既存の Google sign-in が動いているなら登録済) |
