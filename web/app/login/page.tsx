@@ -2,46 +2,26 @@
 
 import Link from "next/link";
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { getSafeRedirectPath } from "@/utils/redirect";
 
 function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
   const searchParams = useSearchParams();
-  const router = useRouter();
   // オープンリダイレクト対策: redirectToを検証
   const redirectTo = getSafeRedirectPath(searchParams.get('redirectTo'), '/app');
 
+  // Session check は middleware が担当するので client 側ではやらない。
+  // 以前は useEffect で Supabase client を動的 import → getSession() →
+  // redirect していたため /login 開いてから 3秒以上ボタンが出なかった。
+  // middleware なら HTML を返す前に /app へ飛ばせるのでこの遅延はゼロ。
   useEffect(() => {
-    // URLパラメータからエラーを取得
     const errorParam = searchParams.get('error');
     if (errorParam) {
       setError(decodeURIComponent(errorParam));
     }
-    
-    // 既にログインしているか確認
-    const checkSession = async () => {
-      try {
-        const { createClient } = await import('@/utils/supabase/client')
-        const supabase = createClient()
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        
-        if (session && !sessionError) {
-          // 既にログインしている場合は/appにリダイレクト
-          router.replace(redirectTo)
-          return
-        }
-      } catch (err) {
-        console.error('Session check error:', err)
-      } finally {
-        setCheckingSession(false)
-      }
-    }
-    
-    checkSession()
-  }, [searchParams, router, redirectTo]);
+  }, [searchParams]);
 
   const handleMicrosoftLogin = async () => {
     try {
@@ -178,14 +158,6 @@ function LoginForm() {
       setLoading(false);
     }
   };
-
-  if (checkingSession) {
-    return (
-      <main className="min-h-screen bg-white flex flex-col items-center justify-center">
-        <div className="text-gray-600">セッションを確認中...</div>
-      </main>
-    )
-  }
 
   return (
     <main className="min-h-screen bg-white flex flex-col">

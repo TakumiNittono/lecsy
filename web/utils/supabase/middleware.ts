@@ -56,9 +56,29 @@ export async function updateSession(request: NextRequest) {
     '/manifest.webmanifest',
     '/manifest.json',
   ])
+  // /login は publicPages 扱いだが、既ログインユーザーは /app (or ?redirectTo=...)
+  // に即リダイレクトする。以前は LoginForm 側の useEffect で Supabase Client を
+  // 動的 import → getSession() → redirect していたが、これが /login の LCP を
+  // 3.3s に膨らませていた。middleware で判定すれば HTML を返す前に redirect
+  // できるので、未ログインの人には空の追加処理ゼロでログインフォームが即出る。
+  if (path.startsWith('/login')) {
+    const { data: { user: authedUser } } = await supabase.auth.getUser()
+    if (authedUser) {
+      const redirectParam = request.nextUrl.searchParams.get('redirectTo') || '/app'
+      // open redirect 対策: 自サイト配下の pathname のみ許可
+      const safeRedirect = redirectParam.startsWith('/') && !redirectParam.startsWith('//')
+        ? redirectParam
+        : '/app'
+      const url = request.nextUrl.clone()
+      url.pathname = safeRedirect
+      url.search = ''
+      return NextResponse.redirect(url)
+    }
+    return supabaseResponse
+  }
+
   if (
     publicPages.has(path) ||
-    path.startsWith('/login') ||
     path.startsWith('/auth') ||
     path.startsWith('/schools') ||
     path.startsWith('/join')

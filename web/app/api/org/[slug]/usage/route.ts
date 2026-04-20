@@ -34,13 +34,31 @@ export async function GET(
 
   const supabase = createAdminClient()
 
-  // Get all members. ferpa_consented_at lets the dashboard prove to a Dean
-  // / compliance officer that students acknowledged the consent prompt before
-  // any audio was streamed.
-  const { data: members, error: membersError } = await supabase
-    .from('organization_members')
-    .select('user_id, role, ferpa_consented_at')
-    .eq('org_id', orgId)
+  // Fan out: members / org-level AI logs / classes all only depend on orgId,
+  // so run them concurrently instead of serially before the userIds-gated
+  // second wave.
+  const [membersRes, orgAiLogsRes, classesRes] = await Promise.all([
+    // ferpa_consented_at lets the dashboard prove to a Dean / compliance
+    // officer that students acknowledged the consent prompt before any
+    // audio was streamed.
+    supabase
+      .from('organization_members')
+      .select('user_id, role, ferpa_consented_at')
+      .eq('org_id', orgId),
+    // Org-scoped AI actions (cross-summary, glossary generation).
+    supabase
+      .from('org_ai_usage_logs')
+      .select('user_id, action, created_at')
+      .eq('org_id', orgId)
+      .gte('created_at', startDate.toISOString())
+      .lte('created_at', endDate.toISOString()),
+    supabase
+      .from('org_classes')
+      .select('id, name, archived')
+      .eq('org_id', orgId),
+  ])
+
+  const { data: members, error: membersError } = membersRes
 
   if (membersError) {
     console.error('Failed to fetch members:', membersError)
@@ -56,6 +74,7 @@ export async function GET(
         total_users: 0,
         avg_duration_per_user: 0,
         total_summaries: 0,
+        consented_users: 0,
       },
       members: [],
       classes: [],
@@ -64,9 +83,9 @@ export async function GET(
 
   const userIds = members.map((m) => m.user_id)
 
-  // Parallelize user info lookups, transcripts, AI usage, and class list so
-  // the dashboard loads fast even for orgs with many members.
-  const [userInfoResults, transcriptsRes, usageLogsRes, orgAiLogsRes, classesRes] = await Promise.all([
+  // Second wave: userIds-dependent queries. getUserById fan-out + per-user
+  // transcripts + personal AI usage logs — all parallel.
+  const [userInfoResults, transcriptsRes, usageLogsRes] = await Promise.all([
     Promise.all(
       userIds.map(async (uid) => {
         const { data } = await supabase.auth.admin.getUserById(uid)
@@ -87,24 +106,12 @@ export async function GET(
       .in('user_id', userIds)
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString()),
-    // Personal AI actions (per-user summary / exam_mode usage).
     supabase
       .from('usage_logs')
       .select('user_id, action, created_at')
       .in('user_id', userIds)
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString()),
-    // Org-scoped AI actions (cross-summary, glossary generation).
-    supabase
-      .from('org_ai_usage_logs')
-      .select('user_id, action, created_at')
-      .eq('org_id', orgId)
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString()),
-    supabase
-      .from('org_classes')
-      .select('id, name, archived')
-      .eq('org_id', orgId),
   ])
 
   const { data: transcripts, error: transcriptsError } = transcriptsRes
