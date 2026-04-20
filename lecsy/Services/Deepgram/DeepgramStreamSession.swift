@@ -27,13 +27,16 @@ final class DeepgramStreamSession: ObservableObject {
     @Published private(set) var interimText: String = ""
     @Published private(set) var connectionState: ConnectionState = .idle
 
-    /// 確定した1文（Deepgramの`is_final` && `speech_final`）
+    /// 確定したセグメント。Deepgram は `is_final=true` を細かい塊（数語〜1フレーズ）
+    /// 単位で返してくるが、`speech_final=false` の間は「まだ発話が続いている」ので
+    /// 同じ paragraph にまとめて表示する方が読みやすい。
+    /// Merging は DeepgramStreamSession.parseResult で行い、ここでは単なる格納だけ。
     struct Segment: Identifiable, Equatable {
-        let id = UUID()
-        let text: String
-        let start: Double
-        let end: Double
-        let language: String?
+        var id = UUID()
+        var text: String
+        var start: Double
+        var end: Double
+        var language: String?
     }
 
     enum ConnectionState: Equatable {
@@ -69,6 +72,9 @@ final class DeepgramStreamSession: ObservableObject {
     private let maxReconnectAttempts = 3
     /// finish() の flush 待ちループで使う。最後に final が届いた時刻。
     private var lastSegmentAt: Date?
+    /// 直近の final が speech_final=false だったか。true の間は次の final を
+    /// 末尾 segment に連結する（paragraph 形成）。speech_final=true で close。
+    private var currentParagraphOpen: Bool = false
 
     init(
         tokenProvider: DeepgramTokenProviderProtocol,
@@ -127,11 +133,19 @@ final class DeepgramStreamSession: ObservableObject {
         }
 
         // 残っている interim は final として採用する。発話の途中で stop した場合の救済。
+        // paragraph 継続中なら末尾 segment に連結、そうでなければ新規 segment。
         if !interimText.isEmpty {
-            finalizedSegments.append(
-                .init(text: interimText, start: 0, end: 0, language: nil)
-            )
+            if currentParagraphOpen, let lastIdx = finalizedSegments.indices.last {
+                var extended = finalizedSegments[lastIdx]
+                extended.text = joinParagraphText(existing: extended.text, new: interimText)
+                finalizedSegments[lastIdx] = extended
+            } else {
+                finalizedSegments.append(
+                    Segment(text: interimText, start: 0, end: 0, language: nil)
+                )
+            }
             interimText = ""
+            currentParagraphOpen = false
         }
 
         self.task?.cancel(with: .normalClosure, reason: nil)
@@ -245,19 +259,34 @@ final class DeepgramStreamSession: ObservableObject {
         let duration    = (obj["duration"] as? Double) ?? 0
 
         // Deepgram `interim_results=true` のセマンティクス:
-        //   is_final=false                → interim（次のメッセージで置き換えられる）
-        //   is_final=true,  speech_final=false → 確定した1塊（まだ発話継続中）
-        //   is_final=true,  speech_final=true  → 確定 + 文末区切り
-        // 以前は `is_final && speech_final` だけ追加していて、speech_final=false の
-        // 確定セグメントが丸ごと捨てられていた（=録音の中盤が抜ける現象）。
-        // is_final=true ならすべて保存する。speech_final はここでは使わない。
-        _ = speechFinal
+        //   is_final=false                      → interim（次のメッセージで置き換え）
+        //   is_final=true,  speech_final=false  → 確定した1塊（発話継続中）
+        //   is_final=true,  speech_final=true   → 確定 + 文末区切り
+        //
+        // UX 方針: speech_final=false の間は末尾 segment に連結して1つの paragraph
+        // として表示する（ユーザーから見ると「文章として」続けて読める）。
+        // speech_final=true で paragraph を closeし、次の final から新規 segment。
         if isFinal {
             let lang = (first["languages"] as? [String])?.first
             let wasEmpty = finalizedSegments.isEmpty
-            finalizedSegments.append(
-                .init(text: transcript, start: start, end: start + duration, language: lang)
-            )
+
+            if currentParagraphOpen, let lastIdx = finalizedSegments.indices.last {
+                // 既存 paragraph に連結。id / start は保持、text を繋ぎ、end を伸ばす。
+                var extended = finalizedSegments[lastIdx]
+                extended.text = joinParagraphText(existing: extended.text, new: transcript)
+                extended.end = start + duration
+                if extended.language == nil, let lang { extended.language = lang }
+                finalizedSegments[lastIdx] = extended
+            } else {
+                // 新しい paragraph 開始
+                finalizedSegments.append(
+                    Segment(text: transcript, start: start, end: start + duration, language: lang)
+                )
+            }
+
+            // paragraph 継続フラグ更新
+            currentParagraphOpen = !speechFinal
+
             interimText = ""
             lastSegmentAt = Date()
             if wasEmpty {
@@ -266,6 +295,20 @@ final class DeepgramStreamSession: ObservableObject {
         } else {
             interimText = transcript
         }
+    }
+
+    /// 同じ paragraph 内で segment を繋ぐときの文字列結合。
+    /// 日本語・中国語など CJK 言語は単語間スペース無し、それ以外はスペース区切り。
+    private func joinParagraphText(existing: String, new: String) -> String {
+        let trimmedNew = new.trimmingCharacters(in: .whitespaces)
+        guard !trimmedNew.isEmpty else { return existing }
+        let trimmedExisting = existing.trimmingCharacters(in: .whitespaces)
+        guard !trimmedExisting.isEmpty else { return trimmedNew }
+
+        // config.language が "ja" / "zh" なら space 無しで結合、それ以外は space
+        let cjkLanguages: Set<String> = ["ja", "zh"]
+        let separator = cjkLanguages.contains(config.language) ? "" : " "
+        return trimmedExisting + separator + trimmedNew
     }
 
     private func handleSocketError(_ error: Error) {

@@ -62,7 +62,14 @@ final class DeepgramTokenProvider: DeepgramTokenProviderProtocol {
 
     private let client: LecsyAPIClient
 
-    init(client: LecsyAPIClient = .shared) {
+    /// デフォルト client（`LecsyAPIClient.shared`）で初期化。
+    /// Swift 6 strict concurrency で default 引数に `@MainActor` 参照を置くと
+    /// "referenced from nonisolated context" 警告になるため、body 内で解決する。
+    init() {
+        self.client = LecsyAPIClient.shared
+    }
+
+    init(client: LecsyAPIClient) {
         self.client = client
     }
 

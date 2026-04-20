@@ -41,16 +41,12 @@ final class DeepgramBatchService {
     /// 上限: 100MB（Deepgramドキュメント上は2GBだが、モバイルでこれ以上はネットワーク負荷大）
     private let maxFileSizeBytes = 100 * 1024 * 1024
 
-    nonisolated init(
-        tokenProvider: DeepgramTokenProviderProtocol,
-        session: URLSession = .shared
-    ) {
+    nonisolated init(tokenProvider: DeepgramTokenProviderProtocol) {
         self.tokenProvider = tokenProvider
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 600    // 10分（長尺音声）
         config.timeoutIntervalForResource = 1200
         self.session = URLSession(configuration: config)
-        _ = session
     }
 
     /// デフォルト依存で初期化する便利初期化子。MainActor前提。
@@ -61,8 +57,12 @@ final class DeepgramBatchService {
 
     // MARK: - Public
 
-    /// 音声ファイル → Deepgram Nova-3 多言語 → TranscriptionResult
-    func transcribe(audioURL: URL) async throws -> TranscriptionResult {
+    /// 音声ファイル → Deepgram Nova-3 → TranscriptionResult
+    /// - Parameters:
+    ///   - audioURL: ローカル音声ファイル
+    ///   - language: Deepgram の `language` クエリ。`nil` で従来通り `"multi"` 自動判定。
+    ///               ユーザーが言語を明示選択している場合はその ISO-639-1 コード（"ja", "es" など）を渡すと精度が安定する。
+    func transcribe(audioURL: URL, language: String? = nil) async throws -> TranscriptionResult {
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
             throw DeepgramBatchError.fileMissing
         }
@@ -83,7 +83,7 @@ final class DeepgramBatchService {
         var comps = URLComponents(string: "https://api.deepgram.com/v1/listen")!
         comps.queryItems = [
             .init(name: "model",        value: "nova-3"),
-            .init(name: "language",     value: "multi"),
+            .init(name: "language",     value: language ?? "multi"),
             .init(name: "smart_format", value: "true"),
             .init(name: "punctuate",    value: "true"),
             .init(name: "diarize",      value: "false"),
@@ -103,7 +103,7 @@ final class DeepgramBatchService {
         let bodyData = try Data(contentsOf: audioURL)
 
         let started = Date()
-        let (data, response) = try await URLSession.shared.upload(
+        let (data, response) = try await session.upload(
             for: req,
             from: bodyData
         )

@@ -16,7 +16,9 @@
 //
 
 import Foundation
-import AVFoundation
+// AVFoundation の型（AVAudioPCMBuffer 等）は Sendable 未対応なので、
+// Swift 6 strict concurrency で警告が出ないよう preconcurrency import する。
+@preconcurrency import AVFoundation
 
 @MainActor
 final class DeepgramAudioCapture {
@@ -32,6 +34,19 @@ final class DeepgramAudioCapture {
     private var converter: AVAudioConverter?
     private var didLogFirstChunk = false
     private var chunkWatchdog: Task<Void, Never>?
+    /// start() 後かどうか。interruption handler が start 前/stop 後に誤動作しないようガード。
+    private var isRunning = false
+    /// Interruption 中は再起動を試みない。`.ended` で true に戻す。
+    private var isInterrupted = false
+    private var interruptionObserver: NSObjectProtocol?
+    private var routeChangeObserver: NSObjectProtocol?
+    private var mediaResetObserver: NSObjectProtocol?
+
+    // NotificationCenter observers は stop() で明示的に解除する。
+    // deinit は @MainActor class では Swift 6 で isolation 制約があるため cleanup を入れない。
+    // observer ブロックは `[weak self]` で self を持たないので、stop 忘れ時も
+    // self 解放後に空発火するだけで副作用はない（次の startLive で clean な状態になる）。
+
     private let targetFormat: AVAudioFormat = {
         // 16kHz mono Int16 interleaved little-endian（Deepgram linear16想定）
         var desc = AudioStreamBasicDescription(
@@ -49,6 +64,14 @@ final class DeepgramAudioCapture {
     }()
 
     func start() throws {
+        try startEngineAndTap()
+        isRunning = true
+        registerAudioSessionObservers()
+    }
+
+    /// Engine を立ち上げてタップを張る。interruption .ended や media services reset
+    /// 復帰時にも同じ手順で呼び直せるように分離。
+    private func startEngineAndTap() throws {
         // AVAudioSession は RecordingService が所有する。ここでは触らない。
         //
         // engine.start() を先に呼ぶ: input node の format は engine が走るまで
@@ -88,9 +111,11 @@ final class DeepgramAudioCapture {
         chunkWatchdog?.cancel()
         chunkWatchdog = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 3_000_000_000)
-            guard !Task.isCancelled, let self else { return }
+            // Swift 6 では同一スコープで `guard let self` を2回書くと2回目が
+            // non-Optional 扱いになりエラー。`strongSelf` 名で1回だけ束縛する。
+            guard !Task.isCancelled, let strongSelf = self else { return }
             let stillSilentAt3s: Bool = await MainActor.run {
-                let silent = !self.didLogFirstChunk
+                let silent = !strongSelf.didLogFirstChunk
                 if silent {
                     AppLogger.warning("Deepgram: no audio chunk after 3s — tap may be silent (AVAudioRecorder conflict?)", category: .transcription)
                 }
@@ -99,22 +124,156 @@ final class DeepgramAudioCapture {
             guard stillSilentAt3s else { return }
 
             try? await Task.sleep(nanoseconds: 7_000_000_000)
-            guard !Task.isCancelled, let self else { return }
+            if Task.isCancelled { return }
             await MainActor.run {
-                guard !self.didLogFirstChunk else { return }
+                guard !strongSelf.didLogFirstChunk else { return }
                 AppLogger.error("Deepgram: no audio chunk after 10s — aborting live transcription", category: .transcription)
-                self.onSilenceFailure?()
+                strongSelf.onSilenceFailure?()
             }
         }
     }
 
     func stop() {
+        isRunning = false
+        isInterrupted = false
         chunkWatchdog?.cancel()
         chunkWatchdog = nil
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        unregisterAudioSessionObservers()
         // AVAudioSession.setActive(false) は呼ばない。
         // RecordingService がまだセッションを使っている可能性があるため。
+    }
+
+    // MARK: - Interruption handling
+    //
+    // 電話着信 / Siri / 他アプリの音声横取り / ヘッドホン抜去 / iOS のメディアサブシステム
+    // リセット時、AVAudioEngine は system 側で停止される。RecordingService は自分で
+    // `AVAudioSession.interruptionNotification` を観察して録音を再開するが、
+    // このエンジンは独立して走っているため自前で再起動する必要がある。対応しないと
+    // 電話から戻ってきた後の live captions が沈黙し続ける（watchdog は初回10秒のみ）。
+
+    private func registerAudioSessionObservers() {
+        let nc = NotificationCenter.default
+
+        // `queue: .main` 指定で main thread 配送される。iOS 17+ なので
+        // `MainActor.assumeIsolated` で Task wrap を避け、Swift 6 の
+        // Sendable / captured var 警告群を根治する。
+        interruptionObserver = nc.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let rawType = (notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) ?? UInt.max
+            MainActor.assumeIsolated {
+                self?.handleInterruption(rawType: rawType)
+            }
+        }
+
+        // ヘッドホン抜去等で input が変わる。hw format が変わったら converter も
+        // 組み直す必要があるので、タップ再インストール込みで startEngineAndTap を呼ぶ。
+        routeChangeObserver = nc.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.handleRouteChange()
+            }
+        }
+
+        // まれに iOS が audio stack 全体を再構築する。engine 内部ポインタが無効化される
+        // ので完全再起動。
+        mediaResetObserver = nc.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.handleMediaServicesReset()
+            }
+        }
+    }
+
+    private func unregisterAudioSessionObservers() {
+        let nc = NotificationCenter.default
+        if let interruptionObserver {
+            nc.removeObserver(interruptionObserver)
+            self.interruptionObserver = nil
+        }
+        if let routeChangeObserver {
+            nc.removeObserver(routeChangeObserver)
+            self.routeChangeObserver = nil
+        }
+        if let mediaResetObserver {
+            nc.removeObserver(mediaResetObserver)
+            self.mediaResetObserver = nil
+        }
+    }
+
+    private func handleInterruption(rawType: UInt) {
+        guard isRunning,
+              let type = AVAudioSession.InterruptionType(rawValue: rawType) else { return }
+
+        switch type {
+        case .began:
+            isInterrupted = true
+            AppLogger.debug("Deepgram: audio interruption began (phone/Siri) — engine paused by system", category: .transcription)
+            // engine は system 側で止まる。明示的な stop は不要（route 再アクティベートの邪魔になる）
+        case .ended:
+            isInterrupted = false
+            AppLogger.debug("Deepgram: audio interruption ended — restarting engine", category: .transcription)
+            // RecordingService が session を再アクティベートしてから engine 再起動
+            restartEngineAfterInterruption()
+        @unknown default:
+            break
+        }
+    }
+
+    private func handleRouteChange() {
+        // 録音中で、かつ interruption 中ではない状態で engine が止まっていたら再起動。
+        // 通常 AVAudioEngine は route change を自動追従するが、
+        // ヘッドホン抜去時に session が一時 deactivate されると engine も止まることがある。
+        guard isRunning, !isInterrupted else { return }
+        if !engine.isRunning {
+            AppLogger.warning("Deepgram: engine stopped after route change — restarting", category: .transcription)
+            restartEngineAfterInterruption()
+        }
+    }
+
+    private func handleMediaServicesReset() {
+        guard isRunning else { return }
+        AppLogger.error("Deepgram: mediaServicesWereReset — full engine rebuild", category: .transcription)
+        // 内部状態を全部捨てて再構築
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        converter = nil
+        restartEngineAfterInterruption()
+    }
+
+    /// Engine を再起動して tap を張り直す。失敗したら onSilenceFailure で上位に通知。
+    /// 短いリトライ（300ms 後）を 1 回だけ入れる：session reactivation レースで
+    /// 最初の start() が AVAudioError.cannotStartEngine になることがある。
+    private func restartEngineAfterInterruption() {
+        guard isRunning, !isInterrupted else { return }
+
+        do {
+            try startEngineAndTap()
+            AppLogger.info("Deepgram: engine restarted after interruption", category: .transcription)
+        } catch {
+            AppLogger.warning("Deepgram: engine restart failed (\(error.localizedDescription)) — retrying in 300ms", category: .transcription)
+            // Task.sleep を避けて DispatchQueue で遅延実行（Swift 6 の @Sendable 制約を回避）
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self, self.isRunning, !self.isInterrupted else { return }
+                do {
+                    try self.startEngineAndTap()
+                    AppLogger.info("Deepgram: engine restarted on retry", category: .transcription)
+                } catch {
+                    AppLogger.error("Deepgram: engine restart failed after retry (\(error.localizedDescription)) — notifying caller", category: .transcription)
+                    self.onSilenceFailure?()
+                }
+            }
+        }
     }
 
     private func convertAndEmit(buffer: AVAudioPCMBuffer) {
@@ -146,8 +305,9 @@ final class DeepgramAudioCapture {
         let ptr = UnsafeBufferPointer(start: channelData[0], count: frames)
         let data = Data(bytes: ptr.baseAddress!, count: byteCount)
 
-        // UIスレッドではなく、コールバック内で同期的に送信（WebSocket I/Oは別Task）
-        Task { @MainActor [weak self] in
+        // tap コールバックは非 MainActor スレッドから来る。Data は Sendable なので
+        // DispatchQueue.main.async でホップ（Task wrap 版だと Swift 6 の var 'self' 警告を踏む）。
+        DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if !self.didLogFirstChunk {
                 self.didLogFirstChunk = true

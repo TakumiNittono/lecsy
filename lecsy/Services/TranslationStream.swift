@@ -79,7 +79,11 @@ final class TranslationStream: ObservableObject {
     private let client: LecsyAPIClient
     private var inflight: Set<UUID> = []
 
-    init(client: LecsyAPIClient = .shared) {
+    init() {
+        self.client = LecsyAPIClient.shared
+    }
+
+    init(client: LecsyAPIClient) {
         self.client = client
     }
 

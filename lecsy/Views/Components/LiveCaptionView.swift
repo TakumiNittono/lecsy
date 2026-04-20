@@ -224,10 +224,12 @@ struct LiveCaptionView: View {
                         .id("interim")
                     }
 
-                    // アクティブ行の下に常に呼吸を確保するスペーサー。
-                    // viewport より content を確実に高くするので、scrollTo の
-                    // anchor が効いてアクティブ行が正しく上寄りに配置される。
-                    Color.clear.frame(height: 180)
+                    // 常に存在する「末尾センチネル」。単一 id で scrollTo する対象。
+                    // segment/interim の id を切り替えるより、この固定 id に .bottom anchor で
+                    // 吸着させる方が複数 onChange が並走しても結果がブレない。
+                    Color.clear
+                        .frame(height: 160)
+                        .id("scroll-tail")
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 6)
@@ -250,48 +252,88 @@ struct LiveCaptionView: View {
                     endPoint: .bottom
                 )
             )
-            .onChange(of: coordinator.liveSegments.count) { _, _ in
-                // アクティブ行をスクロール上 y=0.22 (上から 22%) に固定。
-                // "顔の高さ" に置くのが Apple Music 歌詞と同じ鉄則。
-                // スプリングは response 0.75 / damping 0.88 — 小節切替テンポ。
-                withAnimation(.spring(response: 0.75, dampingFraction: 0.88)) {
-                    if hasInterim {
-                        proxy.scrollTo("interim", anchor: UnitPoint(x: 0.5, y: 0.22))
-                    } else if let last = coordinator.liveSegments.last {
-                        proxy.scrollTo(last.id, anchor: UnitPoint(x: 0.5, y: 0.22))
-                    }
-                }
-            }
-            .onChange(of: coordinator.interimText) { _, newValue in
-                guard !newValue.isEmpty else { return }
-                withAnimation(.easeOut(duration: 0.35)) {
-                    proxy.scrollTo("interim", anchor: UnitPoint(x: 0.5, y: 0.22))
+            // 単一 key で scroll 判定を一本化。これまで count / interimText の
+            // 2系統が並走して scrollTo を打ち合い、paragraph 拡張時（count 不変・text 伸長）
+            // は誰も scroll せず、短い新 paragraph が来ると逆方向に跳ねる現象が出ていた。
+            // - lastSegmentEnd: paragraph 拡張で増える → extend 時も trigger
+            // - lastSegmentId: 新 paragraph 開始で変わる
+            // - interimLen: interim 更新ごとに変わる
+            .onChange(of: scrollFollowKey) { _, _ in
+                // ease-out で短時間に統一。spring は response 小で overshoot→snap-back する
+                // ことがあり、別 onChange と干渉して「戻る」感を生む元凶だった。
+                withAnimation(.easeOut(duration: 0.28)) {
+                    proxy.scrollTo("scroll-tail", anchor: .bottom)
                 }
             }
         }
     }
 
+    /// Scroll 追従を単一 onChange に集約するための合成 key。
+    /// この値が変わった時だけ scrollTo が 1 回走る。
+    private var scrollFollowKey: String {
+        let lastId = coordinator.liveSegments.last?.id.uuidString ?? "-"
+        // end が伸びる（paragraph 拡張）= trigger になる。四捨五入で微小変動を吸収。
+        let lastEnd = Int((coordinator.liveSegments.last?.end ?? 0) * 10)
+        let interimLen = coordinator.interimText.count
+        return "\(lastId)|\(lastEnd)|\(interimLen)"
+    }
+
     /// Apple Music 歌詞風の1行。depth が大きいほど小さく / 薄く。
+    /// Font.system(size:) は SwiftUI の animatable property ではないので、
+    /// `AnimatableFontSize` ViewModifier 経由でサイズを連続補間する。
+    /// opacity / lineSpacing / weight は SwiftUI が Animatable にしてくれる。
     @ViewBuilder
     private func lyricLine(text: String, depth: Int, isActive: Bool) -> some View {
-        let (size, weight, opacity): (CGFloat, Font.Weight, Double) = {
-            if isActive { return (28, .semibold, 1.0) }
+        let size: CGFloat = {
+            if isActive { return 28 }
             switch depth {
-            case 0, 1: return (19, .regular, 0.55)
-            case 2:    return (16, .regular, 0.40)
-            default:   return (14, .regular, 0.28)
+            case 0, 1: return 19
+            case 2:    return 16
+            default:   return 14
+            }
+        }()
+        let weight: Font.Weight = isActive ? .semibold : .regular
+        let opacity: Double = {
+            if isActive { return 1.0 }
+            switch depth {
+            case 0, 1: return 0.55
+            case 2:    return 0.40
+            default:   return 0.28
             }
         }()
 
         Text(text)
-            .font(.system(size: size, weight: weight, design: .rounded))
+            .modifier(AnimatableFontSize(size: size, weight: weight))
             .foregroundStyle(Color.primary.opacity(opacity))
             .lineSpacing(size * 0.22)
             .fixedSize(horizontal: false, vertical: true)
-            // 過去行が "格下げ" される時 (latest → recent → older) にフォントサイズ・
-            // 色が跳ねず、やわらかく縮んでいくようにする。
-            .animation(.easeInOut(duration: 0.45), value: isActive)
-            .animation(.easeInOut(duration: 0.45), value: depth)
+            // spring で柔らかく補間。response 少し長め (0.55) で"溶けるように縮む"感。
+            // damping 0.9 で overshoot 無し。value 毎に掛けることで個別 animate される。
+            .animation(.spring(response: 0.55, dampingFraction: 0.9), value: size)
+            .animation(.spring(response: 0.55, dampingFraction: 0.9), value: opacity)
+            .animation(.easeInOut(duration: 0.35), value: isActive)
+    }
+}
+
+// MARK: - AnimatableFontSize
+//
+// SwiftUI の `.font(.system(size:))` は animatable property として登録されていない
+// ため、`.animation(...)` を付けても discrete (snap) で切り替わる。
+// Animatable に conform した ViewModifier で `animatableData: Double` を
+// 経由することで、フレーム毎に補間された `size` で `.font(...)` を再適用できる。
+// weight は非 animatable なので、size の移行中は discrete に切り替わる（視覚的には
+// size 遷移が支配的なので weight ジャンプはほぼ気づかない）。
+struct AnimatableFontSize: ViewModifier, Animatable {
+    var size: CGFloat
+    var weight: Font.Weight
+
+    var animatableData: CGFloat {
+        get { size }
+        set { size = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight, design: .rounded))
     }
 }
 
