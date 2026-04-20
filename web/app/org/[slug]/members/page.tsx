@@ -32,33 +32,39 @@ export default async function MembersPage({
 
   const memberList = members || []
 
-  // active メンバー(user_id あり)のメールアドレスを取得
+  // active メンバー (user_id あり) のメールと最終アクティビティを並列取得。
+  // 以前は getUserById をシリアルループで呼んでいたため、メンバー数 ×
+  // Supabase Admin API 往復ぶん画面表示が遅れていた (N+1)。
+  // Promise.all で一括、さらに transcripts クエリも同時に走らせる。
+  const activeUserIds = memberList
+    .map((m) => m.user_id)
+    .filter((id): id is string => !!id)
+
+  const [userEmailResults, transcriptsRes] = await Promise.all([
+    Promise.all(
+      activeUserIds.map(async (uid) => {
+        const { data } = await admin.auth.admin.getUserById(uid)
+        return [uid, data?.user?.email ?? null] as const
+      })
+    ),
+    activeUserIds.length > 0
+      ? admin
+          .from('transcripts')
+          .select('user_id, created_at')
+          .in('user_id', activeUserIds)
+          .order('created_at', { ascending: false })
+      : Promise.resolve({ data: [] as Array<{ user_id: string; created_at: string }> }),
+  ])
+
   const emailMap = new Map<string, string>()
-  for (const m of memberList) {
-    if (m.user_id) {
-      const { data } = await admin.auth.admin.getUserById(m.user_id)
-      if (data?.user?.email) {
-        emailMap.set(m.user_id, data.user.email)
-      }
-    }
+  for (const [uid, email] of userEmailResults) {
+    if (email) emailMap.set(uid, email)
   }
 
-  // 各メンバーの最終アクティビティを取得
-  const activeUserIds = memberList.filter(m => m.user_id).map(m => m.user_id)
   const lastActiveMap = new Map<string, string>()
-  if (activeUserIds.length > 0) {
-    const { data: transcripts } = await admin
-      .from('transcripts')
-      .select('user_id, created_at')
-      .in('user_id', activeUserIds)
-      .order('created_at', { ascending: false })
-
-    if (transcripts) {
-      for (const t of transcripts) {
-        if (!lastActiveMap.has(t.user_id)) {
-          lastActiveMap.set(t.user_id, t.created_at)
-        }
-      }
+  for (const t of transcriptsRes.data || []) {
+    if (!lastActiveMap.has(t.user_id)) {
+      lastActiveMap.set(t.user_id, t.created_at)
     }
   }
 
