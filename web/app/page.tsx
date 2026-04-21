@@ -208,7 +208,7 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Recording</span>
                 <span className="flex items-center gap-1.5 text-xs text-gray-900 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
                   Live
                 </span>
               </div>

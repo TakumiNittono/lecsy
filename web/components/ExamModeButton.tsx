@@ -37,7 +37,7 @@ export default function ExamModeButton({ transcriptId }: ExamModeButtonProps) {
   const [examData, setExamData] = useState<ExamResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showAnswers, setShowAnswers] = useState<Record<number, boolean>>({})
-  const [selectedLanguage, setSelectedLanguage] = useState('ja')
+  const [selectedLanguage, setSelectedLanguage] = useState('en')
   const router = useRouter()
   void router
 
@@ -54,7 +54,6 @@ export default function ExamModeButton({ transcriptId }: ExamModeButtonProps) {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
       if (sessionError || !session) {
-        console.error('Session error:', sessionError)
         throw new Error('Not authenticated. Please log in again.')
       }
 
@@ -71,29 +70,22 @@ export default function ExamModeButton({ transcriptId }: ExamModeButtonProps) {
         }),
       })
 
-      console.log('API response status:', response.status)
-
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('API error response:', errorText)
-        
         let errorData
         try {
           errorData = JSON.parse(errorText)
         } catch {
           throw new Error(`Server error (${response.status}): ${errorText}`)
         }
-        
         throw new Error(errorData.error || `Failed to generate exam prep (${response.status})`)
       }
 
       const data = await response.json()
-      console.log('Exam prep generated successfully')
       setExamData(data.exam_mode || data)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred'
       setError(errorMessage)
-      console.error('Exam prep error:', err)
     } finally {
       setLoading(false)
     }
@@ -112,7 +104,7 @@ export default function ExamModeButton({ transcriptId }: ExamModeButtonProps) {
       {!examData && (
         <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
           <label className="block text-sm font-semibold text-gray-900 mb-3">
-            Exam Prep Language / 試験対策の言語
+            Output Language
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             {LANGUAGES.map((lang) => (

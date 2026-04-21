@@ -115,7 +115,7 @@ function LoginForm() {
     setError(null);
     const email = emailInput.trim();
     if (!email) {
-      setError("メールアドレスを入力してください");
+      setError("Please enter your email address.");
       return;
     }
     try {
@@ -131,13 +131,13 @@ function LoginForm() {
         },
       });
       if (otpError) {
-        setError(`コード送信に失敗しました: ${otpError.message}`);
+        setError(`We couldn't send the code: ${otpError.message}`);
         return;
       }
       setMagicLinkStage("code");
       setOtpCodeInput("");
     } catch (err: any) {
-      setError(`コード送信に失敗しました: ${err?.message || "予期しないエラー"}`);
+      setError(`We couldn't send the code: ${err?.message || "unexpected error"}`);
     } finally {
       setLoading(false);
     }
@@ -148,7 +148,7 @@ function LoginForm() {
     const email = emailInput.trim();
     const token = (codeOverride ?? otpCodeInput).trim();
     if (token.length !== 6) {
-      setError("6桁のコードを入力してください");
+      setError("Please enter the 6-digit code.");
       return;
     }
     try {
@@ -161,13 +161,13 @@ function LoginForm() {
         type: "email",
       });
       if (verifyError || !data.session) {
-        setError(`コードが一致しません: ${verifyError?.message || "もう一度お試しください"}`);
+        setError(`That code didn't match: ${verifyError?.message || "please try again"}`);
         return;
       }
       // セッション Cookie が書かれた状態で /app (or redirectTo) に遷移。
       window.location.href = redirectTo;
     } catch (err: any) {
-      setError(`認証に失敗しました: ${err?.message || "予期しないエラー"}`);
+      setError(`Sign-in failed: ${err?.message || "unexpected error"}`);
     } finally {
       setLoading(false);
     }
@@ -208,7 +208,7 @@ function LoginForm() {
       })
 
       if (signInError) {
-        setError(`ログインエラー: ${signInError.message}`)
+        setError(`Sign-in error: ${signInError.message}`)
         setLoading(false)
         return
       }
@@ -216,11 +216,11 @@ function LoginForm() {
       if (data?.url) {
         window.location.href = data.url
       } else {
-        setError('認証URLの取得に失敗しました。もう一度お試しください。')
+        setError("Couldn't start sign-in. Please try again.")
         setLoading(false);
       }
     } catch (err: any) {
-      setError(`ログインに失敗しました: ${err.message || '予期しないエラーが発生しました'}`);
+      setError(`Sign-in failed: ${err.message || 'unexpected error'}`);
       setLoading(false);
     }
   };
@@ -230,14 +230,11 @@ function LoginForm() {
       setLoading(true);
       setError(null);
 
-      // クライアント側で直接OAuthを開始（クッキーストレージを使用）
       const { createClient } = await import('@/utils/supabase/client')
       const supabase = createClient()
-      
-      // リダイレクトURLを構築（現在のoriginを使用）
+
       const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
-      console.log('Starting Google OAuth with redirect:', redirectUrl)
-      
+
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -250,45 +247,33 @@ function LoginForm() {
       })
 
       if (signInError) {
-        console.error('OAuth error:', signInError)
-        setError(`ログインエラー: ${signInError.message}`)
+        setError(`Sign-in error: ${signInError.message}`)
         setLoading(false)
         return
       }
 
       if (data?.url) {
-        console.log('Redirecting to OAuth URL:', data.url.substring(0, 100) + '...')
-        // OAuth URLにリダイレクト
         window.location.href = data.url
-        // リダイレクト後はこのコードは実行されないが、念のため
       } else {
-        console.error('No OAuth URL received')
-        setError('認証URLの取得に失敗しました。もう一度お試しください。')
+        setError("Couldn't start sign-in. Please try again.")
         setLoading(false)
       }
     } catch (err: any) {
-      console.error("Login error:", err);
-      setError(`ログインに失敗しました: ${err.message || '予期しないエラーが発生しました'}`);
+      setError(`Sign-in failed: ${err.message || 'unexpected error'}`);
       setLoading(false);
     }
   };
 
   const handleAppleLogin = async () => {
-    console.log('🍎 Apple Sign In button clicked');
     try {
       setLoading(true);
       setError(null);
-      console.log('🍎 Starting Apple OAuth flow...');
 
-      // クライアント側で直接OAuthを開始（クッキーストレージを使用）
       const { createClient } = await import('@/utils/supabase/client')
       const supabase = createClient()
-      console.log('🍎 Supabase client created');
-      
-      // リダイレクトURLを構築（現在のoriginを使用）
+
       const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
-      console.log('🍎 Redirect URL:', redirectUrl)
-      
+
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
         options: {
@@ -296,28 +281,20 @@ function LoginForm() {
         },
       })
 
-      console.log('🍎 OAuth response:', { data, error: signInError });
-
       if (signInError) {
-        console.error('🍎 OAuth error:', signInError)
-        setError(`ログインエラー: ${signInError.message}`)
+        setError(`Sign-in error: ${signInError.message}`)
         setLoading(false);
         return
       }
 
       if (data?.url) {
-        console.log('🍎 Redirecting to:', data.url.substring(0, 100) + '...');
-        // OAuth URLにリダイレクト
         window.location.href = data.url
-        // リダイレクト後はこのコードは実行されないが、念のため
       } else {
-        console.error('🍎 No OAuth URL received');
-        setError('認証URLの取得に失敗しました。もう一度お試しください。')
+        setError("Couldn't start sign-in. Please try again.")
         setLoading(false);
       }
     } catch (err: any) {
-      console.error("🍎 Login error:", err);
-      setError(`ログインに失敗しました: ${err.message || '予期しないエラーが発生しました'}`);
+      setError(`Sign-in failed: ${err.message || 'unexpected error'}`);
       setLoading(false);
     }
   };
@@ -325,37 +302,38 @@ function LoginForm() {
   return (
     <main className="min-h-screen bg-white flex flex-col">
       {/* Header */}
-      <header className="border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <Link href="/" className="text-2xl font-bold text-gray-900">
+      <header className="border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+          <Link href="/" className="text-xl font-semibold tracking-tight text-gray-900">
             lecsy
           </Link>
         </div>
       </header>
 
       {/* Login Content */}
-      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Join your class</h1>
-            <p className="text-gray-600">
-              Web access is invite-only while we&apos;re in classroom pilot.
+      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-10 sm:py-16">
+        <div className="max-w-sm w-full">
+          <div className="text-center mb-10">
+            <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-gray-900 mb-3">
+              Join your class
+            </h1>
+            <p className="text-gray-500 text-[15px] leading-relaxed">
+              Web access is invite-only during our classroom pilot.
               Personal users, please use the iOS app.
             </p>
           </div>
 
           {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-800 text-sm mb-2">{error}</p>
+            <div className="mb-5 p-4 bg-red-50 border border-red-100 rounded-2xl">
+              <p className="text-red-700 text-sm leading-relaxed">{error}</p>
               <button
                 onClick={() => {
                   setError(null)
-                  // ページをリロードして再試行
                   window.location.reload()
                 }}
-                className="text-red-700 hover:text-red-900 text-sm underline"
+                className="mt-2 text-red-600 hover:text-red-800 text-xs font-medium underline underline-offset-2"
               >
-                もう一度お試しください
+                Try again
               </button>
             </div>
           )}
@@ -371,18 +349,15 @@ function LoginForm() {
           */}
 
           {/* ── Primary: Invite code (classroom pilot) ── */}
-          <div className="rounded-2xl border-2 border-blue-600 bg-blue-50/40 p-5 mb-5">
-            <div className="flex items-center gap-2 mb-1">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-              </svg>
-              <h2 className="font-semibold text-gray-900 text-base">
+          <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4">
+              <h2 className="font-semibold text-gray-900 text-[15px]">
                 Have an invite code?
               </h2>
+              <p className="mt-1 text-[13px] text-gray-500 leading-relaxed">
+                Enter the 6-digit code your teacher gave you.
+              </p>
             </div>
-            <p className="text-xs text-gray-600 mb-3">
-              Type the 6-digit code your teacher handed you.
-            </p>
             <input
               type="text"
               inputMode="numeric"
@@ -401,17 +376,25 @@ function LoginForm() {
                 }
               }}
               disabled={loading}
-              className="w-full h-14 rounded-lg border border-gray-300 bg-white text-gray-900 text-2xl font-mono tracking-[0.5em] text-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+              aria-label="6-digit invite code"
+              className="w-full h-16 rounded-2xl border border-gray-200 bg-gray-50 text-gray-900 text-[28px] font-semibold font-mono tracking-[0.45em] text-center placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent focus:bg-white transition disabled:opacity-50"
             />
             <button
               onClick={handleJoinWithInviteCode}
               disabled={loading || inviteCodeInput.length !== 6}
-              className="mt-3 w-full h-12 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+              className="mt-4 w-full h-12 rounded-full bg-gray-900 text-white text-[15px] font-medium hover:bg-gray-800 active:bg-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-              {loading ? "Joining..." : "Join class"}
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Joining…
+                </span>
+              ) : (
+                <>Join class</>
+              )}
             </button>
           </div>
 
@@ -565,13 +548,13 @@ function LoginForm() {
           </>
           )}
 
-          <p className="mt-6 text-sm text-gray-500 text-center">
+          <p className="mt-8 text-[13px] text-gray-400 text-center leading-relaxed">
             By continuing, you agree to our{" "}
-            <Link href="/terms" className="text-blue-600 hover:text-blue-800 underline">
-              Terms of Service
+            <Link href="/terms" className="text-gray-700 hover:text-gray-900 underline underline-offset-2">
+              Terms
             </Link>{" "}
             and{" "}
-            <Link href="/privacy" className="text-blue-600 hover:text-blue-800 underline">
+            <Link href="/privacy" className="text-gray-700 hover:text-gray-900 underline underline-offset-2">
               Privacy Policy
             </Link>
             .

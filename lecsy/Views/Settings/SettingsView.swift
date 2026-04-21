@@ -53,7 +53,7 @@ struct SettingsView: View {
                     .disabled(recordingService.isRecording)
 
                     if recordingService.isRecording {
-                        Text("録音中は言語を変更できません")
+                        Text("Language can't be changed while recording")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }

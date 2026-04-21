@@ -84,7 +84,7 @@ struct RecordView: View {
                     HStack(spacing: 8) {
                         ProgressView()
                             .scaleEffect(0.7)
-                        Text("ライブ字幕を再接続中…")
+                        Text("Reconnecting live captions…")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

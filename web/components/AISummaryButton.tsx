@@ -33,7 +33,7 @@ export default function AISummaryButton({ transcriptId }: AISummaryButtonProps) 
   const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState<SummaryResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [selectedLanguage, setSelectedLanguage] = useState('ja')
+  const [selectedLanguage, setSelectedLanguage] = useState('en')
   const router = useRouter()
   void router
 
@@ -50,7 +50,6 @@ export default function AISummaryButton({ transcriptId }: AISummaryButtonProps) 
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
       if (sessionError || !session) {
-        console.error('Session error:', sessionError)
         throw new Error('Not authenticated. Please log in again.')
       }
 
@@ -67,29 +66,22 @@ export default function AISummaryButton({ transcriptId }: AISummaryButtonProps) 
         }),
       })
 
-      console.log('API response status:', response.status)
-
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('API error response:', errorText)
-        
         let errorData
         try {
           errorData = JSON.parse(errorText)
         } catch {
           throw new Error(`Server error (${response.status}): ${errorText}`)
         }
-        
         throw new Error(errorData.error || `Failed to generate summary (${response.status})`)
       }
 
       const data = await response.json()
-      console.log('Summary generated successfully')
       setSummary(data)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred'
       setError(errorMessage)
-      console.error('Summary error:', err)
     } finally {
       setLoading(false)
     }
@@ -101,7 +93,7 @@ export default function AISummaryButton({ transcriptId }: AISummaryButtonProps) 
       {!summary && (
         <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
           <label className="block text-sm font-semibold text-gray-900 mb-3">
-            Summary Language / サマリーの言語
+            Output Language
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             {LANGUAGES.map((lang) => (

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import SentryUserBinding from "@/components/SentryUserBinding";
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.lecsy.app'),
@@ -68,7 +69,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: "#2563eb",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
@@ -83,7 +84,10 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <SentryUserBinding />
+        {children}
+      </body>
     </html>
   );
 }

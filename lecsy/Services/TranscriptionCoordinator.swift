@@ -77,8 +77,11 @@ final class TranscriptionCoordinator: ObservableObject {
     /// 最後に live session を張った時刻。長時間録音で proactive recycle する基準。
     private var streamStartedAt: Date?
     private var proactiveRecycleTask: Task<Void, Never>?
-    /// Session を何分で proactive recycle するか。Deepgram トークン期限切れ（通常 1h）対策。
-    private let proactiveRecycleInterval: TimeInterval = 50 * 60
+    /// Session を何分で proactive recycle するか。Deepgram トークン期限（1h = TTL 900秒
+    /// を内部でリフレッシュ）に対し、90分講義途中でのリフレッシュ失敗リスクを減らすため
+    /// 45分で recycle する。50分だとリフレッシュが間に合わず sequence の中で失敗すると
+    /// 字幕が一瞬途切れる観測があったため、余裕を 15分確保する。
+    private let proactiveRecycleInterval: TimeInterval = 45 * 60
 
     private init() {
         setupNetworkMonitor()
@@ -335,7 +338,7 @@ final class TranscriptionCoordinator: ObservableObject {
         }
         capture.onSilenceFailure = { [weak self] in
             guard let self else { return }
-            self.liveError = "マイク入力を検知できなかったため、ライブ字幕を停止しました。録音は継続し、終了後に文字起こしされます。"
+            self.liveError = "Live captions stopped because no microphone input was detected. Recording will continue and the audio will be transcribed after you stop."
             self.stopLive()
         }
         self.capture = capture
@@ -451,7 +454,7 @@ final class TranscriptionCoordinator: ObservableObject {
     /// 録音後の startTranscription() が Deepgram Batch → WhisperKit fallback で埋めてくれる。
     private func liveConnectFailureMessage(for error: Error) -> String {
         let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        return "ライブ字幕に接続できませんでした（\(detail)）。録音は続行され、終了後に文字起こしされます。"
+        return "Couldn't connect to live captions (\(detail)). Recording will continue and the audio will be transcribed after you stop."
     }
 
     // MARK: - Stream install / recycle
