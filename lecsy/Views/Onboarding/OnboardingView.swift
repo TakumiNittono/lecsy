@@ -22,6 +22,11 @@ struct OnboardingView: View {
     private let totalPages = 5
     private let authPageIndex = 4
     private let estimatedSeconds: Double = 90
+    // Outlier fallback: typical download is ~83s, estimate is 90s. If the
+    // model is still loading past this cap and the user is signed in /
+    // skipped, let them into the app — RecordView shows its own
+    // "Preparing AI model..." indicator while the download finishes.
+    private let maxWaitSeconds: Int = 95
 
     var body: some View {
         ZStack {
@@ -480,6 +485,12 @@ struct OnboardingView: View {
             Task { @MainActor in
                 if !transcriptionService.isModelLoaded {
                     elapsedSeconds += 1
+                }
+                let authedOrSkipped = authService.isAuthenticated || authService.hasSkippedLogin
+                if authedOrSkipped
+                    && elapsedSeconds >= maxWaitSeconds
+                    && !transcriptionService.isModelLoaded {
+                    completeOnboarding()
                 }
             }
         }
