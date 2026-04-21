@@ -39,6 +39,9 @@ supabase/.branches/
 # Claude Code agents
 .agents/
 
+# Claude Code local settings + scheduler state
+.claude/
+
 # Promo / assets (large files)
 gaozou/
 promo-video/node_modules/
