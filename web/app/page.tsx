@@ -231,20 +231,19 @@ export default function Home() {
                   Open Web App
                 </Link>
               )}
+              <Link
+                href="/android"
+                className="group inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl border border-gray-300 text-gray-700 font-medium text-sm hover:border-blue-300 hover:text-blue-700 hover:bg-blue-50 transition-all"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-1.0001 0-.5511.4482-.9993.9993-.9993.5511 0 .9993.4482.9993.9993 0 .5515-.4482 1.0001-.9993 1.0001m-11.046 0c-.5511 0-.9993-.4486-.9993-1.0001 0-.5511.4482-.9993.9993-.9993.5511 0 .9993.4482.9993.9993 0 .5515-.4482 1.0001-.9993 1.0001m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1367 1.0989L4.841 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396" />
+                </svg>
+                Android (Invite)
+              </Link>
             </div>
 
             <p className="mt-6 text-sm text-gray-400">
               Save $204/year compared to Otter.ai
-            </p>
-
-            <p className="mt-3 text-sm text-gray-400">
-              Android user with an invite code?{" "}
-              <Link
-                href="/android"
-                className="text-blue-600 font-medium underline-offset-2 hover:underline"
-              >
-                Enter here →
-              </Link>
             </p>
           </div>
 
@@ -889,6 +888,15 @@ export default function Home() {
                 Open Web App
               </Link>
             )}
+            <Link
+              href="/android"
+              className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl border-2 border-white/40 text-white font-medium text-sm hover:bg-white/10 transition-all"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-1.0001 0-.5511.4482-.9993.9993-.9993.5511 0 .9993.4482.9993.9993 0 .5515-.4482 1.0001-.9993 1.0001m-11.046 0c-.5511 0-.9993-.4486-.9993-1.0001 0-.5511.4482-.9993.9993-.9993.5511 0 .9993.4482.9993.9993 0 .5515-.4482 1.0001-.9993 1.0001m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1367 1.0989L4.841 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396" />
+              </svg>
+              Android (Invite)
+            </Link>
           </div>
         </div>
       </section>
