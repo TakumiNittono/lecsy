@@ -226,6 +226,16 @@ export default function Home() {
             <p className="mt-6 text-sm text-gray-400">
               Save $204/year compared to Otter.ai
             </p>
+
+            <p className="mt-3 text-sm text-gray-400">
+              Android user with an invite code?{" "}
+              <Link
+                href="/android"
+                className="text-blue-600 font-medium underline-offset-2 hover:underline"
+              >
+                Enter here →
+              </Link>
+            </p>
           </div>
 
           {/* Right side - floating card */}
@@ -900,6 +910,11 @@ export default function Home() {
                 <li>
                   <Link href="/ai-note-taking-for-international-students" className="hover:text-gray-900 transition-colors">
                     International Students
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/android" className="hover:text-gray-900 transition-colors">
+                    Android (Invite only)
                   </Link>
                 </li>
               </ul>
