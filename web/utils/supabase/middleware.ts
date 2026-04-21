@@ -55,6 +55,7 @@ export async function updateSession(request: NextRequest) {
     '/opengraph-image',
     '/manifest.webmanifest',
     '/manifest.json',
+    '/sw.js',
   ])
   // /login は publicPages 扱いだが、既ログインユーザーは /app (or ?redirectTo=...)
   // に即リダイレクトする。以前は LoginForm 側の useEffect で Supabase Client を
@@ -72,6 +73,22 @@ export async function updateSession(request: NextRequest) {
       const url = request.nextUrl.clone()
       url.pathname = safeRedirect
       url.search = ''
+      return NextResponse.redirect(url)
+    }
+    return supabaseResponse
+  }
+
+  // /android entry is public (it's the invite-code gate itself).
+  // /android/* deeper paths require an authenticated session (anon redeemed)
+  // and are routed back to /android by the page if no membership exists.
+  if (path === '/android' || path === '/android/') {
+    return supabaseResponse
+  }
+  if (path.startsWith('/android/')) {
+    const { data: { user: androidUser } } = await supabase.auth.getUser()
+    if (!androidUser) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/android'
       return NextResponse.redirect(url)
     }
     return supabaseResponse

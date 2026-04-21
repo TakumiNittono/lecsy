@@ -102,10 +102,16 @@ export default async function JoinPage({ params, searchParams }: PageProps) {
               href={deepLink}
               className="block w-full text-center h-14 leading-[3.5rem] rounded-2xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
             >
-              Open in Lecsy
+              Open in Lecsy (iOS)
             </a>
+            <Link
+              href={`/android?code=${encodeURIComponent(code)}`}
+              className="mt-3 block w-full text-center h-14 leading-[3.5rem] rounded-2xl bg-gray-900 text-white font-semibold hover:bg-gray-800 transition-colors"
+            >
+              Open on Android
+            </Link>
             <p className="mt-3 text-xs text-gray-500">
-              Tap above if Lecsy is already installed. Otherwise download first.
+              Tap iOS if Lecsy is already installed. On Android the web app opens directly.
             </p>
           </div>
         )}

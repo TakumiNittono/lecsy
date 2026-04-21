@@ -64,6 +64,11 @@ export const metadata: Metadata = {
       { url: "/apple-icon.png", type: "image/png" },
     ],
   },
+  manifest: "/manifest.webmanifest",
+};
+
+export const viewport = {
+  themeColor: "#2563eb",
 };
 
 export default function RootLayout({
@@ -73,6 +78,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   );
