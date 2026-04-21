@@ -22,6 +22,7 @@ import {
 } from '../_shared/cors.ts';
 import { getLimits, buildRateLimitBody } from '../_shared/campaign.ts';
 import { callOpenAIChat } from '../_shared/openai.ts';
+import { alert } from '../_shared/alert.ts';
 
 interface SummarizeRequest {
   transcript_id: string;
@@ -200,8 +201,8 @@ serve(async (req) => {
       },
     };
 
-    const outputLanguage = body.output_language || "ja";
-    const langConfig = languageConfigs[outputLanguage] || languageConfigs["ja"];
+    const outputLanguage = body.output_language || "en";
+    const langConfig = languageConfigs[outputLanguage] || languageConfigs["en"];
     const languageName = langConfig.name;
     const languageInstruction = langConfig.instruction;
 
@@ -308,8 +309,17 @@ Remember: ALL text values (terms, definitions, questions, answers, predictions) 
     try {
       result = JSON.parse(responseText);
     } catch (parseErr) {
+      // response_format: json_object を付けているのでここに来るのは異常系。
+      // malformed な生テキストを summary に詰めて返すと iOS 側で「ゴミ要約」が
+      // 保存されてしまうので、ここは 502 で落としてユーザーに再試行させる。
       console.error("Failed to parse OpenAI JSON response:", parseErr, responseText.slice(0, 200));
-      result = { summary: responseText };
+      await alert({
+        source: 'summarize',
+        level: 'error',
+        message: 'OpenAI returned non-JSON response in JSON mode',
+        context: { user_id: user.id, transcript_id: body.transcript_id, preview: responseText.slice(0, 200) },
+      });
+      return createErrorResponse(req, 'openai_malformed_response', 502);
     }
 
     // 保存
@@ -352,6 +362,12 @@ Remember: ALL text values (terms, definitions, questions, answers, predictions) 
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     console.error("Summarize error:", msg);
+    await alert({
+      source: 'summarize',
+      level: 'error',
+      message: `summarize_failed: ${msg}`,
+      error,
+    });
     return createErrorResponse(req, `summarize_failed: ${msg}`, 500);
   }
 });

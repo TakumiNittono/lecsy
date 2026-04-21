@@ -10,6 +10,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { createPreflightResponse, createJsonResponse, createErrorResponse } from '../_shared/cors.ts';
+import { alert } from '../_shared/alert.ts';
 
 const FROM_ADDR = Deno.env.get('RESEND_FROM') ?? 'Lecsy <noreply@lecsy.app>';
 const TO_ADDR = Deno.env.get('PILOT_LEAD_NOTIFY_TO') ?? 'founder@lecsy.app';
@@ -106,12 +107,34 @@ serve(async (req) => {
     if (!resendRes.ok) {
       const errBody = await resendRes.text();
       console.error(`[notify-pilot-lead] Resend failed: ${resendRes.status} ${errBody}`);
+      // パイロット期間中は「lead が DB に入ったのにメール飛ばず営業が気づかない」が致命傷。
+      // critical で Slack/Sentry に上げる。Lead 自体は DB に保存済みなので 200 で返す
+      // （Web フォームは「送信完了」を出してユーザー体験を守る）。
+      await alert({
+        source: 'notify-pilot-lead',
+        level: 'critical',
+        message: `Pilot lead captured but notification email failed — check Slack and follow up manually`,
+        context: {
+          lead_id: lead.id,
+          school_name: lead.school_name,
+          contact_email: lead.contact_email,
+          resend_status: resendRes.status,
+          resend_error: errBody.slice(0, 500),
+        },
+      });
       return createJsonResponse(req, { ok: true, sent: false, reason: 'resend_failed' }, 200);
     }
 
     return createJsonResponse(req, { ok: true, sent: true }, 200);
   } catch (e) {
     console.error('[notify-pilot-lead] error', e);
-    return createErrorResponse(req, `internal_error: ${(e as Error).message}`, 500);
+    const msg = (e as Error).message;
+    await alert({
+      source: 'notify-pilot-lead',
+      level: 'error',
+      message: `notify_pilot_lead internal_error: ${msg}`,
+      error: e,
+    });
+    return createErrorResponse(req, `internal_error: ${msg}`, 500);
   }
 });

@@ -21,6 +21,8 @@
 // 必要secrets: DEEPGRAM_ADMIN_KEY, DEEPGRAM_PROJECT_ID
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { alert } from '../_shared/alert.ts';
+import { getCorsHeaders, createPreflightResponse } from '../_shared/cors.ts';
 
 const DEEPGRAM_ADMIN_KEY = Deno.env.get('DEEPGRAM_ADMIN_KEY');
 const DEEPGRAM_PROJECT_ID = Deno.env.get('DEEPGRAM_PROJECT_ID');
@@ -28,12 +30,6 @@ const DEEPGRAM_PROJECT_ID = Deno.env.get('DEEPGRAM_PROJECT_ID');
 // キャンペーン終了日時 (JST)。_shared/campaign.ts と合わせる。
 const CAMPAIGN_END_ISO = '2026-06-01T00:00:00+09:00';
 const CAMPAIGN_END_MS = new Date(CAMPAIGN_END_ISO).getTime();
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
 
 interface PlanCap {
   dailyMinutes: number;
@@ -51,15 +47,20 @@ const PLAN_CAPS: Record<Plan, PlanCap> = {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: CORS_HEADERS });
+    return createPreflightResponse(req);
   }
 
   if (!DEEPGRAM_ADMIN_KEY || !DEEPGRAM_PROJECT_ID) {
-    return json({ error: 'server_misconfigured' }, 500);
+    await alert({
+      source: 'deepgram-token',
+      level: 'critical',
+      message: 'server_misconfigured: DEEPGRAM_ADMIN_KEY or DEEPGRAM_PROJECT_ID missing',
+    });
+    return json(req, { error: 'server_misconfigured' }, 500);
   }
 
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) return json({ error: 'unauthorized' }, 401);
+  if (!authHeader) return json(req, { error: 'unauthorized' }, 401);
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
 
   const { data: userData } = await supabase.auth.getUser();
   const user = userData?.user;
-  if (!user) return json({ error: 'unauthorized' }, 401);
+  if (!user) return json(req, { error: 'unauthorized' }, 401);
 
   // Feature flag
   const { data: flag } = await supabase
@@ -77,7 +78,7 @@ Deno.serve(async (req) => {
     .select('enabled')
     .eq('name', 'realtime_captions_beta')
     .maybeSingle();
-  if (!flag?.enabled) return json({ error: 'feature_disabled' }, 503);
+  if (!flag?.enabled) return json(req, { error: 'feature_disabled' }, 503);
 
   // プラン判定 (2026-06-08 ローンチ方針):
   // B2B 専用。active な organization_members で org.plan='pro' の時だけ pro。
@@ -101,10 +102,26 @@ Deno.serve(async (req) => {
     `https://api.deepgram.com/v1/projects/${DEEPGRAM_PROJECT_ID}/balances`,
     { headers: { Authorization: `Token ${DEEPGRAM_ADMIN_KEY}` } }
   );
-  if (!balRes.ok) return json({ error: 'balance_check_failed' }, 502);
+  if (!balRes.ok) {
+    await alert({
+      source: 'deepgram-token',
+      level: 'error',
+      message: `Deepgram balance check failed (status=${balRes.status})`,
+      context: { user_id: user.id, status: balRes.status },
+    });
+    return json(req, { error: 'balance_check_failed' }, 502);
+  }
   const balJson = await balRes.json();
   const balance = Number(balJson.balances?.[0]?.amount ?? 0);
-  if (balance < 100) return json({ error: 'budget_exceeded', balance }, 402);
+  if (balance < 100) {
+    await alert({
+      source: 'deepgram-token',
+      level: 'critical',
+      message: 'Deepgram balance exceeded — live token requests being rejected. Recharge NOW.',
+      context: { balance_usd: balance, user_id: user.id, plan },
+    });
+    return json(req, { error: 'budget_exceeded', balance }, 402);
+  }
 
   // L3: 日次cap
   const today = new Date().toISOString().split('T')[0];
@@ -116,7 +133,7 @@ Deno.serve(async (req) => {
     .maybeSingle();
   const dailyUsed = dailyRow?.minutes_today ?? 0;
   if (dailyUsed >= cap.dailyMinutes) {
-    return json({
+    return json(req, {
       error: 'daily_cap', plan, cap: cap.dailyMinutes, used: dailyUsed,
     }, 429);
   }
@@ -131,7 +148,7 @@ Deno.serve(async (req) => {
     .maybeSingle();
   const monthlyUsed = monthRow?.minutes_month ?? 0;
   if (monthlyUsed >= cap.monthlyMinutes) {
-    return json({
+    return json(req, {
       error: 'monthly_cap', plan, cap: cap.monthlyMinutes, used: monthlyUsed,
     }, 429);
   }
@@ -154,11 +171,17 @@ Deno.serve(async (req) => {
   );
 
   if (!tokenRes.ok) {
-    return json({ error: 'token_mint_failed', status: tokenRes.status }, 500);
+    await alert({
+      source: 'deepgram-token',
+      level: 'error',
+      message: `Deepgram token mint failed (status=${tokenRes.status}) — live captions unavailable`,
+      context: { user_id: user.id, plan, status: tokenRes.status },
+    });
+    return json(req, { error: 'token_mint_failed', status: tokenRes.status }, 500);
   }
 
   const { key } = await tokenRes.json();
-  return json({
+  return json(req, {
     token: key,
     ttl_seconds: 900,
     plan,
@@ -167,9 +190,9 @@ Deno.serve(async (req) => {
   }, 200);
 });
 
-function json(body: unknown, status: number) {
+function json(req: Request, body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
   });
 }
