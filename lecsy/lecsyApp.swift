@@ -6,11 +6,39 @@
 //
 
 import SwiftUI
+import Sentry
+
 import StoreKit
 import AuthenticationServices
 
 @main
 struct lecsyApp: App {
+    init() {
+        // Sentry DSN は Info.plist の SENTRY_DSN (xcconfig 経由で注入) から読む。
+        // ソース直書きは git 履歴に残ると git clone しただけの外部が error capture
+        // を打ち込めてしまうので避ける。DSN が未設定なら SDK を起動しないだけ。
+        if let dsn = Bundle.main.object(forInfoDictionaryKey: "SENTRY_DSN") as? String,
+           !dsn.isEmpty,
+           dsn != "$(SENTRY_DSN)" {
+            SentrySDK.start { options in
+                options.dsn = dsn
+
+                // FERPA 配慮: 学生の IP / user-agent など PII 送出を明示的に切る。
+                // ユーザーID紐付けは AuthService から SentrySDK.setUser で個別に渡す方針。
+                // 参考: https://docs.sentry.io/platforms/apple/data-management/data-collected/
+                options.sendDefaultPii = false
+
+                options.tracesSampleRate = 1.0
+
+                options.configureProfiling = {
+                    $0.sessionSampleRate = 1.0
+                    $0.lifecycle = .trace
+                }
+
+                options.experimental.enableLogs = true
+            }
+        }
+    }
     @StateObject private var authService = AuthService.shared
     @AppStorage("lecsy.hasSeenOnboarding") private var hasSeenOnboarding = false
     @Environment(\.requestReview) private var requestReview

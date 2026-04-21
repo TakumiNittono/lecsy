@@ -20,10 +20,17 @@ import UIKit
 @MainActor
 final class BillingService {
     static let shared = BillingService()
-    private init() {}
+    private init() {
+        // URL(string:) が nil を返すのは文字列が RFC 3986 違反の時だけ。上の定数は
+        // コンパイル時に確定している安全な URL だが、念のため preconditionFailure で
+        // クラッシュさせず、fallback URL (lecsy.app) に落とす。
+        self.pricingURL = URL(string: Self.pricingURLString)
+            ?? URL(string: "https://www.lecsy.app")!
+    }
 
     /// B2C ユーザーがプラン選択するランディング。Safari で開く。
-    let pricingURL = URL(string: "https://www.lecsy.app/pricing")!
+    private static let pricingURLString = "https://www.lecsy.app/pricing"
+    let pricingURL: URL
 
     /// Portal 終了後に戻る先。Web アプリのホームで十分。
     private let portalReturnURL = "https://www.lecsy.app/app"
