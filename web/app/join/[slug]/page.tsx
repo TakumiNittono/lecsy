@@ -50,8 +50,8 @@ export default async function JoinPage({ params, searchParams }: PageProps) {
   const org = await getOrg(params.slug)
   if (!org) notFound()
 
-  const rawCode = (searchParams.code || '').trim().toUpperCase().replace(/[\s-]/g, '')
-  const code = /^[A-Z0-9]{4,12}$/.test(rawCode) ? rawCode : null
+  const rawCode = (searchParams.code || '').trim().replace(/\D/g, '')
+  const code = /^[0-9]{6}$/.test(rawCode) ? rawCode : null
   const deepLink = code ? `lecsy://invite?code=${encodeURIComponent(code)}` : null
 
   return (
@@ -139,7 +139,7 @@ export default async function JoinPage({ params, searchParams }: PageProps) {
                 <p className="text-sm text-gray-600">
                   {code
                     ? 'Lecsy will take the code automatically and sign you in.'
-                    : `Type the 6-character code on your card. You'll be signed in to ${org.name} instantly.`}
+                    : `Type the 6-digit code on your card. You'll be signed in to ${org.name} instantly.`}
                 </p>
               </div>
             </li>

@@ -64,7 +64,7 @@ struct LoginView: View {
                 VStack(spacing: 16) {
                     // ── Invite code (classroom pilot primary path) ──
                     // メールが届かない / 学校 Microsoft 365 が Junk に飛ばす
-                    // 問題を回避するため、教員が紙 or QR で配る 6-char コードで
+                    // 問題を回避するため、教員が紙 or QR で配る 6-digit コードで
                     // anonymous サインイン + org 参加を一発で済ませる。
                     inviteCodeSection
                         .padding(.bottom, 4)
@@ -237,33 +237,35 @@ struct LoginView: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(.primary)
                 }
-                Text("Type the 6-character code on your card.")
+                Text("Type the 6-digit code on your card.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
 
-            TextField("XXXXXX", text: $inviteCodeInput)
+            TextField("000000", text: $inviteCodeInput)
                 .textContentType(.oneTimeCode)
+                .keyboardType(.numberPad)
                 .autocorrectionDisabled()
-                .textInputAutocapitalization(.characters)
                 .multilineTextAlignment(.center)
-                .font(.system(size: 24, weight: .semibold, design: .monospaced))
-                .tracking(4)
+                .font(.system(size: 28, weight: .semibold, design: .monospaced))
+                .tracking(6)
                 .focused($inviteCodeFieldFocused)
                 .padding(.horizontal, 16)
-                .frame(height: 56)
+                .frame(height: 60)
                 .background(Color(.systemGray6))
                 .cornerRadius(12)
                 .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
                 .onChange(of: inviteCodeInput) { _, newValue in
-                    // Normalize on the fly: uppercase, strip whitespace/dashes
-                    let cleaned = newValue
-                        .replacingOccurrences(of: " ", with: "")
-                        .replacingOccurrences(of: "-", with: "")
-                        .uppercased()
-                    if cleaned != newValue { inviteCodeInput = cleaned }
+                    // Digits only, capped at 6. Auto-submit when the sixth
+                    // digit lands so students on a number pad don't have to
+                    // reach for "Join class" — matches the magic-link OTP UX.
+                    let digits = String(newValue.filter { $0.isNumber }.prefix(6))
+                    if digits != newValue { inviteCodeInput = digits }
+                    if digits.count == 6 && !authService.isLoading {
+                        Task { await joinWithInviteCode() }
+                    }
                 }
 
             Button {
@@ -276,12 +278,12 @@ struct LoginView: View {
                 .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
                 .frame(height: 50)
                 .background(
-                    inviteCodeInput.count >= 4 ? Color.blue : Color.blue.opacity(0.4)
+                    inviteCodeInput.count == 6 ? Color.blue : Color.blue.opacity(0.4)
                 )
                 .foregroundColor(.white)
                 .cornerRadius(12)
             }
-            .disabled(authService.isLoading || inviteCodeInput.count < 4)
+            .disabled(authService.isLoading || inviteCodeInput.count != 6)
         }
     }
 

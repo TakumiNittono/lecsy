@@ -49,7 +49,7 @@ export async function MobileGate() {
               <span className="flex-none w-5 h-5 rounded-full bg-gray-900 text-white text-[11px] leading-5 text-center font-semibold">
                 2
               </span>
-              <span>Type the 6-character invite code your teacher gave you.</span>
+              <span>Type the 6-digit invite code your teacher gave you.</span>
             </li>
             <li className="flex gap-3">
               <span className="flex-none w-5 h-5 rounded-full bg-gray-900 text-white text-[11px] leading-5 text-center font-semibold">

@@ -1200,7 +1200,7 @@ class AuthService: NSObject, ObservableObject {
     // US 大学 / コミカレ (FMCC, Santa Fe 等) の Microsoft 365 テナントは
     // 新規ドメインからの OTP メールを Junk / 3 分遅延に落とすため、
     // 教室パイロットでは Magic Link が間に合わない。代わりに教員が紙 /
-    // QR で配布する 6-char コードを使って anonymous サインイン + org 参加を
+    // QR で配布する 6-digit コードを使って anonymous サインイン + org 参加を
     // 1 アクションで完了する。詳細は
     // supabase/migrations/20260420000000_invite_codes.sql。
 
@@ -1212,6 +1212,9 @@ class AuthService: NSObject, ObservableObject {
     /// 失敗時 (コード誤入力など) は作成した anon セッションを signOut して
     /// ゾンビアカウントを残さない。再入力するとまた新しい anon 行ができる。
     func signInWithInviteCode(_ rawCode: String) async throws {
+        // Strip everything but digits — invite codes are 6 digits since
+        // the 2026-04 migration. We keep the uppercase-fold for backward
+        // compatibility with any alphanumeric codes still in the DB.
         let normalized = rawCode
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "-", with: "")
@@ -1271,13 +1274,15 @@ class AuthService: NSObject, ObservableObject {
                 let userMessage: String
                 switch errMsg {
                 case "code_not_found":
-                    userMessage = "We couldn't find that code. Double-check the letters."
+                    userMessage = "We couldn't find that code. Double-check the digits."
                 case "code_already_used":
                     userMessage = "This code has already been used. Ask your teacher for a new one."
                 case "code_expired":
                     userMessage = "This code has expired. Ask your teacher for a new one."
                 case "code_empty", "not_authenticated":
-                    userMessage = "Please enter the 6-character code on your card."
+                    userMessage = "Please enter the 6-digit code on your card."
+                case "rate_limited":
+                    userMessage = "Too many tries. Please wait a minute and try again."
                 default:
                     userMessage = "Invite code error: \(errMsg)"
                 }

@@ -15,10 +15,12 @@ type RedeemResult = {
 export function InviteCodeForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  // Invite codes are 6 digits (numeric migration 2026-04-21). We still
+  // accept alphanumeric chars in normalization in case a legacy card is
+  // scanned, but the UI keypad is digits-only.
   const initialCode = (searchParams.get("code") || "")
-    .replace(/[\s-]/g, "")
-    .toUpperCase()
-    .slice(0, 12)
+    .replace(/\D/g, "")
+    .slice(0, 6)
 
   const [code, setCode] = useState(initialCode)
   const [loading, setLoading] = useState(false)
@@ -27,9 +29,9 @@ export function InviteCodeForm() {
 
   const submit = async (raw: string) => {
     setError(null)
-    const normalized = raw.trim().replace(/[\s-]/g, "").toUpperCase()
-    if (normalized.length < 4) {
-      setError("Please enter the 6-character code on your card.")
+    const normalized = raw.trim().replace(/\D/g, "")
+    if (normalized.length !== 6) {
+      setError("Please enter the 6-digit code on your card.")
       return
     }
     setLoading(true)
@@ -53,11 +55,13 @@ export function InviteCodeForm() {
         await supabase.auth.signOut()
         const friendly =
           result.error === "code_not_found"
-            ? "We couldn't find that code. Double-check the letters."
+            ? "We couldn't find that code. Double-check the digits."
             : result.error === "code_already_used"
             ? "This code has already been used. Ask your teacher for a new one."
             : result.error === "code_expired"
             ? "This code has expired."
+            : result.error === "rate_limited"
+            ? "Too many tries. Please wait a minute and try again."
             : `Invite code error: ${result.error}`
         setError(friendly)
         return
@@ -76,7 +80,7 @@ export function InviteCodeForm() {
   }
 
   useEffect(() => {
-    if (initialCode.length >= 4 && !autoSubmitted) {
+    if (initialCode.length === 6 && !autoSubmitted) {
       setAutoSubmitted(true)
       void submit(initialCode)
     }
@@ -92,30 +96,30 @@ export function InviteCodeForm() {
         <h2 className="font-semibold text-gray-900 text-base">Have an invite code?</h2>
       </div>
       <p className="text-xs text-gray-600 mb-3">
-        Type the 6-character code your teacher handed you.
+        Type the 6-digit code your teacher handed you.
       </p>
       <input
         type="text"
-        inputMode="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
         autoComplete="one-time-code"
-        autoCapitalize="characters"
         autoCorrect="off"
         spellCheck={false}
-        placeholder="XXXXXX"
+        placeholder="000000"
         value={code}
         onChange={(e) =>
-          setCode(e.target.value.replace(/[\s-]/g, "").toUpperCase().slice(0, 12))
+          setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
         }
         onKeyDown={(e) => {
-          if (e.key === "Enter" && code.length >= 4 && !loading) submit(code)
+          if (e.key === "Enter" && code.length === 6 && !loading) submit(code)
         }}
         disabled={loading}
         autoFocus
-        className="w-full h-14 rounded-lg border border-gray-300 bg-white text-gray-900 text-2xl font-mono tracking-[0.5em] text-center uppercase focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+        className="w-full h-14 rounded-lg border border-gray-300 bg-white text-gray-900 text-2xl font-mono tracking-[0.5em] text-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
       />
       <button
         onClick={() => submit(code)}
-        disabled={loading || code.length < 4}
+        disabled={loading || code.length !== 6}
         className="mt-3 w-full h-12 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

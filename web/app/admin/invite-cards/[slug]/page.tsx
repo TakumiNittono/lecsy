@@ -141,7 +141,7 @@ export default async function PrintInviteCardsPage({ params, searchParams }: Pag
                 <div className="mt-3 text-[10px] text-gray-600 text-center leading-relaxed px-2">
                   Scan with iPhone camera → tap the Lecsy banner.
                   <br />
-                  Or open Lecsy, tap <strong>Have an invite code?</strong>, type the code.
+                  Or open Lecsy, tap <strong>Have an invite code?</strong>, type the 6 digits.
                 </div>
               </div>
             ))}

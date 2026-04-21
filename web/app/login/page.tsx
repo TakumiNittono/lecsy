@@ -21,9 +21,10 @@ function LoginForm() {
   const [magicLinkStage, setMagicLinkStage] = useState<"email" | "code">("email");
 
   // Invite code (classroom pilot) — bypasses email entirely. Teacher hands
-  // out a 6-char code on paper / QR; student types it → we do
+  // out a 6-digit code on paper / QR; student types it → we do
   // signInAnonymously() + redeem_invite_code RPC. See
-  // supabase/migrations/20260420000000_invite_codes.sql for the backend.
+  // supabase/migrations/20260421000000_invite_codes_numeric_rate_limit.sql
+  // for the rate-limited backend.
   const [inviteCodeInput, setInviteCodeInput] = useState("");
 
   // Session check は middleware が担当するので client 側ではやらない。
@@ -39,12 +40,9 @@ function LoginForm() {
 
   const handleJoinWithInviteCode = async () => {
     setError(null);
-    const normalized = inviteCodeInput
-      .trim()
-      .replace(/[\s-]/g, "")
-      .toUpperCase();
-    if (normalized.length < 4) {
-      setError("Please enter the 6-character code on your card.");
+    const normalized = inviteCodeInput.trim().replace(/\D/g, "");
+    if (normalized.length !== 6) {
+      setError("Please enter the 6-digit code on your card.");
       return;
     }
     try {
@@ -82,11 +80,13 @@ function LoginForm() {
         await supabase.auth.signOut();
         const userMsg =
           result.error === "code_not_found"
-            ? "We couldn't find that code. Double-check the letters."
+            ? "We couldn't find that code. Double-check the digits."
             : result.error === "code_already_used"
             ? "This code has already been used. Ask your teacher for a new one."
             : result.error === "code_expired"
             ? "This code has expired."
+            : result.error === "rate_limited"
+            ? "Too many tries. Please wait a minute and try again."
             : `Invite code error: ${result.error}`;
         setError(userMsg);
         setLoading(false);
@@ -381,33 +381,31 @@ function LoginForm() {
               </h2>
             </div>
             <p className="text-xs text-gray-600 mb-3">
-              Type the 6-character code your teacher handed you.
+              Type the 6-digit code your teacher handed you.
             </p>
             <input
               type="text"
-              inputMode="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               autoComplete="one-time-code"
-              autoCapitalize="characters"
               autoCorrect="off"
               spellCheck={false}
-              placeholder="XXXXXX"
+              placeholder="000000"
               value={inviteCodeInput}
               onChange={(e) =>
-                setInviteCodeInput(
-                  e.target.value.replace(/[\s-]/g, "").toUpperCase().slice(0, 12)
-                )
+                setInviteCodeInput(e.target.value.replace(/\D/g, "").slice(0, 6))
               }
               onKeyDown={(e) => {
-                if (e.key === "Enter" && inviteCodeInput.length >= 4 && !loading) {
+                if (e.key === "Enter" && inviteCodeInput.length === 6 && !loading) {
                   handleJoinWithInviteCode();
                 }
               }}
               disabled={loading}
-              className="w-full h-14 rounded-lg border border-gray-300 bg-white text-gray-900 text-2xl font-mono tracking-[0.5em] text-center uppercase focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+              className="w-full h-14 rounded-lg border border-gray-300 bg-white text-gray-900 text-2xl font-mono tracking-[0.5em] text-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
             />
             <button
               onClick={handleJoinWithInviteCode}
-              disabled={loading || inviteCodeInput.length < 4}
+              disabled={loading || inviteCodeInput.length !== 6}
               className="mt-3 w-full h-12 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
