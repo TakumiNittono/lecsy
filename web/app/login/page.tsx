@@ -337,9 +337,10 @@ function LoginForm() {
       <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Login</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Join your class</h1>
             <p className="text-gray-600">
-              Sign in to access your lectures on the web
+              Web access is invite-only while we&apos;re in classroom pilot.
+              Personal users, please use the iOS app.
             </p>
           </div>
 
@@ -416,7 +417,14 @@ function LoginForm() {
             </button>
           </div>
 
-          {/* ── Secondary: Magic Link (.edu 用) ── */}
+          {/*
+            Web B2C 動線は 2026-04-21 時点で全て非表示。Web は B2B 招待コード
+            パイロット専用とし、個人ユーザーは iOS アプリへ誘導する。
+            Magic Link / Google / Apple / Microsoft のハンドラと state は
+            残すので、B2C を再開する時は JSX コメントを外すだけで復活可能。
+          */}
+          {false && (
+          <>
           <div className="rounded-2xl border border-gray-200 bg-white p-5 mb-5">
             {magicLinkStage === "email" ? (
               <>
@@ -556,6 +564,8 @@ function LoginForm() {
               </span>
             </button>
           </div>
+          </>
+          )}
 
           <p className="mt-6 text-sm text-gray-500 text-center">
             By continuing, you agree to our{" "}
