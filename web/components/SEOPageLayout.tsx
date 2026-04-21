@@ -2,6 +2,7 @@ import Link from "next/link";
 import SEOFooter from "./SEOFooter";
 import CTASection from "./CTASection";
 import BreadcrumbJsonLd from "./BreadcrumbJsonLd";
+import { APP_STORE_URL } from "@/lib/constants";
 
 interface SEOPageLayoutProps {
   children: React.ReactNode;
@@ -21,18 +22,19 @@ export default function SEOPageLayout({ children, breadcrumbs }: SEOPageLayoutPr
             lecsy
           </Link>
           <div className="flex gap-4">
-            <Link
-              href="/login"
-              className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors font-medium"
-            >
-              Login
-            </Link>
-            <Link
-              href="/login"
+            {/*
+              Web B2C 動線は 2026-04-21 時点で全て非表示。SEO ランディング
+              からの Login / Get Started も iOS ダウンロードに置き換え。
+              B2C 再開時にこのブロックを戻す。
+            */}
+            <a
+              href={APP_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg hover:from-blue-700 hover:to-blue-600 transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
             >
-              Get Started
-            </Link>
+              Download for iPhone
+            </a>
           </div>
         </div>
       </header>

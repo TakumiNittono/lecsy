@@ -13,15 +13,22 @@ export default function CTASection() {
           Start recording and transcribing for free.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-8">
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-white text-blue-600 rounded-xl text-lg font-semibold hover:bg-gray-100 transition-all shadow-2xl hover:shadow-3xl transform hover:scale-105"
-          >
-            Try Lecsy Free
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </Link>
+          {/*
+            Web B2C 動線は 2026-04-21 時点で全て非表示。"Try Lecsy Free" →
+            /login は個人ユーザーに招待コード画面を見せてしまうので封印。
+            App Store だけ残す。
+          */}
+          {false && (
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 px-8 py-4 bg-white text-blue-600 rounded-xl text-lg font-semibold hover:bg-gray-100 transition-all shadow-2xl hover:shadow-3xl transform hover:scale-105"
+            >
+              Try Lecsy Free
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+          )}
           <a
             href={APP_STORE_URL}
             target="_blank"

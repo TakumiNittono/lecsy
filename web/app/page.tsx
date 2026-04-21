@@ -122,12 +122,19 @@ export default function Home() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-[13px] text-gray-500 hover:text-gray-900 transition-colors hidden sm:block"
-            >
-              Log in
-            </Link>
+            {/*
+              Web B2C 動線は 2026-04-21 時点で全て非表示。Web は B2B 招待コード
+              パイロット専用。個人ユーザーは iOS アプリへ誘導するため、
+              Header の "Log in" は出さない。B2C 再開時にこのブロックを戻す。
+            */}
+            {false && (
+              <Link
+                href="/login"
+                className="text-[13px] text-gray-500 hover:text-gray-900 transition-colors hidden sm:block"
+              >
+                Log in
+              </Link>
+            )}
             <a
               href={APP_STORE_URL}
               target="_blank"
@@ -215,12 +222,15 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </a>
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center h-12 px-6 rounded-xl border border-gray-200 text-gray-700 font-medium text-sm hover:border-gray-300 hover:bg-gray-50 transition-all"
-              >
-                Open Web App
-              </Link>
+              {/* "Open Web App" は B2B 招待パイロット期間中は非表示 (B2C は iOS のみ)。 */}
+              {false && (
+                <Link
+                  href="/login"
+                  className="inline-flex items-center justify-center h-12 px-6 rounded-xl border border-gray-200 text-gray-700 font-medium text-sm hover:border-gray-300 hover:bg-gray-50 transition-all"
+                >
+                  Open Web App
+                </Link>
+              )}
             </div>
 
             <p className="mt-6 text-sm text-gray-400">
@@ -870,12 +880,15 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </a>
-            <Link
-              href="/login"
-              className="inline-flex items-center justify-center h-12 px-6 rounded-xl border-2 border-white/30 text-white font-medium text-sm hover:bg-white/10 transition-all"
-            >
-              Open Web App
-            </Link>
+            {/* Final CTA の "Open Web App" も B2B 招待パイロット期間中は非表示。 */}
+            {false && (
+              <Link
+                href="/login"
+                className="inline-flex items-center justify-center h-12 px-6 rounded-xl border-2 border-white/30 text-white font-medium text-sm hover:bg-white/10 transition-all"
+              >
+                Open Web App
+              </Link>
+            )}
           </div>
         </div>
       </section>
