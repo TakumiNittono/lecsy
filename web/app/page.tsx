@@ -52,7 +52,7 @@ function Waveform() {
         (h, i) => (
           <div
             key={i}
-            className="w-[3px] rounded-full bg-blue-400"
+            className="w-[3px] rounded-full bg-gray-900"
             style={{ height: `${h}%` }}
           />
         )
@@ -109,12 +109,12 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between">
           <Link
             href="/"
-            className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-blue-600"
+            className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-gray-900"
           >
             lecsy
           </Link>
 
-          <nav className="hidden md:flex items-center gap-8 text-[13px] text-gray-500">
+          <nav className="hidden md:flex items-center gap-8 text-[13px] text-gray-600">
             <Link href="#features" className="hover:text-gray-900 transition-colors">Features</Link>
             <Link href="#compare" className="hover:text-gray-900 transition-colors">Compare</Link>
             <Link href="#pricing" className="hover:text-gray-900 transition-colors">Pricing</Link>
@@ -139,7 +139,7 @@ export default function Home() {
               href={APP_STORE_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="h-8 px-4 flex items-center gap-2 rounded-full bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors"
+              className="h-8 px-4 flex items-center gap-2 rounded-full bg-gray-900 text-white text-[13px] font-semibold hover:bg-gray-800 transition-colors"
             >
               <AppleIcon className="w-4 h-4" />
               Download
@@ -149,64 +149,23 @@ export default function Home() {
       </header>
 
       {/* ━━━ HERO ━━━ */}
-      {/* ━━━ COMING SOON BIG ANNOUNCEMENT ━━━ */}
-      <section className="relative pt-24 pb-6 overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-700">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.15),transparent_60%)]" />
-        <div className="relative max-w-6xl mx-auto px-5 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 border border-white/30 backdrop-blur-sm mb-4">
-            <span className="w-2 h-2 rounded-full bg-yellow-300 animate-pulse" />
-            <span className="text-xs font-bold text-white tracking-widest uppercase">
-              Coming Soon · Private Beta
-            </span>
-          </div>
-          <h2 className="font-[family-name:var(--font-display)] text-3xl md:text-5xl lg:text-6xl font-extrabold text-white tracking-tight mb-4">
-            Real-time bilingual captions,
-            <br className="hidden md:block" />
-            <span className="text-yellow-200"> powered by Deepgram.</span>
-          </h2>
-          <p className="text-lg lg:text-xl text-blue-100 max-w-2xl mx-auto mb-6">
-            See the lecture in English AND your native language —
-            live, in class, word-by-word. Launching for international students this summer.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
-            <a
-              href="mailto:support@lecsy.app?subject=Lecsy%20Beta%20Waitlist"
-              className="inline-flex items-center gap-2 h-12 px-6 rounded-xl bg-white text-blue-700 font-bold text-sm hover:bg-blue-50 transition-all shadow-lg"
-            >
-              Join the waitlist
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-              </svg>
-            </a>
-            <span className="text-xs text-blue-200">
-              Current Lecsy users stay free with on-device WhisperKit.
-            </span>
-          </div>
-        </div>
-      </section>
-
-      <section className="relative pt-20 pb-20 lg:pt-28 lg:pb-32 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-blue-50/80 via-white to-white pointer-events-none" />
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[900px] h-[600px] bg-blue-400/[0.08] rounded-full blur-[120px] pointer-events-none" />
+      <section className="relative pt-28 pb-20 lg:pt-36 lg:pb-32 overflow-hidden bg-white">
 
         <div className="relative max-w-6xl mx-auto px-5">
           <div className="max-w-3xl animate-fade-in-up">
-            <div className="inline-flex items-center gap-2 mb-8 px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-              <span className="text-xs font-medium text-blue-600 tracking-wide">
-                Available now · Free · On-device
-              </span>
-            </div>
+            <p className="text-sm font-medium tracking-[0.18em] uppercase text-gray-500 mb-6">
+              For international students
+            </p>
 
-            <h1 className="font-[family-name:var(--font-display)] text-[clamp(2.5rem,7vw,5.5rem)] font-bold leading-[0.95] tracking-tight text-gray-900 mb-6">
+            <h1 className="font-[family-name:var(--font-display)] text-[clamp(2.75rem,7.5vw,6rem)] font-semibold leading-[0.95] tracking-tight text-gray-900 mb-6">
               Your lectures,
               <br />
-              <span className="text-blue-600">transcribed.</span>
+              <span className="text-gray-400">transcribed.</span>
             </h1>
 
-            <p className="text-lg lg:text-xl text-gray-500 leading-relaxed max-w-xl mb-10">
-              Record on iPhone. Transcribe offline. Get AI summaries and exam
-              prep in 12 languages. <span className="text-gray-900 font-semibold">$0.</span>
+            <p className="text-xl lg:text-2xl text-gray-500 leading-snug max-w-xl mb-10 tracking-tight">
+              Record on iPhone. Transcribe offline. AI summaries and exam prep
+              in 12 languages. Free.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -214,7 +173,7 @@ export default function Home() {
                 href={APP_STORE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group inline-flex items-center justify-center gap-3 h-12 px-6 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                className="group inline-flex items-center justify-center gap-3 h-12 px-6 rounded-full bg-gray-900 text-white font-semibold text-sm hover:bg-gray-800 transition-all"
               >
                 <AppleIcon className="w-5 h-5" />
                 Download for iPhone
@@ -226,14 +185,14 @@ export default function Home() {
               {false && (
                 <Link
                   href="/login"
-                  className="inline-flex items-center justify-center h-12 px-6 rounded-xl border border-gray-200 text-gray-700 font-medium text-sm hover:border-gray-300 hover:bg-gray-50 transition-all"
+                  className="inline-flex items-center justify-center h-12 px-6 rounded-full border border-gray-200 text-gray-700 font-medium text-sm hover:border-gray-300 hover:bg-gray-50 transition-all"
                 >
                   Open Web App
                 </Link>
               )}
               <Link
                 href="/android"
-                className="group inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl border border-gray-300 text-gray-700 font-medium text-sm hover:border-blue-300 hover:text-blue-700 hover:bg-blue-50 transition-all"
+                className="group inline-flex items-center justify-center gap-2 h-12 px-6 rounded-full border border-gray-300 text-gray-900 font-medium text-sm hover:border-gray-900 transition-all"
               >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-1.0001 0-.5511.4482-.9993.9993-.9993.5511 0 .9993.4482.9993.9993 0 .5515-.4482 1.0001-.9993 1.0001m-11.046 0c-.5511 0-.9993-.4486-.9993-1.0001 0-.5511.4482-.9993.9993-.9993.5511 0 .9993.4482.9993.9993 0 .5515-.4482 1.0001-.9993 1.0001m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1367 1.0989L4.841 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396" />
@@ -241,19 +200,15 @@ export default function Home() {
                 Android (Invite)
               </Link>
             </div>
-
-            <p className="mt-6 text-sm text-gray-400">
-              Save $204/year compared to Otter.ai
-            </p>
           </div>
 
           {/* Right side - floating card */}
           <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-72">
-            <div className="bg-white shadow-2xl shadow-blue-900/[0.08] border border-gray-100 rounded-2xl p-6 space-y-5">
+            <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Recording</span>
-                <span className="flex items-center gap-1.5 text-xs text-blue-600 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                <span className="flex items-center gap-1.5 text-xs text-gray-900 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                   Live
                 </span>
               </div>
@@ -262,7 +217,7 @@ export default function Home() {
                 <div className="h-2 bg-gray-100 rounded-full w-full" />
                 <div className="h-2 bg-gray-100 rounded-full w-4/5" />
                 <div className="h-2 bg-gray-100 rounded-full w-3/5" />
-                <div className="h-2 bg-blue-100 rounded-full w-2/3" />
+                <div className="h-2 bg-gray-200 rounded-full w-2/3" />
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-400">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -302,7 +257,7 @@ export default function Home() {
       </section>
 
       {/* ━━━ FOR INTERNATIONAL STUDENTS ━━━ */}
-      <section id="international-students" className="py-20 lg:py-28 bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      <section id="international-students" className="py-20 lg:py-28 bg-[#fbfbfd]">
         <div className="max-w-5xl mx-auto px-5">
           <div className="text-center mb-12">
             <span className="inline-block px-3 py-1 mb-4 text-xs font-semibold uppercase tracking-wider text-blue-700 bg-blue-100 rounded-full">
@@ -450,7 +405,7 @@ export default function Home() {
             </div>
           </div>
 
-          <p className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-blue-200 bg-blue-50 text-sm text-blue-600 font-medium">
+          <p className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 bg-gray-50 text-sm text-gray-700 font-medium">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -523,19 +478,18 @@ export default function Home() {
 
           <div className="grid md:grid-cols-6 gap-4">
             {/* Large card - Privacy */}
-            <div className="md:col-span-4 p-8 rounded-2xl bg-blue-600 text-white relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400/30 rounded-full blur-[80px] pointer-events-none" />
+            <div className="md:col-span-4 p-8 rounded-2xl bg-gray-950 text-white relative overflow-hidden">
               <div className="relative">
-                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-5">
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-5">
                   <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 </div>
-                <h3 className="font-[family-name:var(--font-display)] text-xl font-bold mb-2">
-                  Audio stays on your iPhone
+                <h3 className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight mb-2">
+                  Audio stays on your iPhone.
                 </h3>
-                <p className="text-blue-100 text-sm leading-relaxed max-w-sm">
-                  Lecsy never stores your audio. Live transcription is performed by Deepgram and processed audio is auto-deleted within 30 days. Your local .m4a backup file stays on your device. No ads, no trackers, no IDFA.
+                <p className="text-gray-400 text-sm leading-relaxed max-w-sm">
+                  Lecsy never stores your audio. Live transcription runs through Deepgram and processed audio is auto-deleted within 30 days. Your local .m4a stays on the device. No ads, no trackers, no IDFA.
                 </p>
               </div>
             </div>
@@ -700,13 +654,13 @@ export default function Home() {
 
           <div className="grid md:grid-cols-2 gap-6">
             {/* Free Plan - Available Now */}
-            <div className="p-8 lg:p-10 rounded-2xl border-2 border-blue-600 bg-white relative shadow-lg shadow-blue-600/[0.06]">
-              <div className="absolute -top-3 left-6 px-3 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full uppercase tracking-wider">
+            <div className="p-8 lg:p-10 rounded-2xl border border-gray-900 bg-white relative">
+              <div className="absolute -top-3 left-6 px-3 py-0.5 bg-gray-900 text-white text-xs font-bold rounded-full uppercase tracking-wider">
                 Available Now
               </div>
 
               <div className="flex items-baseline gap-2 mb-1">
-                <span className="font-[family-name:var(--font-display)] text-5xl font-bold text-gray-900">$0</span>
+                <span className="font-[family-name:var(--font-display)] text-5xl font-semibold tracking-tight text-gray-900">$0</span>
                 <span className="text-gray-400">forever</span>
               </div>
               <p className="text-sm text-gray-400 mb-8">The Free plan — everything on-device.</p>
@@ -724,7 +678,7 @@ export default function Home() {
                   "Web sync at lecsy.app",
                 ].map((f) => (
                   <div key={f} className="flex items-center gap-3 text-sm text-gray-700">
-                    <CheckIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                    <CheckIcon className="w-4 h-4 text-gray-900 flex-shrink-0" />
                     {f}
                   </div>
                 ))}
@@ -734,20 +688,20 @@ export default function Home() {
                 href={APP_STORE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block w-full text-center h-12 leading-[3rem] rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+                className="block w-full text-center h-12 leading-[3rem] rounded-full bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 transition-colors"
               >
                 Download Free
               </a>
             </div>
 
             {/* Paid Plans - Coming Soon */}
-            <div className="p-8 lg:p-10 rounded-2xl border-2 border-dashed border-indigo-300 bg-gradient-to-br from-indigo-50 to-blue-50 relative">
-              <div className="absolute -top-3 left-6 px-3 py-0.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xs font-bold rounded-full uppercase tracking-wider">
+            <div className="p-8 lg:p-10 rounded-2xl border border-gray-200 bg-[#fbfbfd] relative">
+              <div className="absolute -top-3 left-6 px-3 py-0.5 bg-gray-900 text-white text-xs font-bold rounded-full uppercase tracking-wider">
                 Coming Soon
               </div>
 
               <div className="flex items-baseline gap-2 mb-1">
-                <span className="font-[family-name:var(--font-display)] text-5xl font-bold text-gray-900">$7.99+</span>
+                <span className="font-[family-name:var(--font-display)] text-5xl font-semibold tracking-tight text-gray-900">$7.99+</span>
                 <span className="text-gray-400">/month</span>
               </div>
               <p className="text-sm text-gray-500 mb-8">Student / Pro / Power — unlocked with Deepgram.</p>
@@ -762,7 +716,7 @@ export default function Home() {
                   "Priority support",
                 ].map((f) => (
                   <div key={f} className="flex items-center gap-3 text-sm text-gray-700">
-                    <svg className="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <span>{f}</span>
@@ -772,17 +726,17 @@ export default function Home() {
 
               <a
                 href="mailto:support@lecsy.app?subject=Lecsy%20Beta%20Waitlist"
-                className="block w-full text-center h-12 leading-[3rem] rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+                className="block w-full text-center h-12 leading-[3rem] rounded-full bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 transition-colors"
               >
                 Join the Waitlist
               </a>
 
-              <div className="mt-6 pt-6 border-t border-indigo-200">
+              <div className="mt-6 pt-6 border-t border-gray-200">
                 <Link
                   href="/pricing"
-                  className="inline-block text-sm font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                  className="inline-block text-sm font-medium text-gray-700 hover:text-gray-900 hover:underline underline-offset-4"
                 >
-                  View detailed paid plans →
+                  View detailed paid plans ›
                 </Link>
               </div>
             </div>
@@ -855,23 +809,20 @@ export default function Home() {
       </section>
 
       {/* ━━━ FINAL CTA ━━━ */}
-      <section className="bg-blue-600 py-20 lg:py-28 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-400/30 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-800/40 rounded-full blur-[100px] pointer-events-none" />
-
+      <section className="bg-gray-950 py-24 lg:py-32 relative overflow-hidden">
         <div className="relative max-w-3xl mx-auto px-5 text-center">
-          <h2 className="font-[family-name:var(--font-display)] text-3xl lg:text-5xl font-bold text-white tracking-tight mb-4">
-            Never miss a word again
+          <h2 className="font-[family-name:var(--font-display)] text-4xl lg:text-6xl font-semibold text-white tracking-tight mb-5">
+            Never miss a word.
           </h2>
-          <p className="text-blue-100 text-lg mb-10 max-w-lg mx-auto">
-            Join students who record, transcribe, and ace their exams — Free plan always available.
+          <p className="text-gray-400 text-lg mb-12 max-w-lg mx-auto">
+            Record, transcribe, and ace your exams. Free plan, always.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
             <a
               href={APP_STORE_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="group inline-flex items-center gap-3 h-12 px-6 rounded-xl bg-white text-blue-600 font-semibold text-sm hover:bg-blue-50 transition-all shadow-lg"
+              className="group inline-flex items-center gap-3 h-12 px-6 rounded-full bg-white text-gray-900 font-semibold text-sm hover:bg-gray-100 transition-all"
             >
               <AppleIcon className="w-5 h-5" />
               Download for iPhone
@@ -890,7 +841,7 @@ export default function Home() {
             )}
             <Link
               href="/android"
-              className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl border-2 border-white/40 text-white font-medium text-sm hover:bg-white/10 transition-all"
+              className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-full border border-white/25 text-white font-medium text-sm hover:bg-white/10 transition-all"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-1.0001 0-.5511.4482-.9993.9993-.9993.5511 0 .9993.4482.9993.9993 0 .5515-.4482 1.0001-.9993 1.0001m-11.046 0c-.5511 0-.9993-.4486-.9993-1.0001 0-.5511.4482-.9993.9993-.9993.5511 0 .9993.4482.9993.9993 0 .5515-.4482 1.0001-.9993 1.0001m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1367 1.0989L4.841 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396" />
@@ -906,7 +857,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-5">
           <div className="grid md:grid-cols-4 gap-10 mb-12">
             <div>
-              <div className="font-[family-name:var(--font-display)] text-xl font-bold text-blue-600 mb-3">
+              <div className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-gray-900 mb-3">
                 lecsy
               </div>
               <p className="text-gray-400 text-sm leading-relaxed">
