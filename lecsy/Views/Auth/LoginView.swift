@@ -39,35 +39,34 @@ struct LoginView: View {
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
-                VStack(spacing: horizontalSizeClass == .regular ? 40 : 24) {
-                    Spacer().frame(height: horizontalSizeClass == .regular ? 60 : 24)
-
-                    // アプリロゴ・タイトル
-                    VStack(spacing: horizontalSizeClass == .regular ? 20 : 16) {
+                // sheet / navigation bar が既に上部チャームを担うので、ここでは最小 margin のみ。
+                // 各要素サイズも iPad モーダル幅に合わせてコンパクト化 (以前は旧 full-screen 設計
+                // の頃のまま巨大で、モーダル中では1画面に収まらずスクロールが必須だった)。
+                VStack(spacing: horizontalSizeClass == .regular ? 20 : 16) {
+                    // アプリロゴ・タイトル (コンパクト版)
+                    VStack(spacing: horizontalSizeClass == .regular ? 10 : 8) {
                         Image(systemName: "mic.fill")
-                            .font(.system(size: horizontalSizeClass == .regular ? 88 : 72))
+                            .font(.system(size: horizontalSizeClass == .regular ? 44 : 40))
                             .foregroundColor(.blue)
 
                         Text("Lecsy")
-                            .font(.system(size: horizontalSizeClass == .regular ? 48 : 40, weight: .bold, design: .rounded))
+                            .font(.system(size: horizontalSizeClass == .regular ? 30 : 28, weight: .bold, design: .rounded))
                             .foregroundColor(.primary)
 
                         Text("Record lectures and transcribe automatically")
-                            .font(horizontalSizeClass == .regular ? .title3 : .subheadline)
+                            .font(.footnote)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                     }
+                    .padding(.top, horizontalSizeClass == .regular ? 4 : 0)
 
-                    Spacer().frame(height: horizontalSizeClass == .regular ? 24 : 8)
-                
                 // ログインボタン
-                VStack(spacing: 16) {
+                VStack(spacing: 12) {
                     // ── Invite code (classroom pilot primary path) ──
                     // メールが届かない / 学校 Microsoft 365 が Junk に飛ばす
                     // 問題を回避するため、教員が紙 or QR で配る 6-digit コードで
                     // anonymous サインイン + org 参加を一発で済ませる。
                     inviteCodeSection
-                        .padding(.bottom, 4)
 
                     HStack {
                         Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
@@ -78,8 +77,7 @@ struct LoginView: View {
                             .padding(.horizontal, 8)
                         Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
                     }
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
-                    .padding(.vertical, 4)
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
 
                     // Microsoft ボタンは一時非表示。
                     // US 大学 / コミカレ (Santa Fe, FMCC 等) の Entra ID テナントは
@@ -108,7 +106,7 @@ struct LoginView: View {
                                 Text("Continue with Microsoft")
                                     .font(.headline)
                             }
-                            .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                            .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
                             .frame(height: 50)
                             .background(Color.white)
                             .foregroundColor(.black)
@@ -138,15 +136,15 @@ struct LoginView: View {
                         }
                     )
                     .signInWithAppleButtonStyle(.black)
-                    .frame(height: 50)
+                    .frame(height: 44)
                     // ASAuthorizationAppleIDButton は内部で width <= 375 の制約を
                     // 持っている (Apple HIG)。外側が 400+ だと constraint 競合ログ
                     // が出るので、ここで 375 に揃える。iPad では中央寄せで余白になる。
                     .frame(maxWidth: 375)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .cornerRadius(12)
+                    .cornerRadius(10)
                     .disabled(authService.isLoading)
-                
+
                 // Googleログインボタン
                 Button(action: {
                     Task {
@@ -155,17 +153,17 @@ struct LoginView: View {
                 }) {
                     HStack {
                         Image(systemName: "globe")
-                            .font(.system(size: 20))
+                            .font(.system(size: 18))
                         Text("Continue with Google")
-                            .font(.headline)
+                            .font(.subheadline.weight(.semibold))
                     }
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
-                    .frame(height: 50)
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                    .frame(height: 44)
                     .background(Color.white)
                     .foregroundColor(.black)
-                    .cornerRadius(12)
+                    .cornerRadius(10)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: 10)
                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                     )
                 }
@@ -178,8 +176,8 @@ struct LoginView: View {
                     Text("Continue without login")
                         .font(.subheadline.weight(.medium))
                         .foregroundColor(.secondary)
-                        .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
-                        .frame(height: 44)
+                        .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                        .frame(height: 40)
                         .background(Color.secondary.opacity(0.08))
                         .cornerRadius(12)
                 }
@@ -194,13 +192,12 @@ struct LoginView: View {
                         .padding(.horizontal, 8)
                     Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
                 }
-                .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
-                .padding(.vertical, 4)
+                .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
 
                 // ── Email magic link ──
                 magicLinkSection
             }
-            .padding(.horizontal, horizontalSizeClass == .regular ? 80 : 40)
+            .padding(.horizontal, horizontalSizeClass == .regular ? 40 : 20)
             
             if let errorMessage = errorMessage ?? authService.errorMessage {
                 Text(errorMessage)
@@ -208,55 +205,53 @@ struct LoginView: View {
                     .foregroundColor(.red)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
-                    .padding(.top, 8)
+                    .padding(.top, 4)
             }
-            
+
             if authService.isLoading {
                 ProgressView()
-                    .padding(.top, 16)
+                    .padding(.top, 8)
             }
-            
-                Spacer().frame(height: 24)
                 }
+                .padding(.top, horizontalSizeClass == .regular ? 16 : 12)
+                .padding(.bottom, 20)
                 .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding()
     }
     
     @ViewBuilder
     private var inviteCodeSection: some View {
-        VStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Image(systemName: "ticket.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(.blue)
-                    Text("Have an invite code?")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.primary)
-                }
-                Text("Type the 6-digit code on your card.")
+        VStack(spacing: 8) {
+            // 1行見出し (以前は縦 2行使ってた heading + 説明文 を統合)
+            HStack(spacing: 6) {
+                Image(systemName: "ticket.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.blue)
+                Text("Have an invite code?")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.primary)
+                Text("· 6 digits on your card")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                Spacer()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+            .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
 
             TextField("000000", text: $inviteCodeInput)
                 .textContentType(.oneTimeCode)
                 .keyboardType(.numberPad)
                 .autocorrectionDisabled()
                 .multilineTextAlignment(.center)
-                .font(.system(size: 28, weight: .semibold, design: .monospaced))
+                .font(.system(size: 24, weight: .semibold, design: .monospaced))
                 .tracking(6)
                 .focused($inviteCodeFieldFocused)
                 .padding(.horizontal, 16)
-                .frame(height: 60)
+                .frame(height: 50)
                 .background(Color(.systemGray6))
-                .cornerRadius(12)
-                .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                .cornerRadius(10)
+                .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
                 .onChange(of: inviteCodeInput) { _, newValue in
                     // Digits only, capped at 6. Auto-submit when the sixth
                     // digit lands so students on a number pad don't have to
@@ -272,16 +267,16 @@ struct LoginView: View {
                 Task { await joinWithInviteCode() }
             } label: {
                 HStack {
-                    Image(systemName: "arrow.right.circle.fill").font(.system(size: 16))
-                    Text("Join class").font(.headline)
+                    Image(systemName: "arrow.right.circle.fill").font(.system(size: 15))
+                    Text("Join class").font(.subheadline.weight(.semibold))
                 }
-                .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
-                .frame(height: 50)
+                .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                .frame(height: 44)
                 .background(
                     inviteCodeInput.count == 6 ? Color.blue : Color.blue.opacity(0.4)
                 )
                 .foregroundColor(.white)
-                .cornerRadius(12)
+                .cornerRadius(10)
             }
             .disabled(authService.isLoading || inviteCodeInput.count != 6)
         }
@@ -289,7 +284,7 @@ struct LoginView: View {
 
     @ViewBuilder
     private var magicLinkSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             switch magicLinkStage {
             case .email:
                 TextField("Email", text: $emailInput)
@@ -299,28 +294,28 @@ struct LoginView: View {
                     .textInputAutocapitalization(.never)
                     .focused($emailFieldFocused)
                     .padding(.horizontal, 16)
-                    .frame(height: 50)
+                    .frame(height: 44)
                     .background(Color(.systemGray6))
-                    .cornerRadius(12)
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                    .cornerRadius(10)
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
 
                 Button {
                     Task { await sendMagicLink() }
                 } label: {
                     HStack {
-                        Image(systemName: "envelope.fill").font(.system(size: 16))
-                        Text("Send code to email").font(.headline)
+                        Image(systemName: "envelope.fill").font(.system(size: 15))
+                        Text("Send code to email").font(.subheadline.weight(.semibold))
                     }
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
-                    .frame(height: 50)
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                    .frame(height: 44)
                     .background(Color.blue)
                     .foregroundColor(.white)
-                    .cornerRadius(12)
+                    .cornerRadius(10)
                 }
                 .disabled(authService.isLoading || emailInput.trimmingCharacters(in: .whitespaces).isEmpty)
 
             case .codeEntry:
-                VStack(spacing: 6) {
+                VStack(spacing: 4) {
                     Text("We sent a code to")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -333,13 +328,13 @@ struct LoginView: View {
                     .textContentType(.oneTimeCode)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.center)
-                    .font(.system(size: 28, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 24, weight: .semibold, design: .monospaced))
                     .focused($otpFieldFocused)
                     .padding(.horizontal, 16)
-                    .frame(height: 60)
+                    .frame(height: 50)
                     .background(Color(.systemGray6))
-                    .cornerRadius(12)
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                    .cornerRadius(10)
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
                     .onChange(of: otpCodeInput) { _, newValue in
                         // Auto-submit when 6 digits are entered
                         let digits = newValue.filter { $0.isNumber }
@@ -367,7 +362,7 @@ struct LoginView: View {
                     .foregroundColor(.blue)
                     .disabled(authService.isLoading)
                 }
-                .frame(maxWidth: horizontalSizeClass == .regular ? 400 : .infinity)
+                .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
             }
         }
     }
