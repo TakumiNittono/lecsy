@@ -13,6 +13,10 @@ import CryptoKit
 import SafariServices
 import os.log
 
+#if canImport(Sentry)
+import Sentry
+#endif
+
 /// Authentication service
 @MainActor
 class AuthService: NSObject, ObservableObject {
@@ -29,6 +33,23 @@ class AuthService: NSObject, ObservableObject {
     }
     @Published var currentUser: LecsyUser? {
         didSet {
+            // Sentry: ログイン/ログアウトで user scope を切替え、どの学生のエラーか可視化。
+            // Sentry SDK 未リンク環境でも #if canImport で no-op。
+            #if canImport(Sentry)
+            if let u = currentUser {
+                let su = User()
+                su.userId = u.id.uuidString
+                if let email = u.email, !email.isEmpty {
+                    // PII 最小化: ドメインのみ残してハッシュ化までは今はやらない。
+                    // sendDefaultPii=false なので IP 等は送られない。
+                    su.email = email
+                }
+                SentrySDK.setUser(su)
+            } else {
+                SentrySDK.setUser(nil)
+            }
+            #endif
+
             // Phase 1.5 #2: Notify PostLoginCoordinator on every sign-in / sign-out
             // transition. Centralised here so each auth path (Apple / Google /
             // Magic Link / restored session) does not need to remember to post.
@@ -1368,6 +1389,20 @@ class AuthService: NSObject, ObservableObject {
             errorMessage = error.localizedDescription
             throw AuthError.signOutFailed(error.localizedDescription)
         }
+    }
+
+    /// ネットワーク遅延 (Supabase /logout endpoint が -1005 で詰まる等) で signOut が
+    /// タイムアウトした時に UI 側から呼ぶローカルクリーンアップ。サーバ側の token
+    /// revocation は待たず、ローカル状態だけを確実に落とす。Access token 自体は 1h 後に
+    /// 自然失効するので、オフライン中の強制サインアウトには十分。
+    func forceLocalSignOut() {
+        isAuthenticated = false
+        currentUser = nil
+        isOrgMember = false
+        cachedAccessToken = nil
+        cachedRefreshToken = nil
+        clearPersistedSession()
+        isLoading = false
     }
     
     /// アカウント削除（Apple審査要件対応）

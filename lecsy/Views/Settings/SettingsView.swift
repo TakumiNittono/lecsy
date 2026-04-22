@@ -22,6 +22,7 @@ struct SettingsView: View {
     @State private var showDeleteAccountErrorAlert = false
     @State private var deleteAccountErrorMessage = ""
     @State private var isDeletingAccount = false
+    @State private var isSigningOut = false
     @State private var showReportSheet = false
     @State private var cloudSyncEnabled = CloudSyncService.shared.isEnabled
     @ObservedObject private var cloudSync = CloudSyncService.shared
@@ -189,36 +190,29 @@ struct SettingsView: View {
                             }
                         }
 
-                        Button("Sign Out", role: .destructive) {
-                            showSignOutDialog = true
+                        Button(action: {
+                            if !isSigningOut { showSignOutDialog = true }
+                        }) {
+                            HStack {
+                                if isSigningOut {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                }
+                                Text(isSigningOut ? "Signing out…" : "Sign Out")
+                            }
                         }
+                        .foregroundColor(.red)
+                        .disabled(isSigningOut)
                         .confirmationDialog(
                             "Sign Out?",
                             isPresented: $showSignOutDialog,
                             titleVisibility: .visible
                         ) {
                             Button("Sign Out", role: .destructive) {
-                                Task {
-                                    do {
-                                        try await authService.signOut()
-                                    } catch {
-                                        deleteAccountErrorMessage = ErrorMessages.friendly(error)
-                                        showDeleteAccountErrorAlert = true
-                                    }
-                                }
+                                Task { await performSignOut(wipeLocalData: false) }
                             }
                             Button("Sign Out & Delete Data on This Device", role: .destructive) {
-                                Task {
-                                    do {
-                                        try await authService.signOut()
-                                        await MainActor.run {
-                                            LectureStore.shared.deleteAllData()
-                                        }
-                                    } catch {
-                                        deleteAccountErrorMessage = ErrorMessages.friendly(error)
-                                        showDeleteAccountErrorAlert = true
-                                    }
-                                }
+                                Task { await performSignOut(wipeLocalData: true) }
                             }
                             Button("Cancel", role: .cancel) {}
                         } message: {
@@ -399,6 +393,35 @@ struct SettingsView: View {
                 billingErrorMessage = error.localizedDescription
             }
         }
+    }
+
+    /// サインアウト処理:
+    /// - 即座にローカル状態をクリア (UX: タップ → 瞬時に login 画面)
+    /// - Supabase /logout は fire-and-forget (以前は -1005 で立ち往生して UI が60秒無反応だった)
+    /// - Token は 1h で自然失効するため、サーバ側 revocation の待ちは許容する
+    /// - wipeLocalData=true ならローカル lecture もクリア
+    /// - spinner は短時間表示 (ユーザーに押下が通った合図)
+    @MainActor
+    private func performSignOut(wipeLocalData: Bool) async {
+        guard !isSigningOut else { return }
+        isSigningOut = true
+
+        // Supabase /logout エンドポイントへの revocation は fire-and-forget。
+        // ネットワーク不達でも UI は止めない。
+        Task.detached {
+            try? await AuthService.shared.signOut()
+        }
+
+        // ローカル状態を即クリア → UI 側は LoginView に flip する
+        authService.forceLocalSignOut()
+
+        if wipeLocalData {
+            LectureStore.shared.deleteAllData()
+        }
+
+        // spinner はごく短い間だけ出す (ボタン押下のフィードバック用)。
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        isSigningOut = false
     }
 
     /// Languages available for selection (base always, extended only with kit)
