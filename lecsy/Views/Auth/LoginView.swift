@@ -61,6 +61,10 @@ struct LoginView: View {
                     .padding(.top, horizontalSizeClass == .regular ? 4 : 0)
 
                 // ログインボタン
+                // 以下の各 button / input は全て 375pt 上限 + 中央寄せに統一する。
+                // Apple Sign-In ボタンは HIG で内部的に 375 上限がかかっているため、
+                // Google / Join class / Continue without login 等を同じ上限に揃えないと
+                // iPhone で Apple だけ狭く見える違和感が出る (iPad sheet 内でも同様)。
                 VStack(spacing: 12) {
                     // ── Invite code (classroom pilot primary path) ──
                     // メールが届かない / 学校 Microsoft 365 が Junk に飛ばす
@@ -77,7 +81,8 @@ struct LoginView: View {
                             .padding(.horizontal, 8)
                         Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
                     }
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                    .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
 
                     // Microsoft ボタンは一時非表示。
                     // US 大学 / コミカレ (Santa Fe, FMCC 等) の Entra ID テナントは
@@ -106,7 +111,8 @@ struct LoginView: View {
                                 Text("Continue with Microsoft")
                                     .font(.headline)
                             }
-                            .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                            .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
                             .frame(height: 50)
                             .background(Color.white)
                             .foregroundColor(.black)
@@ -145,7 +151,7 @@ struct LoginView: View {
                     .cornerRadius(10)
                     .disabled(authService.isLoading)
 
-                // Googleログインボタン
+                // Googleログインボタン — Apple button と同じ 375 centered パターン
                 Button(action: {
                     Task {
                         await signInWithGoogle()
@@ -157,7 +163,7 @@ struct LoginView: View {
                         Text("Continue with Google")
                             .font(.subheadline.weight(.semibold))
                     }
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                    .frame(maxWidth: .infinity)
                     .frame(height: 44)
                     .background(Color.white)
                     .foregroundColor(.black)
@@ -167,20 +173,24 @@ struct LoginView: View {
                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                     )
                 }
+                .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .disabled(authService.isLoading)
 
-                // Continue without login (right under Apple / Google)
+                // Continue without login — 同じ 375 centered パターンに統一
                 Button(action: {
                     authService.skipLogin()
                 }) {
                     Text("Continue without login")
                         .font(.subheadline.weight(.medium))
                         .foregroundColor(.secondary)
-                        .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                        .frame(maxWidth: .infinity)
                         .frame(height: 40)
                         .background(Color.secondary.opacity(0.08))
-                        .cornerRadius(12)
+                        .cornerRadius(10)
                 }
+                .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .disabled(authService.isLoading)
 
                 // ── Divider ──
@@ -192,7 +202,8 @@ struct LoginView: View {
                         .padding(.horizontal, 8)
                     Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
                 }
-                .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
 
                 // ── Email magic link ──
                 magicLinkSection
@@ -237,7 +248,8 @@ struct LoginView: View {
                     .foregroundColor(.secondary)
                 Spacer()
             }
-            .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+            .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
 
             TextField("000000", text: $inviteCodeInput)
                 .textContentType(.oneTimeCode)
@@ -251,7 +263,8 @@ struct LoginView: View {
                 .frame(height: 50)
                 .background(Color(.systemGray6))
                 .cornerRadius(10)
-                .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .onChange(of: inviteCodeInput) { _, newValue in
                     // Digits only, capped at 6. Auto-submit when the sixth
                     // digit lands so students on a number pad don't have to
@@ -270,7 +283,8 @@ struct LoginView: View {
                     Image(systemName: "arrow.right.circle.fill").font(.system(size: 15))
                     Text("Join class").font(.subheadline.weight(.semibold))
                 }
-                .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .frame(height: 44)
                 .background(
                     inviteCodeInput.count == 6 ? Color.blue : Color.blue.opacity(0.4)
@@ -297,7 +311,8 @@ struct LoginView: View {
                     .frame(height: 44)
                     .background(Color(.systemGray6))
                     .cornerRadius(10)
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                    .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
 
                 Button {
                     Task { await sendMagicLink() }
@@ -306,7 +321,8 @@ struct LoginView: View {
                         Image(systemName: "envelope.fill").font(.system(size: 15))
                         Text("Send code to email").font(.subheadline.weight(.semibold))
                     }
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                    .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
                     .frame(height: 44)
                     .background(Color.blue)
                     .foregroundColor(.white)
@@ -334,7 +350,8 @@ struct LoginView: View {
                     .frame(height: 50)
                     .background(Color(.systemGray6))
                     .cornerRadius(10)
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                    .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
                     .onChange(of: otpCodeInput) { _, newValue in
                         // Auto-submit when 6 digits are entered
                         let digits = newValue.filter { $0.isNumber }
@@ -362,7 +379,8 @@ struct LoginView: View {
                     .foregroundColor(.blue)
                     .disabled(authService.isLoading)
                 }
-                .frame(maxWidth: horizontalSizeClass == .regular ? 375 : .infinity)
+                .frame(maxWidth: 375)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
         }
     }
