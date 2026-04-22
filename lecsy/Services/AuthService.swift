@@ -219,9 +219,11 @@ class AuthService: NSObject, ObservableObject {
             // them sequentially made sign-in feel sluggish because the listener
             // handler stayed busy until both finished.
             Task { await refreshOrgMembership() }
-            // Auto-backfill local lectures to Supabase on first sign-in.
-            // Idempotent server-side; flagged per-user in UserDefaults.
-            Task { await CloudSyncService.shared.backfillAllLocalLecturesIfNeeded(store: LectureStore.shared) }
+            // 自動 backfill は廃止。端末共有 (家族 iPad / 教室端末) で前ユーザーの
+            // 録音を次ユーザーのアカウントに流す致命的リークが実機で再現した
+            // (2026-04-22 ログ: 51件の local lecture が別ユーザー account に org=none で upload)。
+            // 新規録音は保存時点で正しいユーザーで upload 済なので、過去分の cloud 化は
+            // Settings > Upload all の user-initiated アクションだけに限定する。
         case .signedOut:
             AppLogger.info("AuthService: Signed out event received", category: .auth)
             isLoading = false
