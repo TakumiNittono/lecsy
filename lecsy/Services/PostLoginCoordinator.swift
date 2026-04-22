@@ -114,9 +114,10 @@ final class PostLoginCoordinator {
                     // FERPA 同意 & 組織の利用同意を済ませているので CloudSync を自動 ON。
                     // ユーザーが明示的に OFF にした場合は上書きしない。
                     CloudSyncService.shared.enableForOrgMemberIfUnset()
-                    // 過去の録音 (15日ずっと 500 で取りこぼされた分を含む) を遡って
-                    // アップロード。save-transcript 側で client_id 重複排除するので安全に再試行できる。
-                    Task { await CloudSyncService.shared.backfillAllLocalLecturesIfNeeded(store: LectureStore.shared) }
+                    // 自動 backfill は AuthService.handleSignIn 側で既に呼ばれているため
+                    // ここでの重複呼び出しは不要。WhisperKit 経路は cloud 対象外
+                    // (オンデバイスが product value) なので、backfill に乗せるかは
+                    // Settings の手動トリガに任せる。
                     // B2B minimum-data: hydrate the class picker shown in
                     // TitleInputSheet. Fire-and-forget — failure just hides the
                     // picker rather than blocking recording.

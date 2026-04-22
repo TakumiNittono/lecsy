@@ -794,8 +794,27 @@ struct RecordView: View {
 
         NotificationCenter.default.post(name: .lectureRecordingCompleted, object: nil)
 
-        // Live結果が無いときだけWhisperKit fallback
-        if liveResult == nil {
+        if let live = liveResult {
+            // Deepgram Live 経路: Pro ユーザーの B2B 動線。transcript text だけ (audio は上げない)
+            // を Supabase に送って org 管理画面の Recent Activity / Usage に反映させる。
+            // 以前のコードではこのブランチで upload 呼び出しが欠けており、Pro ユーザーの
+            // 通常録音がダッシュボードに一切流れていなかった。
+            let savedLecture = lecture
+            let langRaw = transcriptionService.transcriptionLanguage.rawValue
+            let liveText = live.text
+            Task {
+                await CloudSyncService.shared.uploadTranscriptIfEnabled(
+                    clientId: savedLecture.id,
+                    title: savedLecture.title,
+                    content: liveText,
+                    createdAt: savedLecture.createdAt,
+                    durationSeconds: savedLecture.duration,
+                    language: langRaw
+                )
+            }
+        } else {
+            // Live 結果が無い場合 (Deepgram 失敗 / Free プラン / 権限 off) は WhisperKit fallback。
+            // WhisperKit の結果は cloud には送らず local only (プライバシーモデルの核心)。
             Task {
                 await startTranscription(for: lecture)
             }
@@ -907,21 +926,10 @@ struct RecordView: View {
             latest.language = transcriptionService.transcriptionLanguage
             store.updateLecture(latest)
 
-            // Cloud sync (fire-and-forget): upload the transcript text — NOT
-            // the audio file — to Supabase so school admins can see activity
-            // and users don't lose notes when their phone breaks. Gated by
-            // CloudSyncService (default ON, opt-out per device, signed-in only).
-            // See doc/STRATEGIC_REVIEW_2026Q2.md for the strategic rationale.
-            Task {
-                await CloudSyncService.shared.uploadTranscriptIfEnabled(
-                    clientId: latest.id,
-                    title: latest.title,
-                    content: result.text,
-                    createdAt: latest.createdAt,
-                    durationSeconds: latest.duration,
-                    language: transcriptionService.transcriptionLanguage.rawValue
-                )
-            }
+            // WhisperKit 経路はオンデバイス transcription が商品価値の核心なので
+            // transcript を cloud に送らずローカルに留める。Free ユーザーのプライバシー
+            // 担保と Pro が Deepgram 不達で fallback した場合の一貫性を両立。
+            // B2B dashboard に流すべきは Deepgram 経路の transcript のみ。
         } catch {
             transcriptionService.onChunkCompleted = nil
             if var latest = store.getLecture(by: lectureId) {
