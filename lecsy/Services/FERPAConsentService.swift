@@ -142,18 +142,34 @@ final class FERPAConsentService: ObservableObject {
         }
     }
 
-    /// iOS の QUIC/HTTP3 stale-socket (-1005 NetworkConnectionLost) を 1回だけ自動リトライ。
-    /// SupabaseClient.send の retry と同じポリシー。Apple 自身の推奨対処。
-    /// 本物の -1009 (NotConnectedToInternet) や -1001 (TimedOut) はリトライしない。
+    /// VPN / QUIC / iOS 由来の一時エラー (-1005 / -1009 / -1001 / -1006) で最大2回
+    /// リトライ。SupabaseClient.send の方針と揃える。
     private func sendWithStaleSocketRetry(_ req: URLRequest) async throws -> (Data, URLResponse) {
         do {
             return try await URLSession.shared.data(for: req)
-        } catch let error as URLError where error.code == .networkConnectionLost {
+        } catch let first as URLError where Self.isTransient(first) {
             AppLogger.warning(
-                "URLSession -1005 (stale socket) on FERPA PATCH — retrying once",
+                "URLSession \(first.code.rawValue) on FERPA PATCH — retrying (1/2)",
                 category: .general
             )
-            return try await URLSession.shared.data(for: req)
+            do {
+                return try await URLSession.shared.data(for: req)
+            } catch let second as URLError where Self.isTransient(second) {
+                AppLogger.warning(
+                    "URLSession \(second.code.rawValue) on FERPA PATCH — retrying (2/2)",
+                    category: .general
+                )
+                return try await URLSession.shared.data(for: req)
+            }
+        }
+    }
+
+    private static func isTransient(_ error: URLError) -> Bool {
+        switch error.code {
+        case .networkConnectionLost, .notConnectedToInternet, .timedOut, .dnsLookupFailed:
+            return true
+        default:
+            return false
         }
     }
 }

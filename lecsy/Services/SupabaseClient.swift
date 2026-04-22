@@ -59,7 +59,17 @@ final class LecsyAPIClient {
         self.baseURL = URL(string: urlString) ?? URL(string: "https://invalid")!
         self.anonKey = key
         let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = 30
+        // VPN 経由 (WireGuard/OpenVPN/iCloud Private Relay 等) で QUIC が MTU 断片化で
+        // 詰まる + NWPath が頻繁に unsatisfied/satisfied を行き来する環境に耐える設定:
+        // - timeoutIntervalForRequest を 30 → 60 に延長 (VPN 経由の TLS handshake は
+        //   倍の時間がかかる事がある)
+        // - waitsForConnectivity=true で一時的な -1009 "offline" を即失敗にせず、
+        //   NWPath が復帰するまで待つ。VPN 切替時の数秒 blackout を自動吸収
+        // - networkServiceType=.responsiveData で iOS に「低遅延経路優先」を宣言、
+        //   QUIC 優先度と競合時に HTTP/2 fallback が早く選ばれやすくなる
+        cfg.timeoutIntervalForRequest = 60
+        cfg.waitsForConnectivity = true
+        cfg.networkServiceType = .responsiveData
         self.session = URLSession(configuration: cfg)
     }
 
@@ -177,20 +187,46 @@ final class LecsyAPIClient {
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     }
 
-    /// `URLSession.data(for:)` をラップして、iOS の古典的な stale-socket エラー
-    /// (-1005 NetworkConnectionLost) で 1 回だけ自動リトライする。
-    /// QUIC/HTTP3 のアイドル接続が裏でタイムアウトすると、次のリクエスト発火時に
-    /// いきなり -1005 で失敗する既知の iOS バグ。Apple 自身の推奨対処がリトライ。
-    /// `-1009 (NotConnectedToInternet)` や本物の `-1001 (TimedOut)` はリトライしない。
+    /// `URLSession.data(for:)` をラップして、VPN / QUIC / iOS 由来の一時的エラーで
+    /// 最大 2 回まで自動リトライする。
+    /// - -1005 NetworkConnectionLost: QUIC/HTTP3 のアイドル接続が OS に切られた直後
+    ///   (Apple の推奨対処がリトライ)
+    /// - -1009 NotConnectedToInternet: VPN 切替中の数秒 blackout。waitsForConnectivity
+    ///   でもたまに即失敗になる経路があるので手動で拾う
+    /// - -1001 TimedOut: VPN の MTU 断片化で TLS handshake が詰まったケース。本物の
+    ///   永続 timeout と区別できないが、2 回試して両方失敗なら諦める
+    /// - その他 URLError (e.g. -1003 cannotFindHost) はネット構成そのものの問題なので
+    ///   リトライしても意味がない → throw
     private func send(_ req: URLRequest) async throws -> (Data, URLResponse) {
         do {
             return try await session.data(for: req)
-        } catch let error as URLError where error.code == .networkConnectionLost {
+        } catch let first as URLError where Self.isTransientNetworkError(first) {
             AppLogger.warning(
-                "URLSession -1005 (stale socket) on \(req.url?.path ?? "?") — retrying once",
+                "URLSession \(first.code.rawValue) on \(req.url?.path ?? "?") — retrying (1/2)",
                 category: .general
             )
-            return try await session.data(for: req)
+            do {
+                return try await session.data(for: req)
+            } catch let second as URLError where Self.isTransientNetworkError(second) {
+                AppLogger.warning(
+                    "URLSession \(second.code.rawValue) on \(req.url?.path ?? "?") — retrying (2/2)",
+                    category: .general
+                )
+                return try await session.data(for: req)
+            }
+        }
+    }
+
+    /// VPN / QUIC 由来の一時エラー判定。Supabase REST の send / FERPA PATCH で共用する想定。
+    private static func isTransientNetworkError(_ error: URLError) -> Bool {
+        switch error.code {
+        case .networkConnectionLost,      // -1005
+             .notConnectedToInternet,      // -1009
+             .timedOut,                    // -1001
+             .dnsLookupFailed:             // -1006
+            return true
+        default:
+            return false
         }
     }
 
