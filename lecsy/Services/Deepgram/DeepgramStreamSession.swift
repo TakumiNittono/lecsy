@@ -211,17 +211,54 @@ final class DeepgramStreamSession: ObservableObject {
         }
     }
 
-    /// Deepgramは10秒以上音声が無いとタイムアウトする。
-    /// 無音時用に5秒ごとに `{"type":"KeepAlive"}` を送る。
+    /// 2段階 keep-alive:
+    /// - **アプリ層 (5秒)**: Deepgram サーバが 10秒無音でセッション切るのを防ぐ
+    ///   `{"type":"KeepAlive"}` JSON メッセージ
+    /// - **WebSocket 層 (10秒)**: `sendPing()` で制御フレームを投げて NAT / VPN の
+    ///   idle timeout 追跡を継続的に更新する。アプリ層データと違って VPN によっては
+    ///   ping frame は別扱いになり、より確実に NAT テーブルを生かす
+    /// どちらの send も失敗した時点で直ちに connection state を .failed に落として
+    /// 上位 (TranscriptionCoordinator) の自動 reconnect に即繋ぐ。以前は swallow で
+    /// receive 側が死ぬまで数秒ロスしていた。
     private func startKeepAlive() {
         keepAliveTask?.cancel()
         keepAliveTask = Task { @MainActor [weak self] in
+            var tickCount = 0
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 guard let self, let task = self.task else { return }
-                task.send(.string(#"{"type":"KeepAlive"}"#), completionHandler: { _ in })
+
+                // アプリ層 KeepAlive (毎 5秒)
+                task.send(.string(#"{"type":"KeepAlive"}"#)) { [weak self] err in
+                    if err != nil {
+                        Task { @MainActor [weak self] in
+                            self?.markFailedIfActive()
+                        }
+                    }
+                }
+
+                // WebSocket-level PING (10秒に1回 = 2 tick に 1回)
+                tickCount += 1
+                if tickCount.isMultiple(of: 2) {
+                    task.sendPing { [weak self] err in
+                        if err != nil {
+                            Task { @MainActor [weak self] in
+                                self?.markFailedIfActive()
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+
+    /// keep-alive / ping が失敗した時に、既に .failed でない connection state を
+    /// failed に落として上位の reconnect ロジックを即発火させる。
+    private func markFailedIfActive() {
+        if case .failed = connectionState { return }
+        if case .closed = connectionState { return }
+        AppLogger.warning("Deepgram keep-alive / ping failed — marking stream as failed for reconnect", category: .transcription)
+        connectionState = .failed("keep-alive send failed (likely VPN / NAT drop)")
     }
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {

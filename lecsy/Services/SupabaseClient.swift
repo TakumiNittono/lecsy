@@ -70,6 +70,10 @@ final class LecsyAPIClient {
         cfg.timeoutIntervalForRequest = 60
         cfg.waitsForConnectivity = true
         cfg.networkServiceType = .responsiveData
+        // VPN トンネル経由で並行 QUIC/HTTP2 stream を 6 本も張ると MTU 断片化が複利で
+        // 悪化する。同時接続を 2 本に絞ることで stream 多重化の頻度を落とし、各個々の
+        // 接続の成功率を上げる (通常のモバイル通信でも害は軽微)。
+        cfg.httpMaximumConnectionsPerHost = 2
         self.session = URLSession(configuration: cfg)
     }
 
