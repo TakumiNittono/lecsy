@@ -136,6 +136,10 @@ class AuthService: NSObject, ObservableObject {
     private let userIdKey = "lecsy.cachedUserId"
     private let userNameKey = "lecsy.cachedUserName"
     private let hasSkippedLoginKey = "lecsy.hasSkippedLogin"
+
+    // Debounce state for repeated signedOut events. See handleAuthStateChange case .signedOut.
+    private var lastSignedOutEventKept: Date?
+    private let signedOutDebounceInterval: TimeInterval = 30
     
     private override init() {
         // Initialize Supabase client (must initialize before super.init())
@@ -210,6 +214,7 @@ class AuthService: NSObject, ObservableObject {
             }
             isLoading = false
             errorMessage = nil
+            lastSignedOutEventKept = nil
             // Clear skip-login flag when user actually signs in
             if hasSkippedLogin {
                 resetSkipLogin()
@@ -225,6 +230,25 @@ class AuthService: NSObject, ObservableObject {
             // 新規録音は保存時点で正しいユーザーで upload 済なので、過去分の cloud 化は
             // Settings > Upload all の user-initiated アクションだけに限定する。
         case .signedOut:
+            // 重要: Supabase SDK は一時的なネットワーク断 (QUIC -1005 等) で
+            // refresh が滑った時に signedOut イベントを連発する。以前は 20回以上の
+            // 空回り loop (refresh 試行 → "cached token still valid" → keep →
+            // 即座に次の signedOut) がログに流れていた。
+            //
+            // デバウンス: 直近30秒以内に一度 "cached token 有効で session 維持" を
+            // 判断済みなら、SDK が再度 signedOut を投げてきても黙殺する。実体として
+            // 認証が切れているなら cached token が期限切れになった時点で
+            // signedOut → No cached tokens 経路に入って正しく後始末される。
+            if let last = lastSignedOutEventKept,
+               Date().timeIntervalSince(last) < signedOutDebounceInterval,
+               isAuthenticated {
+                AppLogger.debug(
+                    "AuthService: Debouncing signedOut (last kept \(Int(Date().timeIntervalSince(last)))s ago)",
+                    category: .auth
+                )
+                return
+            }
+
             AppLogger.info("AuthService: Signed out event received", category: .auth)
             isLoading = false
             // Only sign out if we don't have cached tokens
@@ -233,6 +257,7 @@ class AuthService: NSObject, ObservableObject {
                 AppLogger.info("AuthService: No cached tokens, signing out", category: .auth)
                 isAuthenticated = false
                 currentUser = nil
+                lastSignedOutEventKept = nil
             } else {
                 AppLogger.info("AuthService: Cached tokens exist, attempting refresh before signing out", category: .auth)
                 let refreshed = await refreshSession()
@@ -243,6 +268,10 @@ class AuthService: NSObject, ObservableObject {
                     cachedAccessToken = nil
                     cachedRefreshToken = nil
                     clearPersistedSession()
+                    lastSignedOutEventKept = nil
+                } else {
+                    // 維持判断 = デバウンス起点を更新。次回30秒以内の signedOut は黙殺。
+                    lastSignedOutEventKept = Date()
                 }
             }
         case .tokenRefreshed:

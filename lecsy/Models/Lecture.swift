@@ -38,6 +38,10 @@ struct Lecture: Identifiable, Codable, Equatable {
     /// Keyed by language so switching language still re-generates.
     var cachedSummary: SummaryService.SummaryResult?
     var cachedSummaryLanguage: String?
+    /// 録音時点でサインインしていたユーザーの ID。nil = 匿名録音 or legacy データ。
+    /// LectureStore が Library 表示時のユーザースコープ絞り込みに使う。端末共有時
+    /// (家族 iPad / 教室端末) に前ユーザーの録音が次ユーザーに見えるのを防ぐ。
+    var ownerUserID: UUID?
 
     /// Resolved audio file URL (reconstructed from filename + Documents directory)
     var audioPath: URL? {
@@ -61,7 +65,8 @@ struct Lecture: Identifiable, Codable, Equatable {
         courseName: String? = nil,
         lastPlaybackPosition: TimeInterval? = nil,
         cachedSummary: SummaryService.SummaryResult? = nil,
-        cachedSummaryLanguage: String? = nil
+        cachedSummaryLanguage: String? = nil,
+        ownerUserID: UUID? = nil
     ) {
         self.id = id
         self.title = title
@@ -77,6 +82,7 @@ struct Lecture: Identifiable, Codable, Equatable {
         self.lastPlaybackPosition = lastPlaybackPosition
         self.cachedSummary = cachedSummary
         self.cachedSummaryLanguage = cachedSummaryLanguage
+        self.ownerUserID = ownerUserID
     }
 
     // MARK: - Custom Codable (handles migration from old audioPath URL to new audioFileName)
@@ -89,6 +95,7 @@ struct Lecture: Identifiable, Codable, Equatable {
         case language, bookmarks, courseName
         case lastPlaybackPosition
         case cachedSummary, cachedSummaryLanguage
+        case ownerUserID
     }
 
     init(from decoder: Decoder) throws {
@@ -125,6 +132,7 @@ struct Lecture: Identifiable, Codable, Equatable {
         lastPlaybackPosition = try container.decodeIfPresent(TimeInterval.self, forKey: .lastPlaybackPosition)
         cachedSummary = try container.decodeIfPresent(SummaryService.SummaryResult.self, forKey: .cachedSummary)
         cachedSummaryLanguage = try container.decodeIfPresent(String.self, forKey: .cachedSummaryLanguage)
+        ownerUserID = try container.decodeIfPresent(UUID.self, forKey: .ownerUserID)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -144,6 +152,7 @@ struct Lecture: Identifiable, Codable, Equatable {
         try container.encodeIfPresent(lastPlaybackPosition, forKey: .lastPlaybackPosition)
         try container.encodeIfPresent(cachedSummary, forKey: .cachedSummary)
         try container.encodeIfPresent(cachedSummaryLanguage, forKey: .cachedSummaryLanguage)
+        try container.encodeIfPresent(ownerUserID, forKey: .ownerUserID)
     }
 
     // MARK: - Computed properties

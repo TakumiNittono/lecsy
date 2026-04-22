@@ -12,9 +12,22 @@ import Combine
 @MainActor
 class LectureStore: ObservableObject {
     static let shared = LectureStore()
-    
-    @Published var lectures: [Lecture] = []
-    
+
+    /// UI に出る lectures (ユーザーごとにフィルタ済)。
+    /// - 現在サインインしているユーザーの録音 (ownerUserID == currentUser.id)
+    /// - 匿名 or legacy 録音 (ownerUserID == nil)
+    /// の合算。端末共有時に前ユーザーの録音が次ユーザーに漏れないようにするため。
+    /// 実ストレージは `allLectures` に保持しており、ユーザー切替 (sign-in/out) 時に
+    /// `republishForCurrentUser()` で再計算される。
+    @Published private(set) var lectures: [Lecture] = []
+
+    /// ディスクに保存されているすべての録音 (全ユーザー分)。UI からは直接読まない。
+    private var allLectures: [Lecture] = []
+
+    /// サインイン/サインアウト購読用。AuthService.currentUser が変わる度に
+    /// lectures (public) を再計算する。
+    private var authCancellable: AnyCancellable?
+
     private let storageURL: URL
     private let backupStorageURL: URL
     private let encoder = JSONEncoder()
@@ -44,46 +57,78 @@ class LectureStore: ObservableObject {
             .first ?? FileManager.default.temporaryDirectory
         storageURL = documentsPath.appendingPathComponent("lectures.json")
         backupStorageURL = documentsPath.appendingPathComponent("lectures_backup.json")
-        
+
         // Date format settings
         encoder.dateEncodingStrategy = .iso8601
         decoder.dateDecodingStrategy = .iso8601
-        
+
         // Load data on launch
         loadLectures()
+
+        // Auth state を監視して、サインイン/サインアウト時に published lectures を
+        // 再計算する。端末共有時に前ユーザーの録音が次ユーザーに見えるのを防ぐ。
+        authCancellable = AuthService.shared.$currentUser
+            .removeDuplicates(by: { $0?.id == $1?.id })
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.republishForCurrentUser()
+                }
+            }
     }
-    
-    /// Add lecture
+
+    /// 現在サインインしているユーザーのスコープに合わせて `lectures` (public) を再計算する。
+    /// allLectures から (ownerUserID == currentUserID) または (ownerUserID == nil) の
+    /// lecture だけを抽出する。
+    private func republishForCurrentUser() {
+        let currentUserID = AuthService.shared.currentUser?.id
+        lectures = allLectures.filter { lecture in
+            lecture.ownerUserID == currentUserID || lecture.ownerUserID == nil
+        }
+    }
+
+    /// Add lecture (tag with current user automatically)
     func addLecture(_ lecture: Lecture) {
-        lectures.append(lecture)
+        var tagged = lecture
+        if tagged.ownerUserID == nil {
+            tagged.ownerUserID = AuthService.shared.currentUser?.id
+        }
+        allLectures.append(tagged)
+        republishForCurrentUser()
         saveLectures()
     }
-    
+
     /// Update lecture (writes to disk first, then updates in-memory state)
     func updateLecture(_ lecture: Lecture) {
-        guard let index = lectures.firstIndex(where: { $0.id == lecture.id }) else { return }
-        let previous = lectures[index]
-        lectures[index] = lecture
+        guard let index = allLectures.firstIndex(where: { $0.id == lecture.id }) else { return }
+        let previous = allLectures[index]
+        // ownerUserID は保存時点で確定した値を尊重 (UI 側の書き換えでは変えない)
+        var merged = lecture
+        merged.ownerUserID = previous.ownerUserID
+        allLectures[index] = merged
+        republishForCurrentUser()
         let saved = saveLecturesReturningSuccess()
         if !saved {
             // Rollback in-memory state if disk write failed
-            lectures[index] = previous
+            allLectures[index] = previous
+            republishForCurrentUser()
         }
     }
-    
+
     /// Delete lecture
     func deleteLecture(_ lecture: Lecture) {
-        lectures.removeAll { $0.id == lecture.id }
-        
+        allLectures.removeAll { $0.id == lecture.id }
+        republishForCurrentUser()
+
         // Also delete audio file
         if let audioPath = lecture.audioPath {
             try? FileManager.default.removeItem(at: audioPath)
         }
-        
+
         saveLectures()
     }
-    
-    /// Get lecture by ID
+
+    /// Get lecture by ID (scoped to currently-visible lectures; call sites that
+    /// need cross-user access should be reviewed carefully — there are none today).
     func getLecture(by id: UUID) -> Lecture? {
         return lectures.first { $0.id == id }
     }
@@ -92,7 +137,7 @@ class LectureStore: ObservableObject {
     @discardableResult
     private func saveLecturesReturningSuccess() -> Bool {
         do {
-            let data = try encoder.encode(lectures)
+            let data = try encoder.encode(allLectures)
             let tempURL = storageURL.deletingLastPathComponent()
                 .appendingPathComponent("lectures_temp_\(UUID().uuidString).json")
             do {
@@ -127,7 +172,7 @@ class LectureStore: ObservableObject {
     /// whether the write succeeded (e.g. `updateLecture` rollback path) must
     /// use `saveLecturesReturningSuccess()` instead, which remains synchronous.
     func saveLectures() {
-        let snapshot = lectures
+        let snapshot = allLectures
         let storageURL = self.storageURL
         let backupStorageURL = self.backupStorageURL
         Task.detached(priority: .utility) {
@@ -174,7 +219,8 @@ class LectureStore: ObservableObject {
         if FileManager.default.fileExists(atPath: storageURL.path) {
             do {
                 let data = try Data(contentsOf: storageURL)
-                lectures = try decoder.decode([Lecture].self, from: data)
+                allLectures = try decoder.decode([Lecture].self, from: data)
+                republishForCurrentUser()
                 return
             } catch {
                 AppLogger.error("Failed to load lectures from primary: \(error)", category: .storage)
@@ -185,7 +231,8 @@ class LectureStore: ObservableObject {
         if FileManager.default.fileExists(atPath: backupStorageURL.path) {
             do {
                 let data = try Data(contentsOf: backupStorageURL)
-                lectures = try decoder.decode([Lecture].self, from: data)
+                allLectures = try decoder.decode([Lecture].self, from: data)
+                republishForCurrentUser()
                 AppLogger.warning("Loaded lectures from backup location", category: .storage)
                 // Restore primary from backup
                 saveLectures()
@@ -195,14 +242,15 @@ class LectureStore: ObservableObject {
             }
         }
 
-        lectures = []
+        allLectures = []
+        republishForCurrentUser()
     }
     
-    /// Search
+    /// Search (scoped to the currently signed-in user's visible lectures)
     func searchLectures(query: String) -> [Lecture] {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty else { return lectures }
-        
+
         let lowercasedQuery = trimmedQuery.lowercased()
         return lectures.filter { lecture in
             // Search by title
@@ -211,27 +259,28 @@ class LectureStore: ObservableObject {
             lecture.transcriptText?.lowercased().contains(lowercasedQuery) ?? false
         }
     }
-    
-    /// Get all unique course names
+
+    /// Get all unique course names (scoped to the currently signed-in user)
     func allCourseNames() -> [String] {
         Array(Set(lectures.compactMap { $0.courseName })).sorted()
     }
 
-    /// Delete all local data (for account deletion)
+    /// Delete all local data (for account deletion / "Sign Out & Delete Data" flow).
+    /// ユーザーが明示的に選択するルートなので全録音を対象にする (他ユーザー分も含む)。
     func deleteAllData() {
         // Delete all audio files
-        for lecture in lectures {
+        for lecture in allLectures {
             if let audioPath = lecture.audioPath {
                 try? FileManager.default.removeItem(at: audioPath)
             }
         }
-        
-        // Clear lectures array
-        lectures = []
-        
+
+        allLectures = []
+        republishForCurrentUser()
+
         // Delete storage file
         try? FileManager.default.removeItem(at: storageURL)
-        
+
         // Save empty state
         saveLectures()
     }
