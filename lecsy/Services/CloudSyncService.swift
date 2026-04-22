@@ -51,6 +51,15 @@ final class CloudSyncService: ObservableObject {
         UserDefaults.standard.set(enabled, forKey: Self.cloudSyncEnabledKey)
     }
 
+    /// ユーザーが Settings でまだ touch していない場合のみ cloudSync を ON にする。
+    /// B2B org メンバー確定時に呼ぶことで、Recent Activity / 管理画面に録音が自動で
+    /// 流れる状態を作る。既にユーザーが明示的に OFF を選んでいる場合は上書きしない。
+    func enableForOrgMemberIfUnset() {
+        guard UserDefaults.standard.object(forKey: Self.cloudSyncEnabledKey) == nil else { return }
+        UserDefaults.standard.set(true, forKey: Self.cloudSyncEnabledKey)
+        AppLogger.info("CloudSync auto-enabled (org member, opt-in default)", category: .recording)
+    }
+
     /// Upload a completed transcript to Supabase.
     /// Fire-and-forget. Returns the remote transcript id on success, nil on
     /// any failure (auth missing, sync disabled, network error, etc.).
@@ -96,7 +105,8 @@ final class CloudSyncService: ObservableObject {
             let client_id: String?
             let organization_id: String?
             let visibility: String?
-            let class_id: String?
+            // class_id は 2026-04-07 b2b_simplify で DB 側の列を drop 済。Edge Function も
+            // もう参照しない。payload から削除して死データ送出をやめる。
         }
 
         struct SaveResp: Decodable {
@@ -112,8 +122,7 @@ final class CloudSyncService: ObservableObject {
             language: language,
             client_id: clientId?.uuidString,
             organization_id: orgContext?.orgId,
-            visibility: orgContext?.visibility,
-            class_id: orgContext?.classId
+            visibility: orgContext?.visibility
         )
 
         do {
@@ -129,10 +138,22 @@ final class CloudSyncService: ObservableObject {
             return resp.id
         } catch {
             // Fire-and-forget: log only, never bubble up.
-            AppLogger.warning(
-                "Cloud sync upload failed (will retry on next save): \(error)",
+            // SupabaseError.server は errorDescription にレスポンス body を含むので、
+            // 「HTTP 500」ではなく「Server error 500: {code=23505, details=...}」が
+            // Sentry に残る。Sentry SDK の auto HTTPClientError は body を持たないので、
+            // こちらを結合診断用の主シグナルにする。
+            let detail: String
+            if case let SupabaseError.server(body, code) = error {
+                detail = "HTTP \(code) from save-transcript: \(body.prefix(600))"
+            } else {
+                detail = "save-transcript invoke failed: \(error)"
+            }
+            AppLogger.error(
+                "Cloud sync upload failed (will retry on next save). \(detail)",
                 category: .recording
             )
+            // 型付き error を別チャンネルで capture。Sentry 上のスタック/ドメインが保持される。
+            AppLogger.capture(error, category: .recording)
             return nil
         }
     }

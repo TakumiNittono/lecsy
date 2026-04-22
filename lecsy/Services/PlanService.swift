@@ -99,6 +99,15 @@ final class PlanService: ObservableObject {
         return currentPlan == .pro
     }
 
+    /// 資格ベースの Pro 判定。forceLocalTranscription トグルの影響を受けない。
+    /// UI で「Pro 機能のトグル自体を表示するか」に使う。`isPaid` はランタイム判定
+    /// （Deepgram を使うか WhisperKit にフォールバックするか）用で、トグル ON の時に
+    /// false を返すため、UI セクションの gate に使うとトグル自体が消える事故になる。
+    var isProEntitled: Bool {
+        guard AuthService.shared.isAuthenticated else { return false }
+        return currentPlan == .pro
+    }
+
     var forceLocalTranscription: Bool {
         UserDefaults.standard.bool(forKey: Self.forceLocalKey)
     }

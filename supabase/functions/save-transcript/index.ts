@@ -8,6 +8,7 @@ import {
   createJsonResponse,
   createErrorResponse,
 } from '../_shared/cors.ts';
+import { alert } from '../_shared/alert.ts';
 
 // 環境変数でデバッグモードを制御
 const DEBUG_MODE = Deno.env.get("DEBUG") === "true";
@@ -39,6 +40,8 @@ interface SaveTranscriptRequest {
   // visible according to the chosen visibility level.
   organization_id?: string | null;
   visibility?: 'private' | 'class' | 'org_wide' | null;
+  // class_id は 2026-04-07 b2b_simplify で列削除済。iOS が古い版で送ってきても
+  // 読み捨てるため型には残すが、insert には使わない。
   class_id?: string | null;
 }
 
@@ -47,6 +50,10 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return createPreflightResponse(req);
   }
+
+  // Sentry / Slack に送る診断コンテキスト。try/catch の両方から読めるよう外側に置く。
+  // PII (content, title) は載せない。量・所属・dedup キー程度に限定。
+  const diag: Record<string, unknown> = {};
 
   try {
     // 認証（summarize関数と完全に同じ実装）
@@ -65,9 +72,16 @@ serve(async (req) => {
     if (!user) {
       return createErrorResponse(req, "Unauthorized", 401);
     }
+    diag.user_id = user.id;
 
     // リクエストボディ
     const body: SaveTranscriptRequest = await req.json();
+    diag.content_length = body.content?.length ?? 0;
+    diag.has_client_id = !!body.client_id;
+    diag.has_org = !!body.organization_id;
+    diag.visibility = body.visibility ?? null;
+    diag.app_version = body.app_version ?? null;
+    diag.language = body.language ?? null;
 
     // バリデーション
     if (!body.content || body.content.trim() === "") {
@@ -80,7 +94,6 @@ serve(async (req) => {
     // B2B context: validate org membership before trusting the org_id
     let orgId: string | null = null;
     let visibility: string = 'private';
-    let classId: string | null = null;
     if (body.organization_id) {
       const { data: membership } = await supabase
         .from('organization_members')
@@ -94,16 +107,8 @@ serve(async (req) => {
         if (body.visibility && ['private', 'class', 'org_wide'].includes(body.visibility)) {
           visibility = body.visibility;
         }
-        // Validate class_id belongs to the same org before trusting it.
-        if (body.class_id) {
-          const { data: cls } = await supabase
-            .from('classes')
-            .select('id')
-            .eq('id', body.class_id)
-            .eq('org_id', orgId)
-            .maybeSingle();
-          if (cls) classId = body.class_id;
-        }
+        // class_id / classes テーブルは 2026-04-07 b2b_simplify で削除済。
+        // iOS 旧版から来ても無視して先に進む。
       }
     }
 
@@ -137,7 +142,6 @@ serve(async (req) => {
         client_id: body.client_id ?? null,
         organization_id: orgId,
         visibility: visibility,
-        class_id: classId,
       })
       .select("id, created_at")
       .single();
@@ -148,7 +152,45 @@ serve(async (req) => {
 
     return createJsonResponse(req, data);
   } catch (error) {
-    console.error("Error:", error instanceof Error ? error.message : "Unknown error");
-    return createErrorResponse(req, "Internal server error", 500);
+    // Supabase / PostgREST が返す error は plain object (code / message / details / hint)
+    // で instanceof Error が false になるケースがあり、以前は全部 "Unknown error" に
+    // 畳まれて原因特定できなかった。型別に拾って Sentry / Slack / レスポンスに漏れなく渡す。
+    const e = error as (Record<string, unknown> & Error) | undefined;
+    const parts: string[] = [];
+    if (e?.message && typeof e.message === 'string') parts.push(e.message);
+    if (e?.code) parts.push(`code=${e.code}`);
+    if (e?.details) parts.push(`details=${e.details}`);
+    if (e?.hint) parts.push(`hint=${e.hint}`);
+    const msg = parts.length > 0 ? parts.join(' | ') : String(error ?? 'Unknown error');
+
+    console.error("save-transcript error:", msg, diag);
+    await alert({
+      source: 'save-transcript',
+      level: 'error',
+      message: `save_transcript_failed: ${msg}`,
+      context: {
+        ...diag,
+        pg_code: e?.code ?? null,
+        pg_details: e?.details ?? null,
+        pg_hint: e?.hint ?? null,
+      },
+      error: error instanceof Error ? error : new Error(msg),
+    });
+    // iOS 側で Sentry に body が残るよう、500 レスポンスに detail を載せる。
+    // PII にならないよう PostgrestError の構造フィールドだけを出す。
+    return new Response(
+      JSON.stringify({
+        error: 'internal_server_error',
+        detail: msg,
+        code: e?.code ?? null,
+      }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': req.headers.get('origin') ?? '*',
+        },
+      },
+    );
   }
 });

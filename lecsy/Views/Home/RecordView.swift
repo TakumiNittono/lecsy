@@ -659,15 +659,6 @@ struct RecordView: View {
                     .clipShape(Capsule())
                 }
 
-                if !transcriptionService.isModelLoaded {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                        Text("Preparing AI model...")
-                            .font(.system(.caption2, design: .rounded))
-                    }
-                    .foregroundColor(.secondary.opacity(0.4))
-                }
             }
         }
     }

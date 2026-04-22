@@ -5,4 +5,9 @@
 SUPABASE_URL = https:/$()/your-project.supabase.co
 SUPABASE_ANON_KEY = your-anon-key-here
 
+// Sentry DSN — sentry.io > Settings > Projects > lecsy-ios > Client Keys (DSN) から。
+// 空のままだと起動時 "[Sentry] [fatal] The SDK is disabled" が出て error 送出が走らない。
+// 例: SENTRY_DSN = https:/$()/<public-key>@o<org-id>.ingest.sentry.io/<project-id>
+SENTRY_DSN =
+
 // 注意: $() は "/" のエスケープに必要

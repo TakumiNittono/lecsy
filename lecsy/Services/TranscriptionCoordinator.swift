@@ -82,12 +82,18 @@ final class TranscriptionCoordinator: ObservableObject {
     /// 45分で recycle する。50分だとリフレッシュが間に合わず sequence の中で失敗すると
     /// 字幕が一瞬途切れる観測があったため、余裕を 15分確保する。
     private let proactiveRecycleInterval: TimeInterval = 45 * 60
+    /// ホーム画面に滞在中、preparedSession を TTL 切れ前に張り直すための Task。
+    /// prepare() 成功後に起動し、startLive / stopLive / 次の prepare でキャンセルされる。
+    /// これによりユーザーが何分ホームで待っても、録音ボタンを押した瞬間に接続済み session
+    /// が利用可能な状態を保つ。
+    private var keepWarmTask: Task<Void, Never>?
 
     private init() {
         setupNetworkMonitor()
         observeRecording()
         observeAppLifecycle()
         observeAuthAndPlan()
+        observeTranscriptionLanguage()
     }
 
     deinit {
@@ -145,24 +151,47 @@ final class TranscriptionCoordinator: ObservableObject {
 
     /// App が前景復帰した時、stream が死んでいたら再接続を試みる。
     /// 長い backgrounding で WebSocket が OS に切られているケース対策。
+    /// 録音中でなくホーム滞在中の場合は preparedSession を張り直して「即録音」体験を維持する。
     private func observeAppLifecycle() {
         NotificationCenter.default
             .publisher(for: UIApplication.willEnterForegroundNotification)
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    guard let self, self.capture != nil else { return }
-                    // 前景復帰は「新しいチャンス」としてカウンタリセット
-                    self.reconnectConsecutiveFailures = 0
-                    if let stream = self.stream {
-                        if case .failed = stream.connectionState {
-                            self.triggerReconnectIfNeeded(reason: "app foregrounded, stream failed")
-                        } else if case .closed = stream.connectionState {
-                            self.triggerReconnectIfNeeded(reason: "app foregrounded, stream closed")
+                    guard let self else { return }
+                    if self.capture != nil {
+                        // 録音継続中: 切れていれば再接続
+                        self.reconnectConsecutiveFailures = 0
+                        if let stream = self.stream {
+                            if case .failed = stream.connectionState {
+                                self.triggerReconnectIfNeeded(reason: "app foregrounded, stream failed")
+                            } else if case .closed = stream.connectionState {
+                                self.triggerReconnectIfNeeded(reason: "app foregrounded, stream closed")
+                            }
+                        } else if self.isLiveActive {
+                            // 異常系: stream が nil なのに live 扱い
+                            self.triggerReconnectIfNeeded(reason: "app foregrounded, no stream")
                         }
-                    } else if self.isLiveActive {
-                        // 異常系: stream が nil なのに live 扱い
-                        self.triggerReconnectIfNeeded(reason: "app foregrounded, no stream")
+                    } else {
+                        // ホーム待機中: long-backgrounding で OS に切られた preparedSession を張り直す
+                        await self.prepare()
                     }
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    /// 文字起こし言語が切り替わった時、ホームで待機中の preparedSession を新しい言語で張り直す。
+    /// 録音中は installStream 経由で session 側が言語を引き継ぐ（capture は停めない）ので、
+    /// ここではホーム滞在中（capture == nil）のみハンドリングする。
+    private func observeTranscriptionLanguage() {
+        TranscriptionService.shared.$transcriptionLanguage
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, self.capture == nil else { return }
+                    await self.prepare()
                 }
             }
             .store(in: &cancellables)
@@ -213,8 +242,11 @@ final class TranscriptionCoordinator: ObservableObject {
                 preparedLanguage = nil
             }
         }
-        // 新鮮な preparedSession があればそのまま使う
-        if preparedSession != nil { return }
+        // 新鮮な preparedSession があればそのまま使う（keep-warm は維持）
+        if preparedSession != nil {
+            if keepWarmTask == nil { scheduleKeepWarm() }
+            return
+        }
 
         isPreparing = true
 
@@ -256,6 +288,28 @@ final class TranscriptionCoordinator: ObservableObject {
         // なっていたら、そのまま startLive にハンドオフする。
         if RecordingService.shared.isRecording && stream == nil && !isStartingLive {
             await startLive()
+            return
+        }
+
+        // ホームに滞在中は TTL 切れ前に再接続し、ワンタップで録音開始できる状態を保つ。
+        scheduleKeepWarm()
+    }
+
+    /// preparedSession が TTL 手前（80%）に達したら自動で張り直す。
+    /// startLive / stopLive / 次の prepare でキャンセルされる。
+    private func scheduleKeepWarm() {
+        keepWarmTask?.cancel()
+        let refreshAfter = preparedSessionMaxAge * 0.8  // 4分
+        keepWarmTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(refreshAfter * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            // 録音に入っている / 別ルートで stream が立った場合は keep-warm 不要
+            guard self.capture == nil, self.stream == nil else { return }
+            guard AuthService.shared.isAuthenticated, PlanService.shared.isPaid else { return }
+            AppLogger.info("Deepgram: keep-warm refresh (idle on home)", category: .transcription)
+            // preparedSession を stale 扱いさせて prepare() に張り直させる
+            self.preparedAt = Date(timeIntervalSinceNow: -self.preparedSessionMaxAge - 1)
+            await self.prepare()
         }
     }
 
@@ -281,6 +335,8 @@ final class TranscriptionCoordinator: ObservableObject {
         }
 
         isStartingLive = true
+        keepWarmTask?.cancel()
+        keepWarmTask = nil
 
         let userLang = TranscriptionService.shared.transcriptionLanguage.deepgramCode
 
@@ -376,6 +432,8 @@ final class TranscriptionCoordinator: ObservableObject {
         reconnectTask = nil
         proactiveRecycleTask?.cancel()
         proactiveRecycleTask = nil
+        keepWarmTask?.cancel()
+        keepWarmTask = nil
         reconnectConsecutiveFailures = 0
         streamStartedAt = nil
         // archivedSegments は consumeFinalizedTranscript で読んだ後にクリアする

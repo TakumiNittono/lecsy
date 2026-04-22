@@ -132,8 +132,13 @@ final class LecsyAPIClient {
                     buffer.reserveCapacity(1024)
                     for try await byte in bytes {
                         buffer.append(byte)
-                        // Flush when we hit a newline or the buffer gets big enough.
-                        if byte == 0x0A || buffer.count >= 256 {
+                        // 体感遅延最小化: 旧しきい値 256 バイトは英語 60+ tokens 相当
+                        // (1 token ≈ 4 bytes) で first paint まで 2-4秒かかっていた。
+                        // 16 バイトまで下げて要約ボタン押下からほぼ即座に最初の文字が出る。
+                        // 下げすぎると SwiftUI 更新が嵩むので 16 が実用バランス。
+                        // UTF-8 の multibyte を跨いだ場合 String(bytes:encoding:) が nil を返す
+                        // ので、その時は buffer を flush せず次の byte まで待つ。
+                        if byte == 0x0A || buffer.count >= 16 {
                             if let chunk = String(bytes: buffer, encoding: .utf8) {
                                 continuation.yield(chunk)
                                 buffer.removeAll(keepingCapacity: true)

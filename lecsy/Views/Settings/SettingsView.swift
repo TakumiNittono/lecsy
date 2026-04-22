@@ -117,7 +117,9 @@ struct SettingsView: View {
 
                 // Transcription Method — Pro (org member) のみ override トグルを表示。
                 // Free プランは常にオンデバイス (WhisperKit) 固定なので何も出さない。
-                if planService.isPaid {
+                // 資格ベース(isProEntitled)で gate する。isPaid で gate すると、トグル ON で
+                // isPaid=false になり、セクション自体が消えて OFF に戻せなくなる。
+                if planService.isProEntitled {
                     Section {
                         HStack {
                             Image(systemName: "cpu")

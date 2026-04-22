@@ -407,27 +407,14 @@ class OrganizationService: ObservableObject {
     /// screen's class picker can show real classes.
     ///
     /// Skipped when `isDemoMode` is true (demo data owns `classes`).
+    ///
+    /// NOTE: 2026-04-07 migration `b2b_simplify` で `org_classes` テーブル自体が
+    /// 削除されたため、このメソッドは早期 return の no-op になっている。以前は
+    /// 毎回 404 notFound を Sentry warning に吐いていた。クラス機能を再導入する
+    /// なら migration で org_classes を復活 → ここで REST 再取得を有効化、の順で戻す。
     func loadRealClasses(orgId: String) async {
         guard !isDemoMode else { return }
-        do {
-            let rows = try await OrganizationAPI.shared.listClasses(orgId: orgId)
-            let orgUUID = UUID(uuidString: orgId) ?? UUID()
-            self.classes = rows.map { row in
-                OrganizationClass(
-                    id: UUID(uuidString: row.id) ?? UUID(),
-                    organizationId: orgUUID,
-                    name: row.name,
-                    language: TranscriptionLanguage(rawValue: row.language ?? "en") ?? .english,
-                    semester: row.semester ?? "",
-                    teacherId: row.teacher_id.flatMap { UUID(uuidString: $0) },
-                    studentIds: []
-                )
-            }
-            AppLogger.info("Loaded \(self.classes.count) org_classes for \(orgId)", category: .general)
-        } catch {
-            // Non-fatal: class picker just won't show entries.
-            AppLogger.warning("loadRealClasses failed: \(error)", category: .general)
-        }
+        self.classes = []
     }
 
     // MARK: - Usage Stats (Mock)

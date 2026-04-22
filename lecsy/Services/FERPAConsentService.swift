@@ -45,6 +45,13 @@ final class FERPAConsentService: ObservableObject {
     /// membership. If the server has no consent timestamp, flip
     /// `shouldPromptConsent` so the RecordView can present the sheet.
     func refreshConsentStatus(orgId: String) async {
+        #if DEBUG
+        // 開発ビルドでは同意シートを強制的に抑制。TestFlight / Release には効かない。
+        // 本番 B2B フローは `#else` のサーバ参照ロジックで従来通り動く。
+        shouldPromptConsent = false
+        pendingPromptOrgId = nil
+        return
+        #else
         // Fast path: local cache says we already consented.
         if hasConsentedLocally(orgId: orgId) {
             shouldPromptConsent = false
@@ -75,6 +82,7 @@ final class FERPAConsentService: ObservableObject {
             // The next sign-in / app launch will retry.
             AppLogger.warning("FERPA consent status fetch failed: \(error)", category: .general)
         }
+        #endif
     }
 
     /// Dismiss the consent sheet for the current app session without writing
@@ -119,7 +127,7 @@ final class FERPAConsentService: ObservableObject {
         struct Body: Encodable { let ferpa_consented_at: String }
         do {
             req.httpBody = try JSONEncoder().encode(Body(ferpa_consented_at: consentedAt))
-            let (_, resp) = try await URLSession.shared.data(for: req)
+            let (_, resp) = try await sendWithStaleSocketRetry(req)
             guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 AppLogger.warning("FERPA consent PATCH non-2xx response", category: .general)
                 return false
@@ -131,6 +139,21 @@ final class FERPAConsentService: ObservableObject {
         } catch {
             AppLogger.warning("FERPA consent PATCH failed: \(error)", category: .general)
             return false
+        }
+    }
+
+    /// iOS の QUIC/HTTP3 stale-socket (-1005 NetworkConnectionLost) を 1回だけ自動リトライ。
+    /// SupabaseClient.send の retry と同じポリシー。Apple 自身の推奨対処。
+    /// 本物の -1009 (NotConnectedToInternet) や -1001 (TimedOut) はリトライしない。
+    private func sendWithStaleSocketRetry(_ req: URLRequest) async throws -> (Data, URLResponse) {
+        do {
+            return try await URLSession.shared.data(for: req)
+        } catch let error as URLError where error.code == .networkConnectionLost {
+            AppLogger.warning(
+                "URLSession -1005 (stale socket) on FERPA PATCH — retrying once",
+                category: .general
+            )
+            return try await URLSession.shared.data(for: req)
         }
     }
 }

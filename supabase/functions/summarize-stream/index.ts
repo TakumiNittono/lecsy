@@ -24,6 +24,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createPreflightResponse, createErrorResponse, createJsonResponse } from "../_shared/cors.ts";
 import { getLimits, buildRateLimitBody } from "../_shared/campaign.ts";
 import { callOpenAIChat } from "../_shared/openai.ts";
+import { alert } from "../_shared/alert.ts";
 
 interface StreamRequest {
   content: string;
@@ -67,38 +68,45 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Rate limits (campaign-aware)
+    // Rate limits (campaign-aware) — daily / monthly を並列に取得して往復時間を半減。
+    // 旧実装は sequential で ~100-200ms かかっていた。
     const limits = getLimits();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const { count: dailyCount } = await serviceClient
-      .from("usage_logs")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .gte("created_at", today.toISOString());
-    if ((dailyCount || 0) >= limits.daily) {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const [dailyRes, monthlyRes] = await Promise.all([
+      serviceClient
+        .from("usage_logs")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", today.toISOString()),
+      serviceClient
+        .from("usage_logs")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", startOfMonth.toISOString()),
+    ]);
+    const dailyCount = dailyRes.count || 0;
+    const monthlyCount = monthlyRes.count || 0;
+
+    if (dailyCount >= limits.daily) {
       const resetAt = new Date(today);
       resetAt.setDate(resetAt.getDate() + 1);
       return createJsonResponse(
         req,
-        buildRateLimitBody("daily", limits.daily, dailyCount || 0, resetAt, limits),
+        buildRateLimitBody("daily", limits.daily, dailyCount, resetAt, limits),
         429,
       );
     }
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-    const { count: monthlyCount } = await serviceClient
-      .from("usage_logs")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .gte("created_at", startOfMonth.toISOString());
-    if ((monthlyCount || 0) >= limits.monthly) {
+    if (monthlyCount >= limits.monthly) {
       const resetAt = new Date(startOfMonth);
       resetAt.setMonth(resetAt.getMonth() + 1);
       return createJsonResponse(
         req,
-        buildRateLimitBody("monthly", limits.monthly, monthlyCount || 0, resetAt, limits),
+        buildRateLimitBody("monthly", limits.monthly, monthlyCount, resetAt, limits),
         429,
       );
     }
@@ -118,8 +126,8 @@ serve(async (req) => {
       body.content = body.content.slice(0, MAX_CONTENT_CHARS);
     }
 
-    const outputLanguage = body.output_language || "ja";
-    const langConfig = languageConfigs[outputLanguage] || languageConfigs["ja"];
+    const outputLanguage = body.output_language || "en";
+    const langConfig = languageConfigs[outputLanguage] || languageConfigs["en"];
 
     // Scale output by transcript length
     const wordCount = body.content.trim().split(/\s+/).length;
@@ -201,12 +209,19 @@ ${body.content}`;
       return createErrorResponse(req, `openai_api_error: ${openaiResp.status}`, 500);
     }
 
-    // Log usage up-front (fire and forget)
+    // Log usage up-front (fire and forget).
+    // usage_logs.action は CHECK 制約で ('summarize', 'exam_mode') のみ許容。
+    // 以前 'summarize_stream' を入れて CHECK 違反で silent drop → ダッシュボードの
+    // summaries_generated が常に 0 になっていた。レガシーと同じ 'summarize' に統一。
     serviceClient.from("usage_logs").insert({
       user_id: user.id,
-      action: "summarize_stream",
-    }).then(() => {}, (err: unknown) => {
-      console.error("usage_logs insert failed:", err);
+      action: "summarize",
+    }).then(({ error }: { error: unknown }) => {
+      if (error) {
+        console.error("usage_logs insert failed:", error);
+      }
+    }, (err: unknown) => {
+      console.error("usage_logs insert rejected:", err);
     });
 
     // Parse OpenAI's SSE stream and forward the delta text to the client.
@@ -260,6 +275,12 @@ ${body.content}`;
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     console.error("summarize-stream error:", msg);
+    await alert({
+      source: 'summarize-stream',
+      level: 'error',
+      message: `summarize_stream_failed: ${msg}`,
+      error,
+    });
     return createErrorResponse(req, `summarize_stream_failed: ${msg}`, 500);
   }
 });

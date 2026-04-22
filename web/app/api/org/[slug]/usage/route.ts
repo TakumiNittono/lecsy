@@ -34,10 +34,10 @@ export async function GET(
 
   const supabase = createAdminClient()
 
-  // Fan out: members / org-level AI logs / classes all only depend on orgId,
-  // so run them concurrently instead of serially before the userIds-gated
-  // second wave.
-  const [membersRes, orgAiLogsRes, classesRes] = await Promise.all([
+  // Fan out: members / org-level AI logs 併走。
+  // 以前は org_classes も並列取得していたが、2026-04-07 b2b_simplify で削除済。
+  // クラス機能自体が廃止なので classBreakdown は常に空配列で返す。
+  const [membersRes, orgAiLogsRes] = await Promise.all([
     // ferpa_consented_at lets the dashboard prove to a Dean / compliance
     // officer that students acknowledged the consent prompt before any
     // audio was streamed.
@@ -52,10 +52,6 @@ export async function GET(
       .eq('org_id', orgId)
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString()),
-    supabase
-      .from('org_classes')
-      .select('id, name, archived')
-      .eq('org_id', orgId),
   ])
 
   const { data: members, error: membersError } = membersRes
@@ -102,7 +98,7 @@ export async function GET(
     ),
     supabase
       .from('transcripts')
-      .select('user_id, duration, language, created_at, class_id')
+      .select('user_id, duration, language, created_at')
       .in('user_id', userIds)
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString()),
@@ -194,56 +190,16 @@ export async function GET(
     }
   })
 
-  // Per-class breakdown: group transcripts by class_id, skip nulls.
-  const classMap = new Map<string, { name: string; archived: boolean }>()
-  for (const row of classesRes.data || []) {
-    classMap.set(row.id, { name: row.name, archived: !!row.archived })
-  }
-
-  const classAgg = new Map<
-    string,
-    { recordings: number; total_duration: number; active_users: Set<string> }
-  >()
-  let unassignedRecordings = 0
-  let unassignedDuration = 0
-
-  for (const t of transcripts || []) {
-    if (!t.class_id) {
-      unassignedRecordings++
-      unassignedDuration += t.duration || 0
-      continue
-    }
-    let bucket = classAgg.get(t.class_id)
-    if (!bucket) {
-      bucket = { recordings: 0, total_duration: 0, active_users: new Set() }
-      classAgg.set(t.class_id, bucket)
-    }
-    bucket.recordings++
-    bucket.total_duration += t.duration || 0
-    bucket.active_users.add(t.user_id)
-  }
-
-  const classBreakdown = Array.from(classAgg.entries())
-    .map(([classId, agg]) => ({
-      class_id: classId,
-      name: classMap.get(classId)?.name || '(deleted class)',
-      archived: classMap.get(classId)?.archived || false,
-      recordings: agg.recordings,
-      total_duration: agg.total_duration,
-      active_users: agg.active_users.size,
-    }))
-    .sort((a, b) => b.recordings - a.recordings)
-
-  if (unassignedRecordings > 0) {
-    classBreakdown.push({
-      class_id: '',
-      name: 'Unassigned',
-      archived: false,
-      recordings: unassignedRecordings,
-      total_duration: unassignedDuration,
-      active_users: 0,
-    })
-  }
+  // Per-class breakdown は廃止 (org_classes / transcripts.class_id が b2b_simplify で削除済)。
+  // UI 側の互換維持のため空配列を返す — UsageStats は classes.length === 0 で section を隠す。
+  const classBreakdown: Array<{
+    class_id: string
+    name: string
+    archived: boolean
+    recordings: number
+    total_duration: number
+    active_users: number
+  }> = []
 
   const totalRecordings = membersList.reduce((s, m) => s + m.recordings, 0)
   const totalDuration = membersList.reduce((s, m) => s + m.total_duration, 0)
