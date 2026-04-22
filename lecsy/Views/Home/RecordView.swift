@@ -79,6 +79,24 @@ struct RecordView: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
+                // オフラインバナー (常時)。録音中でも待機中でも、cloud 機能がデグレしてる
+                // ことを控えめに伝える。録音自体はローカルで続行可能、復旧後に transcript upload。
+                if !liveCoordinator.isOnline {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 6, height: 6)
+                        Text("Offline — recording saves locally")
+                            .font(.caption2.weight(.medium))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.orange.opacity(0.08))
+                    .clipShape(Capsule())
+                    .transition(.opacity.combined(with: .scale))
+                }
+
                 // 再接続中バナー（ネット断・電話・background 復帰などで session 張り直し中）
                 if recordingService.isRecording && liveCoordinator.isReconnectingLive {
                     HStack(spacing: 8) {

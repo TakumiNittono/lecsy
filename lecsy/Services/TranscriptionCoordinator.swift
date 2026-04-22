@@ -46,7 +46,10 @@ final class TranscriptionCoordinator: ObservableObject {
     /// KeepAlive で維持できる範囲（5分）で保持する。期限超過は stale として再接続。
     private let preparedSessionMaxAge: TimeInterval = 5 * 60
     private var cancellables: Set<AnyCancellable> = []
-    private var isOnline: Bool = true
+    /// 公開: UI が小さなオフラインバナーを出すためのフラグ。
+    /// NWPathMonitor 経由で更新され、cloud 依存機能 (Deepgram live / 要約 / upload) が
+    /// 動かない時にユーザーに知らせる。
+    @Published private(set) var isOnline: Bool = true
     private let pathMonitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "lecsy.coordinator.network")
 
