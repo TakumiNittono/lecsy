@@ -542,8 +542,7 @@ struct LibraryView: View {
         recentlyDeletedLecture = lecture
         recentlyDeletedAudioURL = lecture.audioPath
 
-        store.lectures.removeAll { $0.id == lecture.id }
-        store.saveLectures()
+        store.softDeleteLecture(lecture)
 
         showUndoBanner = true
 

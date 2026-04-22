@@ -127,6 +127,16 @@ class LectureStore: ObservableObject {
         saveLectures()
     }
 
+    /// Soft-delete for the Library's undo flow: drop the lecture from the
+    /// published list + disk but keep the audio file intact so `addLecture`
+    /// can re-insert it if the user taps Undo. The caller (LibraryView)
+    /// removes the audio file only after the undo window elapses.
+    func softDeleteLecture(_ lecture: Lecture) {
+        allLectures.removeAll { $0.id == lecture.id }
+        republishForCurrentUser()
+        saveLectures()
+    }
+
     /// Get lecture by ID (scoped to currently-visible lectures; call sites that
     /// need cross-user access should be reviewed carefully — there are none today).
     func getLecture(by id: UUID) -> Lecture? {
