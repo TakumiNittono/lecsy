@@ -36,7 +36,72 @@ final class CloudSyncService: ObservableObject {
 
     private let api = LecsyAPIClient.shared
 
-    private init() {}
+    /// ネット復帰時に pending 再 upload をキックするための subscription。
+    private var networkRecoveryCancellable: AnyCancellable?
+
+    private init() {
+        observeNetworkRecovery()
+    }
+
+    /// TranscriptionCoordinator の `isOnline` を observe し、オフライン→オンラインの
+    /// 遷移で pending な lecture を flush する。
+    private func observeNetworkRecovery() {
+        networkRecoveryCancellable = TranscriptionCoordinator.shared.$isOnline
+            .removeDuplicates()
+            .filter { $0 }          // true (online) に遷移した時だけ
+            .dropFirst()            // 起動直後の初期値 true はスキップ
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    await self?.flushPendingUploads()
+                }
+            }
+    }
+
+    /// ネット復帰後の pending 再 upload。lectures.json の pendingCloudSync=true かつ
+    /// 現在のユーザーが所有する録音を対象に再送する。成功したら flag をクリア、失敗時は
+    /// 次の復帰契機を待つ (無限 loop しないよう 1 ラウンドだけ)。
+    func flushPendingUploads() async {
+        guard AuthService.shared.currentUser != nil else { return }
+        // LectureStore.lectures は既に currentUser スコープでフィルタされている。
+        let pending = LectureStore.shared.lectures.filter { $0.pendingCloudSync == true }
+        guard !pending.isEmpty else { return }
+
+        AppLogger.info("CloudSync: flushing \(pending.count) pending upload(s) after network recovery", category: .recording)
+        for lecture in pending {
+            let id = await uploadTranscriptIfEnabled(
+                clientId: lecture.id,
+                title: lecture.title,
+                content: lecture.transcriptText ?? "",
+                createdAt: lecture.createdAt,
+                durationSeconds: lecture.duration,
+                language: lecture.language.rawValue
+            )
+            if id != nil, var updated = LectureStore.shared.getLecture(by: lecture.id) {
+                updated.pendingCloudSync = false
+                LectureStore.shared.updateLecture(updated)
+            }
+            // 失敗時はそのまま (pendingCloudSync=true のまま置く) → 次のネット復帰で再試行
+        }
+    }
+
+    /// URLError / SupabaseError を見て、リトライしても意味がある "一時的な" エラーかを判定。
+    /// 400/403/422 など永続的なエラーはリトライしてもダメなのでキューに積まない。
+    private static func isRetryableNetworkError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost, .timedOut,
+                 .dnsLookupFailed, .cannotFindHost, .cannotConnectToHost,
+                 .secureConnectionFailed, .internationalRoamingOff:
+                return true
+            default:
+                return false
+            }
+        }
+        if case SupabaseError.server(_, let code) = error, (500...599).contains(code) {
+            return true
+        }
+        return false
+    }
 
     /// Whether the user has cloud sync enabled on this device.
     var isEnabled: Bool {
@@ -148,10 +213,25 @@ final class CloudSyncService: ObservableObject {
             } else {
                 detail = "save-transcript invoke failed: \(error)"
             }
-            AppLogger.error(
-                "Cloud sync upload failed (will retry on next save). \(detail)",
-                category: .recording
-            )
+
+            // リトライ可能な一時エラー (オフライン / timeout / 5xx) なら lecture に
+            // pendingCloudSync=true を立てて、ネット復帰時の flushPendingUploads() で
+            // 自動再送させる。永続エラー (400/403/422) は立てない (永久ループになるため)。
+            let retryable = Self.isRetryableNetworkError(error)
+            if retryable, let lectureID = clientId,
+               var lecture = LectureStore.shared.getLecture(by: lectureID) {
+                lecture.pendingCloudSync = true
+                LectureStore.shared.updateLecture(lecture)
+                AppLogger.warning(
+                    "Cloud sync upload failed (queued for retry on network recovery). \(detail)",
+                    category: .recording
+                )
+            } else {
+                AppLogger.error(
+                    "Cloud sync upload failed (not retryable, dropping). \(detail)",
+                    category: .recording
+                )
+            }
             // 型付き error を別チャンネルで capture。Sentry 上のスタック/ドメインが保持される。
             AppLogger.capture(error, category: .recording)
             return nil
