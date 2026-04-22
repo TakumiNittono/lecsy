@@ -278,6 +278,21 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
+                    // Audio retention — on-device .m4a files の自動削除。transcript は残す
+                    // ので「読み返せるが音声は聞けない」状態にすることでストレージ節約 +
+                    // 端末紛失時の露出縮小。デフォルト .forever = 変化なし。
+                    Picker("Delete audio after", selection: Binding(
+                        get: { RecordingRetention.current },
+                        set: { RecordingRetention.set($0) }
+                    )) {
+                        ForEach(RecordingRetention.allCases) { option in
+                            Text(option.displayName).tag(option)
+                        }
+                    }
+                    Text("Older audio files are removed from this device. Transcripts and summaries stay so you can still read them.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
                     if authService.isAuthenticated && cloudSyncEnabled {
                         Button {
                             Task {

@@ -8,6 +8,37 @@
 import Foundation
 import Combine
 
+/// 音声ファイル (.m4a) の自動削除設定。transcript text は残し、audio だけを N 日で消す。
+/// 既存ユーザーに影響しないようデフォルトは .forever。Settings Privacy セクションで選択。
+enum RecordingRetention: Int, CaseIterable, Identifiable {
+    case forever = 0
+    case days30 = 30
+    case days90 = 90
+    case days180 = 180
+
+    var id: Int { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .forever: return "Keep forever"
+        case .days30:  return "Delete audio after 30 days"
+        case .days90:  return "Delete audio after 90 days"
+        case .days180: return "Delete audio after 180 days"
+        }
+    }
+
+    static let userDefaultsKey = "lecsy.recordingRetentionDays"
+
+    static var current: RecordingRetention {
+        let raw = UserDefaults.standard.integer(forKey: userDefaultsKey)
+        return RecordingRetention(rawValue: raw) ?? .forever
+    }
+
+    static func set(_ retention: RecordingRetention) {
+        UserDefaults.standard.set(retention.rawValue, forKey: userDefaultsKey)
+    }
+}
+
 /// Lecture data management service
 @MainActor
 class LectureStore: ObservableObject {
@@ -74,6 +105,38 @@ class LectureStore: ObservableObject {
                     self?.republishForCurrentUser()
                 }
             }
+
+        // 音声ファイルの自動削除 (ユーザーが Settings で明示的に選んだ時のみ動作)。
+        // transcript は残し、.m4a ファイルだけ消すことで Library からは「音声再生不可」
+        // だが text は読み返せる状態にする。デフォルト .forever は no-op。
+        purgeExpiredAudioIfNeeded()
+    }
+
+    /// Settings の RecordingRetention 設定に従って、古い録音の audio ファイルだけを削除する。
+    /// transcript / bookmarks / cachedSummary など metadata は残す。
+    private func purgeExpiredAudioIfNeeded() {
+        let retention = RecordingRetention.current
+        guard retention != .forever else { return }
+        let cutoff = Date().addingTimeInterval(-TimeInterval(retention.rawValue) * 86400)
+
+        var changed = 0
+        for index in allLectures.indices {
+            let lecture = allLectures[index]
+            guard lecture.createdAt < cutoff,
+                  let audioURL = lecture.audioPath,
+                  FileManager.default.fileExists(atPath: audioURL.path) else { continue }
+            try? FileManager.default.removeItem(at: audioURL)
+            // audioFileName を nil にして「audio ファイル無し」として扱う
+            var updated = lecture
+            updated.audioFileName = nil
+            allLectures[index] = updated
+            changed += 1
+        }
+        if changed > 0 {
+            republishForCurrentUser()
+            saveLectures()
+            AppLogger.info("Retention sweep: purged audio files for \(changed) lecture(s) older than \(retention.rawValue) days", category: .storage)
+        }
     }
 
     /// 現在サインインしているユーザーのスコープに合わせて `lectures` (public) を再計算する。
