@@ -2,13 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-const STORAGE_KEY = 'mv3:pin'
+const STORAGE_KEY = 'mp3:pin'
 const EXPECTED_PIN = '0816'
 
-export default function Mv3Page() {
+export default function Mp3Page() {
   const [unlocked, setUnlocked] = useState(false)
-  const [pinInput, setPinInput] = useState('')
-  const [pinError, setPinError] = useState(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -17,28 +15,12 @@ export default function Mv3Page() {
     }
   }, [])
 
-  function tryUnlock(value: string) {
-    if (value === EXPECTED_PIN) {
-      sessionStorage.setItem(STORAGE_KEY, EXPECTED_PIN)
-      setUnlocked(true)
-      setPinError(false)
-    } else {
-      setPinError(true)
-      setTimeout(() => {
-        setPinInput('')
-        setPinError(false)
-      }, 700)
-    }
-  }
-
   if (!unlocked) {
     return (
       <LockScreen
-        value={pinInput}
-        error={pinError}
-        onChange={(v) => {
-          setPinInput(v)
-          if (v.length === 4) tryUnlock(v)
+        onUnlock={() => {
+          sessionStorage.setItem(STORAGE_KEY, EXPECTED_PIN)
+          setUnlocked(true)
         }}
       />
     )
@@ -47,20 +29,27 @@ export default function Mv3Page() {
   return <Workspace />
 }
 
-function LockScreen({
-  value,
-  error,
-  onChange,
-}: {
-  value: string
-  error: boolean
-  onChange: (v: string) => void
-}) {
+function LockScreen({ onUnlock }: { onUnlock: () => void }) {
+  const [value, setValue] = useState('')
+  const [error, setError] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
+
+  function submit(v: string) {
+    if (v === EXPECTED_PIN) {
+      onUnlock()
+    } else {
+      setError(true)
+      setTimeout(() => {
+        setValue('')
+        setError(false)
+        inputRef.current?.focus()
+      }, 700)
+    }
+  }
 
   return (
     <main className="min-h-screen bg-white flex flex-col items-center justify-center px-6">
@@ -74,40 +63,44 @@ function LockScreen({
         <h1 className="text-xl font-semibold text-neutral-900 tracking-tight">パスコードを入力</h1>
         <p className="text-sm text-neutral-500 mt-2">4桁の数字を入れてください</p>
 
-        <div className={`mt-8 flex gap-3 ${error ? 'animate-shake' : ''}`}>
-          {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className={`w-3.5 h-3.5 rounded-full border ${
-                value.length > i
-                  ? error
-                    ? 'bg-red-500 border-red-500'
-                    : 'bg-neutral-900 border-neutral-900'
-                  : 'border-neutral-300'
-              }`}
-            />
-          ))}
-        </div>
-
-        <input
-          ref={inputRef}
-          type="tel"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={4}
-          value={value}
-          onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 4))}
-          className="absolute opacity-0 pointer-events-none"
-          aria-label="パスコード"
-        />
-
-        <button
-          type="button"
-          onClick={() => inputRef.current?.focus()}
-          className="mt-10 text-sm text-neutral-500 underline underline-offset-4"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (value.length === 4) submit(value)
+          }}
+          className={`mt-8 w-full ${error ? 'animate-shake' : ''}`}
         >
-          数字を入力するにはここをタップ
-        </button>
+          <input
+            ref={inputRef}
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={4}
+            value={value}
+            onChange={(e) => {
+              const v = e.target.value.replace(/\D/g, '').slice(0, 4)
+              setValue(v)
+              setError(false)
+              if (v.length === 4) submit(v)
+            }}
+            className={`w-full text-center text-3xl tracking-[0.6em] py-4 rounded-2xl border ${
+              error ? 'border-red-400 text-red-500' : 'border-neutral-300 text-neutral-900'
+            } focus:outline-none focus:ring-2 focus:ring-neutral-900/30 bg-neutral-50`}
+            aria-label="パスコード"
+            autoFocus
+          />
+          <button
+            type="submit"
+            disabled={value.length !== 4}
+            className="mt-4 w-full rounded-full bg-neutral-900 text-white text-base font-medium py-3 disabled:bg-neutral-300"
+          >
+            開く
+          </button>
+        </form>
+
+        {error && (
+          <p className="mt-4 text-sm text-red-600">パスコードが違います</p>
+        )}
       </div>
 
       <style jsx>{`
@@ -130,6 +123,7 @@ function Workspace() {
   const [transcript, setTranscript] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [copied, setCopied] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function handleTranscribe() {
@@ -186,7 +180,7 @@ function Workspace() {
       setCopied(true)
       setTimeout(() => setCopied(false), 1800)
     } catch {
-      setErrorMsg('コピーに失敗しました。テキストを長押しでコピーしてください。')
+      setErrorMsg('コピーに失敗しました。テキストを選択してコピーしてください。')
     }
   }
 
@@ -198,21 +192,36 @@ function Workspace() {
     if (fileRef.current) fileRef.current.value = ''
   }
 
+  function pickFile(f: File | null) {
+    if (!f) return
+    setFile(f)
+    setErrorMsg('')
+  }
+
   return (
     <main className="min-h-screen bg-white">
-      <div className="max-w-2xl mx-auto px-5 pt-12 pb-24">
+      <div className="max-w-2xl mx-auto px-6 pt-16 pb-24">
         <header className="mb-10">
           <h1 className="text-3xl font-semibold text-neutral-900 tracking-tight">MP3 文字起こし</h1>
           <p className="mt-2 text-neutral-500 text-sm">
-            音声ファイル（MP3 / M4A / WAV）を選んでください。
+            MP3 ファイルを選んで「文字起こしをはじめる」を押してください。
           </p>
         </header>
 
         {status !== 'done' && (
           <section>
             <label
-              htmlFor="mv3-file"
-              className="block w-full rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 hover:bg-neutral-100 transition-colors cursor-pointer p-10 text-center"
+              htmlFor="mp3-file"
+              onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragging(false)
+                pickFile(e.dataTransfer.files?.[0] ?? null)
+              }}
+              className={`block w-full rounded-3xl border border-dashed transition-colors cursor-pointer p-12 text-center ${
+                dragging ? 'border-neutral-900 bg-neutral-100' : 'border-neutral-300 bg-neutral-50 hover:bg-neutral-100'
+              }`}
             >
               <div className="w-14 h-14 mx-auto rounded-full bg-white border border-neutral-200 flex items-center justify-center">
                 <svg className="w-6 h-6 text-neutral-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -221,22 +230,18 @@ function Workspace() {
                 </svg>
               </div>
               <p className="mt-4 text-neutral-900 font-medium">
-                {file ? file.name : 'タップしてファイルを選ぶ'}
+                {file ? file.name : 'ここにドラッグ、またはクリックして MP3 を選ぶ'}
               </p>
               <p className="mt-1 text-xs text-neutral-500">
-                {file ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : '長すぎる音声は分けてください'}
+                {file ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : 'MP3 / M4A / WAV に対応'}
               </p>
               <input
-                id="mv3-file"
+                id="mp3-file"
                 ref={fileRef}
                 type="file"
                 accept="audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/wav,audio/x-wav,.mp3,.m4a,.wav"
                 className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] || null
-                  setFile(f)
-                  setErrorMsg('')
-                }}
+                onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
               />
             </label>
 
@@ -272,18 +277,18 @@ function Workspace() {
               />
             </div>
 
-            <div className="mt-6 flex flex-col gap-3">
+            <div className="mt-6 flex gap-3">
               <button
                 type="button"
                 onClick={handleCopy}
-                className="w-full rounded-full bg-neutral-900 text-white text-base font-medium py-4"
+                className="flex-1 rounded-full bg-neutral-900 text-white text-base font-medium py-4"
               >
                 {copied ? 'コピーしました' : 'すべてコピー'}
               </button>
               <button
                 type="button"
                 onClick={reset}
-                className="w-full rounded-full border border-neutral-300 bg-white text-neutral-900 text-base font-medium py-4"
+                className="flex-1 rounded-full border border-neutral-300 bg-white text-neutral-900 text-base font-medium py-4"
               >
                 別のファイルを選ぶ
               </button>

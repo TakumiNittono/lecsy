@@ -5,6 +5,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
-export default function Mv3Layout({ children }: { children: React.ReactNode }) {
+export default function Mp3Layout({ children }: { children: React.ReactNode }) {
   return children
 }
