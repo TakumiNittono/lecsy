@@ -56,6 +56,7 @@ export async function updateSession(request: NextRequest) {
     '/manifest.webmanifest',
     '/manifest.json',
     '/sw.js',
+    '/mv3',  // 母用 MP3 文字起こしページ (PINゲート)
   ])
   // /login は publicPages 扱いだが、既ログインユーザーは /app (or ?redirectTo=...)
   // に即リダイレクトする。以前は LoginForm 側の useEffect で Supabase Client を
