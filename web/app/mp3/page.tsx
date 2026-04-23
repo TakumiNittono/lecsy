@@ -1,19 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import * as tus from 'tus-js-client'
 
 const STORAGE_KEY = 'mp3:pin'
 const EXPECTED_PIN = '0816'
-// Supabase Free プランのプロジェクト上限が 50MB。
-// Pro アップグレードすれば bucket 上限の 500MB まで開ける (bucket 側は既に 500MB 設定)。
-const MAX_BYTES = 50 * 1024 * 1024 // 50MB — 現在のプラン上限
-
-function sanitizeExt(filename: string): string {
-  const m = /\.([A-Za-z0-9]{1,5})$/.exec(filename)
-  const ext = (m?.[1] ?? 'mp3').toLowerCase()
-  return new Set(['mp3', 'm4a', 'mp4', 'wav']).has(ext) ? ext : 'mp3'
-}
+// Edge Function にストリーミング pass-through する。保存しないので
+// 実質の上限は Supabase Edge Function のリクエストボディ枠 (〜数百MB) と
+// 回線帯域のみ。2時間講義 (〜115MB) を想定して 300MB を警告ラインに。
+const MAX_BYTES = 300 * 1024 * 1024
 
 export default function Mp3Page() {
   const [unlocked, setUnlocked] = useState(false)
@@ -148,7 +142,7 @@ function Workspace() {
   async function handleTranscribe() {
     if (!file) return
     if (file.size > MAX_BYTES) {
-      setErrorMsg(`ファイルが大きすぎます (上限 50MB)。現在 ${(file.size / (1024 * 1024)).toFixed(0)}MB。iPhoneボイスメモなら「設定 > ボイスメモ > 音声品質 = 低品質」にすると2時間でも収まります。`)
+      setErrorMsg(`ファイルが大きすぎます (上限 300MB)。現在 ${(file.size / (1024 * 1024)).toFixed(0)}MB`)
       setPhase('error')
       return
     }
@@ -160,79 +154,69 @@ function Workspace() {
     setPhase('uploading')
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (!supabaseUrl || !anonKey) {
-      setErrorMsg('設定エラー: Supabase 環境変数が未設定です。')
+    if (!supabaseUrl) {
+      setErrorMsg('設定エラー: SUPABASE URL が未設定です。')
       setPhase('error')
       return
     }
 
-    const ext = sanitizeExt(file.name)
-    const path = `uploads/${crypto.randomUUID()}.${ext}`
+    const endpoint = `${supabaseUrl}/functions/v1/mv3-transcribe?language=ja`
+    const start = Date.now()
 
     try {
-      // TUS レジューマブルアップロード
-      // (標準 PUT は platform 上限 50MB。2 時間級 MP3 を通すためレジューマブル必須)
-      await new Promise<void>((resolve, reject) => {
-        const upload = new tus.Upload(file, {
-          endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
-          retryDelays: [0, 3000, 5000, 10000, 20000],
-          headers: {
-            authorization: `Bearer ${anonKey}`,
-          },
-          uploadDataDuringCreation: true,
-          removeFingerprintOnSuccess: true,
-          metadata: {
-            bucketName: 'mv3-uploads',
-            objectName: path,
-            contentType: file.type || 'audio/mpeg',
-            cacheControl: '3600',
-          },
-          chunkSize: 6 * 1024 * 1024,
-          onError: (err) => {
-            reject(new Error(err?.message || 'アップロードに失敗しました'))
-          },
-          onProgress: (bytesUploaded, bytesTotal) => {
-            setUploadPct(Math.round((bytesUploaded / bytesTotal) * 100))
-          },
-          onSuccess: () => resolve(),
-        })
-        upload.start()
+      // 音声を Edge Function に直接 POST。Edge Function は Deepgram へ
+      // ストリーミング pass-through するだけで、ファイルは保存しない。
+      // XHR は upload 進捗を取れる。upload 完了後は Deepgram 処理待ち (経過時間表示)。
+      const transcript = await new Promise<string>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', endpoint)
+        xhr.setRequestHeader('x-mv3-pin', EXPECTED_PIN)
+        xhr.setRequestHeader('Content-Type', file.type || 'audio/mpeg')
+        xhr.timeout = 10 * 60 * 1000
+
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) {
+            setUploadPct(Math.round((ev.loaded / ev.total) * 100))
+          }
+        }
+        xhr.upload.onload = () => {
+          // アップロード完了 → Deepgram 処理フェーズへ
+          setPhase('transcribing')
+          timerRef.current = setInterval(() => {
+            setTranscribeElapsed(Math.floor((Date.now() - start) / 1000))
+          }, 1000)
+        }
+        xhr.onload = () => {
+          if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const j = JSON.parse(xhr.responseText || '{}')
+              resolve((j.transcript || '').trim())
+            } catch {
+              reject(new Error('レスポンス解析に失敗しました'))
+            }
+            return
+          }
+          let msg = `エラー (${xhr.status})`
+          try {
+            const j = JSON.parse(xhr.responseText || '{}')
+            if (j.error === 'unauthorized') msg = 'パスコードが間違っています。'
+            else if (j.error === 'deepgram_failed') msg = `音声の処理に失敗しました (${j.status})。`
+            else if (j.error) msg = j.error
+          } catch { /* ignore */ }
+          reject(new Error(msg))
+        }
+        xhr.onerror = () => reject(new Error('ネットワーク障害でアップロードできませんでした。'))
+        xhr.ontimeout = () => reject(new Error('処理に時間がかかりすぎました。短い音声でお試しください。'))
+        xhr.send(file)
       })
 
-      // 3) 文字起こし実行
-      setPhase('transcribing')
-      const start = Date.now()
-      timerRef.current = setInterval(() => {
-        setTranscribeElapsed(Math.floor((Date.now() - start) / 1000))
-      }, 1000)
-
-      const tRes = await fetch(`${supabaseUrl}/functions/v1/mv3-transcribe`, {
-        method: 'POST',
-        headers: {
-          'x-mv3-pin': EXPECTED_PIN,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ path, language: 'ja' }),
-      })
-      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
-
-      if (!tRes.ok) {
-        const j = await tRes.json().catch(() => ({} as any))
-        throw new Error(
-          j?.error === 'unauthorized' ? 'パスコードが間違っています。' :
-          j?.error === 'deepgram_failed' ? `音声の処理に失敗しました (${j.status})。` :
-          j?.error || `エラー (${tRes.status})`
-        )
-      }
-      const tJson = await tRes.json()
-      const text = (tJson?.transcript || '').trim()
-      if (!text) {
+      if (!transcript) {
         setErrorMsg('文字起こし結果が空でした。音声を確認してください。')
         setPhase('error')
         return
       }
-      setTranscript(text)
+      setTranscript(transcript)
       setPhase('done')
     } catch (e: any) {
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
@@ -277,8 +261,7 @@ function Workspace() {
         <header className="mb-10">
           <h1 className="text-3xl font-semibold text-neutral-900 tracking-tight">MP3 文字起こし</h1>
           <p className="mt-2 text-neutral-500 text-sm">
-            MP3 ファイルを選んで「文字起こしをはじめる」を押してください。最大 50MB まで対応。<br/>
-            <span className="text-xs text-neutral-400">iPhoneボイスメモの場合、「設定 &gt; ボイスメモ &gt; 音声品質 = 低品質」にすると2時間の講義も収まります。</span>
+            MP3 ファイルを選んで「文字起こしをはじめる」を押してください。2時間の長い講義もそのまま入れて大丈夫です。
           </p>
         </header>
 
@@ -310,7 +293,7 @@ function Workspace() {
                 {file ? file.name : 'ここにドラッグ、またはクリックして MP3 を選ぶ'}
               </p>
               <p className="mt-1 text-xs text-neutral-500">
-                {file ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : 'MP3 / M4A / WAV に対応 (最大 50MB)'}
+                {file ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : 'MP3 / M4A / WAV に対応'}
               </p>
               <input
                 id="mp3-file"
