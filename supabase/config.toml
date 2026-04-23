@@ -100,3 +100,6 @@ verify_jwt = false
 # 母用 MP3 文字起こし (PINゲートで保護、JWT不要)
 [functions.mv3-transcribe]
 verify_jwt = false
+
+[functions.mv3-sign-upload]
+verify_jwt = false
