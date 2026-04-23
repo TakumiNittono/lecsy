@@ -1,10 +1,19 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import * as tus from 'tus-js-client'
 
 const STORAGE_KEY = 'mp3:pin'
 const EXPECTED_PIN = '0816'
-const MAX_BYTES = 500 * 1024 * 1024 // 500MB (bucket file_size_limit と合わせる)
+// Supabase Free プランのプロジェクト上限が 50MB。
+// Pro アップグレードすれば bucket 上限の 500MB まで開ける (bucket 側は既に 500MB 設定)。
+const MAX_BYTES = 50 * 1024 * 1024 // 50MB — 現在のプラン上限
+
+function sanitizeExt(filename: string): string {
+  const m = /\.([A-Za-z0-9]{1,5})$/.exec(filename)
+  const ext = (m?.[1] ?? 'mp3').toLowerCase()
+  return new Set(['mp3', 'm4a', 'mp4', 'wav']).has(ext) ? ext : 'mp3'
+}
 
 export default function Mp3Page() {
   const [unlocked, setUnlocked] = useState(false)
@@ -139,7 +148,7 @@ function Workspace() {
   async function handleTranscribe() {
     if (!file) return
     if (file.size > MAX_BYTES) {
-      setErrorMsg(`ファイルが大きすぎます (上限 500MB)。現在 ${(file.size / (1024 * 1024)).toFixed(0)}MB`)
+      setErrorMsg(`ファイルが大きすぎます (上限 50MB)。現在 ${(file.size / (1024 * 1024)).toFixed(0)}MB。iPhoneボイスメモなら「設定 > ボイスメモ > 音声品質 = 低品質」にすると2時間でも収まります。`)
       setPhase('error')
       return
     }
@@ -151,49 +160,44 @@ function Workspace() {
     setPhase('uploading')
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    if (!supabaseUrl) {
-      setErrorMsg('設定エラー: SUPABASE URL が未設定です。')
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!supabaseUrl || !anonKey) {
+      setErrorMsg('設定エラー: Supabase 環境変数が未設定です。')
       setPhase('error')
       return
     }
 
-    try {
-      // 1) 署名付きアップロード URL を取得
-      const signRes = await fetch(`${supabaseUrl}/functions/v1/mv3-sign-upload`, {
-        method: 'POST',
-        headers: {
-          'x-mv3-pin': EXPECTED_PIN,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ filename: file.name }),
-      })
-      if (!signRes.ok) {
-        const j = await signRes.json().catch(() => ({} as any))
-        throw new Error(
-          j?.error === 'unauthorized' ? 'パスコードが間違っています。' :
-          j?.error || `アップロード準備に失敗しました (${signRes.status})`
-        )
-      }
-      const { path, signedUrl } = await signRes.json()
-      if (!path || !signedUrl) throw new Error('アップロード URL の取得に失敗しました。')
+    const ext = sanitizeExt(file.name)
+    const path = `uploads/${crypto.randomUUID()}.${ext}`
 
-      // 2) ブラウザから Supabase Storage に直接 PUT (進捗表示)
+    try {
+      // TUS レジューマブルアップロード
+      // (標準 PUT は platform 上限 50MB。2 時間級 MP3 を通すためレジューマブル必須)
       await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest()
-        xhr.open('PUT', signedUrl)
-        xhr.setRequestHeader('Content-Type', file.type || 'audio/mpeg')
-        xhr.setRequestHeader('x-upsert', 'true')
-        xhr.upload.onprogress = (ev) => {
-          if (ev.lengthComputable) {
-            setUploadPct(Math.round((ev.loaded / ev.total) * 100))
-          }
-        }
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) resolve()
-          else reject(new Error(`アップロードに失敗しました (${xhr.status})`))
-        }
-        xhr.onerror = () => reject(new Error('ネットワーク障害でアップロードできませんでした。'))
-        xhr.send(file)
+        const upload = new tus.Upload(file, {
+          endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          headers: {
+            authorization: `Bearer ${anonKey}`,
+          },
+          uploadDataDuringCreation: true,
+          removeFingerprintOnSuccess: true,
+          metadata: {
+            bucketName: 'mv3-uploads',
+            objectName: path,
+            contentType: file.type || 'audio/mpeg',
+            cacheControl: '3600',
+          },
+          chunkSize: 6 * 1024 * 1024,
+          onError: (err) => {
+            reject(new Error(err?.message || 'アップロードに失敗しました'))
+          },
+          onProgress: (bytesUploaded, bytesTotal) => {
+            setUploadPct(Math.round((bytesUploaded / bytesTotal) * 100))
+          },
+          onSuccess: () => resolve(),
+        })
+        upload.start()
       })
 
       // 3) 文字起こし実行
@@ -273,7 +277,8 @@ function Workspace() {
         <header className="mb-10">
           <h1 className="text-3xl font-semibold text-neutral-900 tracking-tight">MP3 文字起こし</h1>
           <p className="mt-2 text-neutral-500 text-sm">
-            MP3 ファイルを選んで「文字起こしをはじめる」を押してください。2時間の長い講義もそのまま入れて大丈夫です。
+            MP3 ファイルを選んで「文字起こしをはじめる」を押してください。最大 50MB まで対応。<br/>
+            <span className="text-xs text-neutral-400">iPhoneボイスメモの場合、「設定 &gt; ボイスメモ &gt; 音声品質 = 低品質」にすると2時間の講義も収まります。</span>
           </p>
         </header>
 
@@ -305,7 +310,7 @@ function Workspace() {
                 {file ? file.name : 'ここにドラッグ、またはクリックして MP3 を選ぶ'}
               </p>
               <p className="mt-1 text-xs text-neutral-500">
-                {file ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : 'MP3 / M4A / WAV に対応 (最大 500MB)'}
+                {file ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : 'MP3 / M4A / WAV に対応 (最大 50MB)'}
               </p>
               <input
                 id="mp3-file"
