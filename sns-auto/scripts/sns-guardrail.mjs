@@ -19,22 +19,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VAULT = path.resolve(__dirname, "../../_Vault");
 
 const NG_KEYWORDS = [
-  // 本名 / 身上 (memory: feedback_no_real_name)
+  // 自社製品言及 (AI account で Lecsy は隠す、memory: feedback_lecsy_stealth)
+  "Lecsy", "lecsy", "lecsy.app", "講義AI", "講義 AI",
+  // 本名 / 身上
   "Nittono", "新藤", "ニットノ",
-  // 肩書き claim (6/1 ローンチ前禁止、memory: feedback_no_founder_claim)
+  // 肩書き claim (6/1 ローンチ前禁止)
   "Founder", "Founded", "CEO",
   // 完了形 overclaim
   "を launch", "をローンチした", "sold to", "built a company", "を達成した",
-  // 競合攻撃 (Otter を叩くのは長期的に負け)
+  // 競合攻撃
   "Otter は", "Notta は", "CLOVA は",
   // 政治
   "Trump", "Biden", "自民党", "立憲",
   // 炎上系 fire take
   "クソ", "ゴミ", "バカ", "アホ", "死ね", "殺", "終わってる",
-  // 誇大表現 (voice で嫌う + 自分も書かない)
-  "業界No.1", "業界最安", "最速の", "唯一無二", "業界初", "革新的", "シームレス",
-  // 未確認誇張
-  "すべての学生が", "全員が", "100%",
+  // 煽り加担 (voice で嫌う + 自分も書かない)
+  "業界No.1", "業界最安", "最速の", "唯一無二", "業界初", "革新的", "シームレス", "AGI", "revolutionary", "AI-powered",
+  // 一般化
+  "すべての学生が", "全員が", "みんなが", "100%",
+  // 体感
+  "たぶん", "おそらく", "体感",
 ];
 
 const NG_CLAIMS = [
@@ -65,6 +69,22 @@ function countEach(text, pattern) {
   return m ? m.length : 0;
 }
 
+function xWeightedLength(text) {
+  // X のカウント規則:
+  // - ASCII は 1 unit/char
+  // - 非 ASCII (CJK, emoji 等) は 2 unit/char
+  // - URL は 23 units fixed
+  let t = text;
+  const urls = t.match(/https?:\/\/[^\s]+/g) || [];
+  let urlWeight = urls.length * 23;
+  for (const u of urls) t = t.split(u).join("");
+  let weight = 0;
+  for (const ch of t) {
+    weight += ch.codePointAt(0) < 128 ? 1 : 2;
+  }
+  return weight + urlWeight;
+}
+
 function checkOneText(text, { platform, sourceContent }) {
   const reasons = [];
   if (!text || text.trim().length === 0) {
@@ -72,10 +92,11 @@ function checkOneText(text, { platform, sourceContent }) {
     return reasons;
   }
 
-  const len = [...text].length;
+  const urls = text.match(/https?:\/\/[^\s]+/g) || [];
   const maxLen = platform === "LI" ? MAX_LI_LEN : MAX_X_SINGLE;
-  if (len > maxLen) reasons.push(`length ${len} > ${maxLen}`);
-  if (len < 20) reasons.push(`length ${len} < 20 (too short)`);
+  const effectiveLen = platform === "LI" ? [...text].length : xWeightedLength(text);
+  if (effectiveLen > maxLen) reasons.push(`length ${effectiveLen} (X-weighted) > ${maxLen}`);
+  if (effectiveLen < 20) reasons.push(`length ${effectiveLen} < 20 (too short)`);
 
   for (const kw of NG_KEYWORDS) {
     if (text.includes(kw)) reasons.push(`NG keyword: "${kw}"`);
@@ -90,8 +111,8 @@ function checkOneText(text, { platform, sourceContent }) {
   const hashtags = countEach(text, /(^|\s)#[^\s#]+/g);
   if (hashtags > MAX_HASHTAGS) reasons.push(`hashtags: ${hashtags} > ${MAX_HASHTAGS}`);
 
-  const urls = countEach(text, /https?:\/\/[^\s]+/g);
-  if (urls > MAX_URLS) reasons.push(`urls: ${urls} > ${MAX_URLS}`);
+  const urlCount = urls.length;
+  if (urlCount > MAX_URLS) reasons.push(`urls: ${urlCount} > ${MAX_URLS}`);
 
   // ファクトチェック: 数字クレームが sourceContent に存在するか
   if (sourceContent) {

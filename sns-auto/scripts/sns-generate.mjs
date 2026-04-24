@@ -72,31 +72,44 @@ function findByName(dir, name) {
 }
 
 function buildSystemPrompt(tone, ch, lang) {
-  const charBudget = ch === "LI" ? "2000-2500 字 (LinkedIn)" : "140-280 字 x 1-5 投稿 (X)";
+  const charBudget = ch === "LI"
+    ? "2000-2500 字 (LinkedIn)"
+    : `**日本語 1 字 = X の 2 unit**。URL は 23 unit 固定。上限 280 units。
+
+単発 (mode: single): **本文 日本語 100 字以内** + URL 1 つ。これを超える内容は thread にする。
+
+thread 推奨 (内容が重い時): 3 ツイ、各 90 字以内 日本語 + 最後のツイに URL。
+- 1/3: Q + 背景 1 行
+- 2/3: A (要点 + 数字)
+- 3/3: 比較 + taste + URL`;
   const platformRule = ch === "LI"
-    ? "LinkedIn: Q → A (3 点) → taste 閉じ"
+    ? "LinkedIn: Q → A (3 点) → taste 閉じ → 出典 URL"
     : "X: 単発なら 140-280 字 1 ツイ。スレッドなら 3-5 ツイ、ツイ間は '---' で区切る";
-  return `あなたは @takumi_global の代筆者です。この account は「5 つの問いに答える value-first account」で、fans は Voice (taste) にしか付かない。
+  return `あなたは @takumi_global の代筆者です。この account は **「AI 業界の最新発表を builder 視点で読む」** account。fans は Voice (taste) にしか付かない。
 
 # 答える 5 問 (この派生だけ書く)
-1. Deepgram と WhisperKit、どう使い分ける？
-2. iOS でリアルタイム音声処理、どこで落とす？
-3. AI × 教育プロダクトのユニットエコノミクスは？
-4. 米国の語学学校にどう売り込む？
-5. OPT 1 年で技術者が LLC 立てるなら何をいつやる？
+1. 新モデル / API、既存と何が違う？ (ベンチマーク + 価格 + 実装影響)
+2. 新 AI ツール、どのユースケースに効く？ (使用レイヤー判定)
+3. API の価格・レート・機能、どう選ぶ？ (選定判断)
+4. 論文/研究、個人開発者が使える部分は？ (抽出)
+5. 業界の動き、builder はどう読む？ (メタ解釈)
 
 # tone
 ${tone}
 
-# 必須構造 (全投稿)
-Q: [問い]
+# 必須構造
 
+## 単発 (日本語 100 字以内)
+Q: [ニュース 1 文]
 A:
-• [要点 1 + 実測数字]
-• [要点 2 + 選択肢 / 代替案]
-• [要点 3 + 具体手順 or 次アクション]
+• [数字 1 つ]
+• [実装判断 or 比較]
+[出典: URL]
 
-[最後 1 行の taste: 断定 / NG 提示 / AI slop 翻訳 いずれか]
+## スレッド (3 ツイ、各 90 字以内日本語 + URL は最後のみ)
+1/3: Q + 背景 1 行
+2/3: A 要点 + 数字
+3/3: taste 1 行 + 出典 URL
 
 # プラットフォーム規則
 ${platformRule}
@@ -104,17 +117,20 @@ ${platformRule}
 言語: ${lang === "en" ? "英語" : "日本語"}
 
 # 絶対ルール (違反は即却下)
-- sourceNote に書いてある事実 (数字・固有名詞・社名・人名・日付) 以外を使わない
+- sourceContent に書いてある事実 (数字・固有名詞・社名・人名・日付) 以外を使わない
 - **数字は source と exact match**。四捨五入・近似・概算・桁変更禁止
-  (source に "56%" とあれば "56%" と書く。"57%" "約 56%" "60%" 全部 NG)
-- 推測や一般論で数字を作らない
+- 出典 URL を必ず本文に含める (voice の核)
+- 推測や一般論で数字を作らない。source に数字がなければ数字を書かない
+- **自社製品 (Lecsy / lecsy / 講義AI) を本文で言及しない** (bio 例外)
 - 本名 (Nittono/新藤/ニットノ) 禁止
 - 肩書き (Founder/CEO/Founded) 禁止
 - 完了形 overclaim (launched/sold to/built a company/達成した) 禁止
 - 自分語り (「今日」「今週」「俺が」「自分の進捗」で始まらない)
 - @メンション / ハッシュタグ 禁止
 - 絵文字は最大 1 個
-- 誇大表現 (業界初/最速/唯一無二/シームレス/革新的) 禁止
+- 煽り加担禁止 (業界初/最速/唯一無二/シームレス/革新的/AGI/revolutionary/AI-powered)
+- 一般化禁止 (すべての/みんな/全員が/100%)
+- 体感禁止 (たぶん/おそらく/体感)
 - 1 投稿 1 メッセージ
 
 # 出力フォーマット (JSON のみ、前後に文章を付けない)
@@ -127,14 +143,38 @@ ${platformRule}
 }
 
 function buildUserPrompt(cand, sourceContent) {
+  if (cand.sourceUrl) {
+    // AI news item mode (Daily.md から)
+    return `# 今日の AI ニュース item で投稿を書いてください
+
+- id: ${cand.id}
+- source: ${cand.source || "(unknown)"}
+- タイトル: ${cand.title || ""}
+- 公開日: ${cand.published || "(unknown)"}
+- 出典 URL: ${cand.sourceUrl}
+
+# サマリ (source 由来、これ以外の事実は使わない)
+
+\`\`\`
+${sourceContent.slice(0, 4000)}
+\`\`\`
+
+# 要件
+- Q+A 構造、出典 URL を必ず本文に
+- 数字は上記サマリにある物のみ、無ければ数字を書かない
+- builder (個人開発者) が「自分のプロジェクトに持ち帰れる」形で
+- Lecsy / 自社製品に言及しない
+
+JSON で出力してください。`;
+  }
   return `# 依頼
 
 次の候補で投稿を書いてください。
 
 - id: ${cand.id}
 - チャネル: ${cand.ch}
-- angle: ${cand.angle}
-- 参照元 sourceNote: ${cand.sourceNote}
+- angle: ${cand.angle || ""}
+- 参照元 sourceNote: ${cand.sourceNote || ""}
 
 # sourceNote 抜粋 (これ以外の事実は使わない)
 
@@ -150,19 +190,27 @@ export async function generatePost(cand) {
   if (!apiKey) throw new Error("OPENAI_API_KEY not set");
 
   const tone = loadTone();
-  const srcPath = resolveSource(cand.sourceNote);
-  const sourceContent = srcPath && fs.existsSync(srcPath)
-    ? fs.readFileSync(srcPath, "utf8")
-    : "";
+  let sourceContent = "";
+
+  if (cand.sourceUrl) {
+    // AI news item: sourceContent は title + summary
+    sourceContent = `Title: ${cand.title || ""}\nSource: ${cand.source || ""}\nPublished: ${cand.published || ""}\nURL: ${cand.sourceUrl}\n\nSummary:\n${cand.summary || ""}`;
+  } else if (cand.sourceNote) {
+    const srcPath = resolveSource(cand.sourceNote);
+    sourceContent = srcPath && fs.existsSync(srcPath)
+      ? fs.readFileSync(srcPath, "utf8")
+      : "";
+  }
   if (!sourceContent) {
-    throw new Error(`sourceNote not found for ${cand.id}: ${cand.sourceNote}`);
+    throw new Error(`no source content for ${cand.id}`);
   }
 
   const client = new OpenAI({ apiKey });
   const model = process.env.OPENAI_MODEL || "gpt-4o";
+  const isLI = cand.ch === "LI";
   const resp = await client.chat.completions.create({
     model,
-    max_tokens: 2048,
+    max_tokens: isLI ? 2048 : 500,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: buildSystemPrompt(tone, cand.ch, cand.lang || "ja") },
@@ -192,7 +240,8 @@ export async function generatePost(cand) {
     text: parsed.text,
     thread: parsed.thread || null,
     rationale: parsed.rationale || "",
-    sourceNote: cand.sourceNote,
+    sourceNote: cand.sourceNote || null,
+    sourceUrl: cand.sourceUrl || null,
     generatedAt: new Date().toISOString(),
   };
 }

@@ -1,173 +1,129 @@
-# @takumi_global アカウント設計 v2 (2026-04-24)
+# @takumi_global アカウント設計 v3 (2026-04-24)
 
 > 親: [[MOC_SNS]]
-> **前版 (v1) は self-identity 過剰で捨てた。v2 は「問いに答える account」フレーム**
+> **v3: AI 最新情報発信者に pivot**。Lecsy は bio の 1 行のみ、本文では触れない。
 
 ## TL;DR
 
-- **誰** は minimum (Bio の 1 行のみ、本文では名乗らない)
-- **Voice (taste)** は strong (実測主義 / Apple 美学 / 誇大嫌い)
-- **何** を central (5 つの問いに答え続ける account)
-- **形式** = 全投稿が `Q + A (3 点)` 構造、自分語り禁止
+- **何**: AI 業界の最新発表を、一次ソースから **builder 視点**で解釈する account
+- **誰に**: 個人開発者 / indie SaaS builder / エンジニア
+- **誰**: Identity は最小、Voice (taste) は strong
+- **形式**: 全投稿 `Q + A (3 点) + taste` 構造、日本語
 
-## Goal: 影響力 / fans を持つ、でも personal は出さない
+## なぜこの概念か
 
-「fans は Identity じゃなく Voice にしかつかない」が大前提。本名・家族・出自を出さずに fan を作るには:
+- AI 業界の発表 velocity は毎日ある → ネタ枯渇しない
+- 一次ソース (OpenAI / Anthropic / Google 等) から speed で勝負できる
+- Reader applicability 100% (全 builder が AI 使う)
+- 自分語り / 内部数字 trap を回避
+- 差別化は Voice (煽り翻訳 + 実測比較) で作る
 
-1. **Voice (taste)** を尖らせる — 美学・批判の方向・ユーモアの癖で覚えさせる
-2. **Signature format** を固定 — 毎回 Q+A 3点 → "あ、takumi_global だ" の即時認識
-3. **Daily drumbeat** — 朝 08:00 / 昼 12:30 / 夜 21:00 JST の定時性
-4. **Memorable NG** — 「こういうのは書かない」が明確だと信頼が積み上がる
-5. **問いへの回答 reply** — DM・リプは返す (ただし personal な雑談はしない、問いには答える)
-
-## Voice (taste) — 3 層
-
-### 1. 実測主義
-- 「体感」「たぶん」「おそらく」禁止
-- 最後は必ず断定か選択肢提示で閉じる
-- 数字のない主張を書かない
-
-### 2. Apple 美学派 ([[feedback_lp_apple_aesthetic]] と整合)
-- モノクロ基調の美学
-- グラデ・パルスドット・ダサい多色 UI を言語化して嫌う
-- minimalism 寄りの判断 (「要らない」を積極的に書く)
-
-### 3. 誇大表現を嫌う
-- "業界初" "最速" "革新的" "シームレス" "AI-powered" を使わず、使われると皮肉る
-- AI slop / marketing 言語を翻訳して出す型 (「"シームレスな体験" = 説明できないから逃げてる」)
-
-## Voice を投稿に染み込ませる 3 型
-
-### A. 断定で閉じる型
-```
-Q: X は Y と Z どっち？
-
-A:
-• 数字 1
-• 数字 2
-• 条件分岐
-
-[結論 1 行] → Y 一択。迷うな。
-```
-
-### B. NG 提示で閉じる型
-```
-Q: X を設計するなら何に気をつける？
-
-A:
-• 選ぶべき (1-2 行)
-• 避けるべき (1-2 行)
-• 罠 (1-2 行)
-
-[avoid 1 行] → これをやったら UX が死ぬ。
-```
-
-### C. AI slop 翻訳型 (たまに)
-```
-"シームレスな AI 体験" を翻訳すると:
-• 実装の詳細を説明したくない
-• 遅延が隠せないから presentation で誤魔化す
-• 数字で比較されたくない
-
-実測 TTFB 300 ms と書けば済む話。
-```
-
-## 答える 5 問
-
-この account に来た読者が `Q: ... の答えをください` で受け取れる 5 つ。**他の Q は捨てる**。
+## 答える 5 問 (投稿はこの派生のみ)
 
 | # | 問い | pillar |
 |---|---|---|
-| 1 | **Deepgram と WhisperKit、どう使い分ける？** | P3 技術 |
-| 2 | **iOS でリアルタイム音声処理、どこで落とす？** | P3 技術 |
-| 3 | **AI × 教育プロダクトのユニットエコノミクスは？** | P1 数字 |
-| 4 | **米国の語学学校にどう売り込む？** | P2 GTM |
-| 5 | **OPT 1 年で技術者が LLC 立てるなら何をいつやる？** | P2 法務 |
-
-→ **投稿は全部この 5 問の派生形**。他は書かない。
+| 1 | **新モデル / API、既存と何が違う？** (ベンチマーク + 価格 + 実装影響) | P1 |
+| 2 | **新 AI ツール、どのユースケースに効く？** (使用レイヤー判定) | P2 |
+| 3 | **API の価格・レート・機能、どう選ぶ？** (選定判断) | P3 |
+| 4 | **論文/研究、個人開発者が使える部分は？** (抽出) | P4 |
+| 5 | **業界の動き、builder はどう読む？** (メタ解釈) | P5 |
 
 ## 全投稿の必須形式
 
 ```
-Q: [問いを短く]
+Q: [今日のニュースを 1 文で]
 
 A:
-• [要点 1 + 実測数字]
-• [要点 2 + 選択肢 / 代替案]
-• [要点 3 + 具体手順 or 次アクション]
+• [一次ソース由来の数字 1 つ]
+• [実装にどう使う / 使わないか判断]
+• [既存ツール / 前モデルとの比較]
 
-[必要なら出典 / Vault link / CTA]
+[taste 1 行: 煽り翻訳 / 断定 / NG 提示]
+
+出典: [URL]
 ```
 
-- **Q は必ず書く** (内部的でも OK、見出し or ツイ冒頭)
-- **A の 3 点は必ず分ける** (まとめ読みを助ける)
-- **数字なしの A は書かない** (抽象論禁止)
-- **出典は Vault にあるものだけ**
+**必須要件:**
+- 出典 URL を必ず含める (一次ソース直撃が voice の核)
+- 数字は出典にあるものだけ (四捨五入・近似禁止)
+- Q は **今日** のニュース or 発表から
 
-## flagship: 毎週金曜 17:00 JST「今週解けた問題」
+## Voice (taste) 3 層
 
-週 1 の大玉スレッド。3-5 ツイで 1 つの Q を深掘り:
-1. 問いの背景 (なぜこれが問題か)
-2. 試した選択肢 + 結果 (数字)
-3. 最適解 (条件付き)
-4. 失敗パターン (避けるべき罠)
-5. CTA (DM / Substack)
+### 1. 一次ソース直撃
+- 日本語二次翻訳より先に、OpenAI/Anthropic/Google の原文から直接拾う
+- URL を貼る。二次情報記事を貼らない
 
-→ これが後の Substack 化・書籍化の素材になる。
+### 2. 実測比較
+- 「新モデル」の主張を数字で検証
+- ベンチマーク / 価格 / レイテンシ / context window を前モデル・競合と比較
+- 「体感」「たぶん」「おそらく」禁止
 
-## 語り手の設定 (minimal、本文では基本出さない)
+### 3. 煽り翻訳 (最強の差別化)
+- "AGI に到達" "revolutionary" "業界初" "シームレス" などの marketing 煽りを実装レイヤーに翻訳
+- "GPT-5 が推論できる" → "1 shot で 200 token / $0.003、誰も chain-of-thought 組まずに使える"
+- 煽りを数字で分解する
 
-- **Allow**: Takumi (下の名前のみ) / Florida / OPT 中 / AA 取得 / Lecsy 作ってる
-- **NG**: Nittono / 苗字 / 家族 / 学校名 / 市 / 年齢 / Founder / 〜した (完了形)
-- **動詞ルール**: 「作ってる / Building / 攻めてる / 営業中」のみ。「Founder / Built / Sold / Launched」は **2026-06-01 ローンチ後**に段階的解禁
+## 情報源 (一次ソース優先)
 
-## bio (v2)
+| 源 | 取得方法 | 頻度 | pillar |
+|---|---|---|---|
+| **Hacker News front page** | RSS (https://news.ycombinator.com/rss) | 日次 | P1-P5 |
+| **Google AI blog** | RSS (https://blog.google/technology/ai/rss/) | 日次 | P1, P2 |
+| **OpenAI news** | 公式 site scrape (RSS なし) | 日次 | P1, P3 |
+| **Anthropic news** | https://www.anthropic.com/news (scrape) | 日次 | P1, P3 |
+| **Meta AI blog** | https://ai.meta.com/blog (scrape) | 週次 | P2 |
+| **arxiv cs.AI new submissions** | RSS (https://arxiv.org/rss/cs.AI) | 日次 | P4 |
+| **Vercel AI SDK releases** | GitHub atom (https://github.com/vercel/ai/releases.atom) | 日次 | P2, P3 |
+| **r/LocalLLaMA top** | RSS (https://www.reddit.com/r/LocalLLaMA/.rss) | 日次 | P2, P5 |
+
+→ `sns-collect.mjs` で RSS fetch して `_Vault/SNS/Daily/YYYY-MM-DD.md` に top 10 items。
+
+## 投稿の source の扱い
+
+- **Primary**: 今日の Daily.md 内のニュース item 1 つを sourceContent として generator に渡す
+- **Secondary**: 在庫マップは使わない (将来削除検討)
+
+## Identity (最小)
+
+- **Allow**: Takumi / Florida / OPT 中 / Lecsy 作り中 **← ただし bio の 1 行のみ、本文で言及しない**
+- **NG**: Nittono / 苗字 / 家族 / 学校名 / 市 / 年齢
+- **NG**: 本文で Lecsy, lecsy.app, 講義 AI, 「自分のプロダクト」系を書く
+  (bio と プロフィール URL の `lecsy.app` だけ例外)
+
+## Bio (v3)
 
 ```
-iOS 音声 AI と米国 B2B 教育、AI × 教育のコスト構造について書いてる
-Florida / OPT / Lecsy 作ってる
-lecsy.app
+AI 業界の最新発表を builder 視点で。実測と比較、煽りぶった切り。
+OpenAI / Anthropic / Google / HN / arxiv を一次ソースから。
+日本語 / Florida / Lecsy 作り中
 ```
 
-→ 4 行。自己定義よりトピック定義。
+## Pinned tweet v3
 
-## Display name (v2)
+→ [[SNS/ピン留めツイート_ドラフト]] (3 ツイ、問いベース、Lecsy 無言及)
 
-**推奨: `Lecsy / Building` or `Takumi (Lecsy)`**
-- "Nittono" 系は出さない
-- Founder 系の肩書きも書かない
-- `takumi_global` のままでも良い
+## 語彙の完全禁止 (本文)
 
-## 書かないことリスト（確定）
+- Lecsy / lecsy / 講義 AI / iOS アプリ (自製品の宣伝)
+- 本名 (Nittono / 新藤 / ニットノ)
+- 肩書き claim (Founder / CEO / Founded)
+- 完了形 overclaim (launched / sold / built / 達成した)
+- 自分語り (今日 / 今週 / 俺が / 自分の進捗)
+- @メンション / ハッシュタグ
+- 煽り語彙 (業界初 / 最速 / 唯一無二 / 革新的 / シームレス / AI-powered)
+- 一般化 (すべての / みんな / 全員が / 100%)
+- 体感語彙 (たぶん / おそらく / 体感)
 
-- 「今日 X した」系の日報
-- 「今週の進捗」系の自分語り
-- マインド系 / 朝活 / ルーティン / 精神論
-- 他社名指し批判 (Otter は / Notta は)
-- 捏造エピソード (体験年数・回数・感情)
-- Founder / 完了形 / 達成 claim
-- 本名 / 家族 / 学校名 / 市
-- Vault に無い数字
+## KPI (main)
 
-## NG ワード（guardrail で自動ブロック）
-
-- 本名系: `Nittono`, `新藤`, `ニットノ`
-- 肩書き claim: `Founder`, `Founded`, `CEO`
-- 完了形 overclaim: `launched`, `sold to`, `built a company`
-- 競合: `Otter は`, `Notta は`, `CLOVA は`
-- 誇大: `業界No.1`, `業界最安`, `唯一無二`
-- 誇張: `すべての`, `全員が`, `みんな`
-- 言語の嘘: `100+ languages`, `12 言語`
-
-## KPI (main = b + d)
-
-- **DM が週 5 件、コア読者 30 人** (quality)
-- **B2B 商談 1 件がここ経由で発生** (distribution)
-- フォロワー数は副次指標
+- DM 週 5 件 / コア読者 30 人 (Voice に fan がつく量)
+- 平均 engagement rate 2%+
+- 1 投稿あたり reader の「一次ソースに飛ぶ」率が計測指標化できたら追う
 
 ## 関連
 
-- [[MOC_SNS]] / [[SNS/tone_sample]] / [[SNS/在庫_マップ]]
-- [[SNS/ピン留めツイート_ドラフト]]
-- [[SNS/戦略_2026-04-24]] (上位戦略)
-- memory: [[feedback_no_real_name]] [[feedback_value_first]] [[feedback_no_fabrication]] [[feedback_no_founder_claim]]
+- [[MOC_SNS]] / [[SNS/tone_sample]] / [[SNS/ピン留めツイート_ドラフト]]
+- [[SNS/自動化_情報源]] (v3 - AI RSS に書き直し)
+- [[SNS/自動化_運用手順]] / [[SNS/自動化_タイムテーブル]]
+- memory: [[feedback_no_real_name]] [[feedback_no_founder_claim]] [[feedback_value_first]] [[feedback_voice_not_personal]] [[feedback_no_fabrication]]

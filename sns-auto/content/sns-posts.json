@@ -169,6 +169,103 @@
       "url": "https://x.com/Ww83vjNwSLXhV6B/status/2047779886404608068",
       "postedAt": "2026-04-24T20:49:05.586Z",
       "generatedAt": "2026-04-24T20:49:05.368Z"
+    },
+    {
+      "id": "AI-ebab479a",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "length 282 > 280"
+      ],
+      "generatedAt": "2026-04-24T21:08:48.791Z",
+      "blockedAt": "2026-04-24T21:08:48.989Z"
+    },
+    {
+      "id": "AI-ebab479a",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "NG keyword: \"AI-powered\""
+      ],
+      "generatedAt": "2026-04-24T21:09:08.338Z",
+      "blockedAt": "2026-04-24T21:09:08.596Z"
+    },
+    {
+      "id": "AI-ebab479a",
+      "ch": "X",
+      "lang": "ja",
+      "status": "dry-run",
+      "tweetId": null,
+      "url": null,
+      "postedAt": "2026-04-24T21:09:32.603Z",
+      "generatedAt": "2026-04-24T21:09:32.599Z"
+    },
+    {
+      "id": "AI-85c88209",
+      "ch": "X",
+      "lang": "ja",
+      "status": "dry-run",
+      "tweetId": null,
+      "url": null,
+      "postedAt": "2026-04-24T21:16:43.206Z",
+      "generatedAt": "2026-04-24T21:16:43.204Z"
+    },
+    {
+      "id": "AI-85c88209",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "length 310 > 280"
+      ],
+      "generatedAt": "2026-04-24T21:17:00.973Z",
+      "blockedAt": "2026-04-24T21:17:01.179Z"
+    },
+    {
+      "id": "AI-85c88209",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "length 323 > 280"
+      ],
+      "generatedAt": "2026-04-24T21:17:32.316Z",
+      "blockedAt": "2026-04-24T21:17:32.568Z"
+    },
+    {
+      "id": "AI-85c88209",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "length 307 > 280"
+      ],
+      "generatedAt": "2026-04-24T21:18:03.368Z",
+      "blockedAt": "2026-04-24T21:18:03.775Z"
+    },
+    {
+      "id": "AI-85c88209",
+      "ch": "X",
+      "status": "error",
+      "error": "Request failed with code 403",
+      "erroredAt": "2026-04-24T21:18:43.324Z"
+    },
+    {
+      "id": "AI-85c88209",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "length 313 (X-weighted) > 280"
+      ],
+      "generatedAt": "2026-04-24T21:19:40.957Z",
+      "blockedAt": "2026-04-24T21:19:41.136Z"
+    },
+    {
+      "id": "AI-85c88209",
+      "ch": "X",
+      "lang": "ja",
+      "status": "posted",
+      "tweetId": "2047787722459296236",
+      "url": "https://x.com/Ww83vjNwSLXhV6B/status/2047787722459296236",
+      "postedAt": "2026-04-24T21:20:13.906Z",
+      "generatedAt": "2026-04-24T21:20:13.389Z"
     }
   ]
 }

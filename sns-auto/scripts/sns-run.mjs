@@ -19,6 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import dotenv from "dotenv";
 dotenv.config({ path: fileURLToPath(new URL("../.env.local", import.meta.url)) });
 dotenv.config();
@@ -63,6 +64,48 @@ function parseInventory() {
   return rows;
 }
 
+function parseDaily(date) {
+  const dailyPath = path.join(VAULT, "SNS/Daily", `${date}.md`);
+  if (!fs.existsSync(dailyPath)) return [];
+  const md = fs.readFileSync(dailyPath, "utf8");
+  const items = [];
+  const lines = md.split("\n");
+  let current = null;
+  for (const line of lines) {
+    const header = line.match(/^### (\d+)\.\s*\[([^\]]+)\]\s*(.+)$/);
+    if (header) {
+      if (current) items.push(current);
+      current = {
+        index: parseInt(header[1], 10),
+        source: header[2].trim(),
+        title: header[3].trim(),
+        sourceUrl: "",
+        published: "",
+        summary: "",
+      };
+      continue;
+    }
+    if (!current) continue;
+    const urlM = line.match(/^-\s*URL:\s*(.+)$/);
+    if (urlM) current.sourceUrl = urlM[1].trim();
+    const pubM = line.match(/^-\s*Published:\s*(.+)$/);
+    if (pubM) current.published = pubM[1].trim();
+    const sumM = line.match(/^-\s*Summary:\s*(.+)$/);
+    if (sumM) current.summary = sumM[1].trim();
+  }
+  if (current) items.push(current);
+  return items
+    .filter((it) => it.sourceUrl && it.title)
+    .map((it) => ({
+      id: "AI-" + createHash("sha1").update(it.sourceUrl).digest("hex").slice(0, 8),
+      ch: "X",
+      pillar: "AI",
+      lang: "ja",
+      lastPosted: "",
+      ...it,
+    }));
+}
+
 function loadState() {
   if (!fs.existsSync(STATE)) return { meta: {}, posts: [] };
   return JSON.parse(fs.readFileSync(STATE, "utf8"));
@@ -76,6 +119,13 @@ function alreadyPosted(state, id, windowDays = 30) {
   const cutoff = Date.now() - windowDays * 86400000;
   return state.posts.some(
     (p) => p.id === id && p.status === "posted" && Date.parse(p.postedAt) > cutoff
+  );
+}
+
+function recentlyBlocked(state, id, windowH = 6) {
+  const cutoff = Date.now() - windowH * 3600000;
+  return state.posts.some(
+    (p) => p.id === id && p.status === "blocked" && Date.parse(p.blockedAt) > cutoff
   );
 }
 
@@ -156,17 +206,21 @@ async function main() {
     return;
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+  const daily = parseDaily(today);
   const inv = parseInventory();
+  const allItems = daily.length > 0 ? daily : inv;
+  log(`source: ${daily.length > 0 ? `Daily.md (${daily.length} items)` : `Inventory (${inv.length} items)`}`);
   const state = loadState();
-  const cands = pickCandidates(inv, state, args);
+  const cands = pickCandidates(allItems, state, args);
 
   if (!cands.length) {
-    log("no candidates — inventory may be exhausted");
+    log("no candidates — Daily.md empty or inventory exhausted");
     await notify({
       kind: "warning",
       level: "warning",
-      title: "SNS 在庫が枯渇",
-      text: "`_Vault/SNS/在庫_マップ.md` に新しい候補を追加してください。今日は投稿できません。",
+      title: "SNS 候補なし",
+      text: `今日 (${today}) の Daily.md が空、または全候補が投稿済。sns-collect.mjs を再実行するか、在庫マップを補充してください。`,
     });
     close();
     return;
@@ -180,12 +234,11 @@ async function main() {
 
   for (const cand of cands) {
     try {
-      log(`-- ${cand.id}: generate`);
-      const post = await generatePost(cand);
-      log(`-- ${cand.id}: mode=${post.mode} textLen=${post.text.length}`);
-
       const sourceContent = (() => {
         try {
+          if (cand.sourceUrl) {
+            return `${cand.title || ""}\n\n${cand.summary || ""}\n\nURL: ${cand.sourceUrl}`;
+          }
           const p = resolveForCheck(cand.sourceNote);
           return p ? fs.readFileSync(p, "utf8") : "";
         } catch {
@@ -193,9 +246,20 @@ async function main() {
         }
       })();
 
-      const gr = checkPost(post, sourceContent);
+      let post = null;
+      let gr = null;
+      const MAX_ATTEMPTS = 3;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        log(`-- ${cand.id}: generate (attempt ${attempt}/${MAX_ATTEMPTS})`);
+        post = await generatePost(cand);
+        log(`-- ${cand.id}: mode=${post.mode} textLen=${post.text.length}`);
+        gr = checkPost(post, sourceContent);
+        if (gr.pass) break;
+        log(`-- ${cand.id}: attempt ${attempt} blocked: ${gr.reasons.join("; ")}`);
+      }
+
       if (!gr.pass) {
-        log(`-- ${cand.id}: GUARDRAIL BLOCKED: ${gr.reasons.join("; ")}`);
+        log(`-- ${cand.id}: GUARDRAIL BLOCKED (after ${MAX_ATTEMPTS}): ${gr.reasons.join("; ")}`);
         blocked.push({ id: cand.id, reasons: gr.reasons });
         await notify({
           kind: "guardrail",
