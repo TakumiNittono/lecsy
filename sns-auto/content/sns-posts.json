@@ -159,6 +159,16 @@
       ],
       "generatedAt": "2026-04-24T20:47:49.823Z",
       "blockedAt": "2026-04-24T20:47:49.908Z"
+    },
+    {
+      "id": "SNS-401",
+      "ch": "X",
+      "lang": "ja",
+      "status": "posted",
+      "tweetId": "2047779886404608068",
+      "url": "https://x.com/Ww83vjNwSLXhV6B/status/2047779886404608068",
+      "postedAt": "2026-04-24T20:49:05.586Z",
+      "generatedAt": "2026-04-24T20:49:05.368Z"
     }
   ]
 }
