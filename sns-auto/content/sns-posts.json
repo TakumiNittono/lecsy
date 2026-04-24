@@ -138,6 +138,17 @@
       ],
       "generatedAt": "2026-04-24T20:20:45.520Z",
       "blockedAt": "2026-04-24T20:20:45.876Z"
+    },
+    {
+      "id": "SNS-002",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "unverified claim: \"1 分\" not in sourceNote",
+        "unverified claim: \"1 時間\" not in sourceNote"
+      ],
+      "generatedAt": "2026-04-24T20:22:22.298Z",
+      "blockedAt": "2026-04-24T20:22:22.414Z"
     }
   ]
 }
