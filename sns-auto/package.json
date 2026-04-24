@@ -1,0 +1,21 @@
+{
+  "name": "lecsy-sns-auto",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lecsy SNS (X) 自動投稿パイプライン",
+  "scripts": {
+    "sns:run": "node scripts/sns-run.mjs",
+    "sns:run:live": "node scripts/sns-run.mjs --live",
+    "sns:collect": "node scripts/sns-collect.mjs",
+    "sns:generate": "node scripts/sns-generate.mjs",
+    "sns:guardrail": "node scripts/sns-guardrail.mjs",
+    "sns:notify:test": "node scripts/sns-notify.mjs test",
+    "sns:draft": "node scripts/sns-draft.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "openai": "^4.104.0",
+    "twitter-api-v2": "^1.18.2"
+  }
+}

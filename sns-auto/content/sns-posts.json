@@ -1,0 +1,143 @@
+{
+  "meta": {
+    "version": "1.0",
+    "generated": "2026-04-24",
+    "description": "SNS 投稿パイプラインの状態ファイル。sns-draft.mjs が 在庫_マップ.md から読み込んだ候補の posted/draft 状態を管理。",
+    "vaultPath": "../lecsy/_Vault",
+    "inventoryPath": "../lecsy/_Vault/SNS/在庫_マップ.md",
+    "draftsDir": "../lecsy/_Vault/SNS/ドラフト",
+    "archiveDir": "../lecsy/_Vault/SNS/公開済",
+    "defaultDraftsPerDay": 3
+  },
+  "posts": [
+    {
+      "id": "SNS-001",
+      "ch": "X",
+      "draftDate": "2026-04-25",
+      "status": "draft",
+      "createdAt": "2026-04-24T18:39:46.888Z"
+    },
+    {
+      "id": "SNS-002",
+      "ch": "X",
+      "draftDate": "2026-04-25",
+      "status": "draft",
+      "createdAt": "2026-04-24T18:39:46.888Z"
+    },
+    {
+      "id": "SNS-003",
+      "ch": "X",
+      "draftDate": "2026-04-25",
+      "status": "draft",
+      "createdAt": "2026-04-24T18:39:46.888Z"
+    },
+    {
+      "id": "SNS-001",
+      "ch": "X",
+      "status": "error",
+      "error": "ANTHROPIC_API_KEY not set",
+      "erroredAt": "2026-04-24T18:57:54.949Z"
+    },
+    {
+      "id": "SNS-001",
+      "ch": "X",
+      "status": "error",
+      "error": "OPENAI_API_KEY not set",
+      "erroredAt": "2026-04-24T19:12:24.589Z"
+    },
+    {
+      "id": "SNS-001",
+      "ch": "X",
+      "status": "error",
+      "error": "OPENAI_API_KEY not set",
+      "erroredAt": "2026-04-24T19:15:34.769Z"
+    },
+    {
+      "id": "SNS-001",
+      "ch": "X",
+      "status": "error",
+      "error": "OPENAI_API_KEY not set",
+      "erroredAt": "2026-04-24T19:17:20.750Z"
+    },
+    {
+      "id": "SNS-001",
+      "ch": "X",
+      "status": "error",
+      "error": "401 Incorrect API key provided: sk-proj-********************************************************************************************************************************************************4JIA. You can find your API key at https://platform.openai.com/account/api-keys.",
+      "erroredAt": "2026-04-24T19:18:04.657Z"
+    },
+    {
+      "id": "SNS-001",
+      "ch": "X",
+      "lang": "ja",
+      "status": "dry-run",
+      "tweetId": null,
+      "url": null,
+      "postedAt": "2026-04-24T19:19:54.265Z",
+      "generatedAt": "2026-04-24T19:19:54.261Z"
+    },
+    {
+      "id": "SNS-001",
+      "ch": "X",
+      "lang": "ja",
+      "status": "posted",
+      "tweetId": "2047757917034611133",
+      "url": "https://x.com/Ww83vjNwSLXhV6B/status/2047757917034611133",
+      "postedAt": "2026-04-24T19:21:48.413Z",
+      "generatedAt": "2026-04-24T19:21:47.058Z"
+    },
+    {
+      "id": "SNS-002",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "unverified claim: \"1分\" not in sourceNote",
+        "unverified claim: \"1時間\" not in sourceNote"
+      ],
+      "generatedAt": "2026-04-24T19:27:21.087Z",
+      "blockedAt": "2026-04-24T19:27:21.093Z"
+    },
+    {
+      "id": "SNS-002",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "unverified claim: \"90 分\" not in sourceNote"
+      ],
+      "generatedAt": "2026-04-24T19:35:03.140Z",
+      "blockedAt": "2026-04-24T19:35:03.342Z"
+    },
+    {
+      "id": "SNS-002",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "unverified claim: \"1 分\" not in sourceNote"
+      ],
+      "generatedAt": "2026-04-24T19:42:31.363Z",
+      "blockedAt": "2026-04-24T19:42:31.559Z"
+    },
+    {
+      "id": "SNS-002",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "unverified claim: \"1 分\" not in sourceNote",
+        "unverified claim: \"90 分\" not in sourceNote"
+      ],
+      "generatedAt": "2026-04-24T20:15:09.176Z",
+      "blockedAt": "2026-04-24T20:15:09.401Z"
+    },
+    {
+      "id": "SNS-002",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "unverified claim: \"1 分\" not in sourceNote",
+        "unverified claim: \"90 分\" not in sourceNote"
+      ],
+      "generatedAt": "2026-04-24T20:20:45.520Z",
+      "blockedAt": "2026-04-24T20:20:45.876Z"
+    }
+  ]
+}

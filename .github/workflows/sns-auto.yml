@@ -1,0 +1,124 @@
+name: SNS Auto Post
+
+# JST -> UTC 換算 (JST = UTC+9):
+#   04:00 JST = 19:00 UTC (前日)
+#   08:00 JST = 23:00 UTC (前日)
+#   12:30 JST = 03:30 UTC
+#   21:00 JST = 12:00 UTC
+
+on:
+  schedule:
+    - cron: "0 19 * * *"    # 04:00 JST collect
+    - cron: "0 23 * * *"    # 08:00 JST morning (P1)
+    - cron: "30 3 * * *"    # 12:30 JST noon (P3)
+    - cron: "0 12 * * *"    # 21:00 JST night (P2)
+  workflow_dispatch:         # 手動実行ボタン (test用)
+    inputs:
+      action:
+        description: "実行する action"
+        required: true
+        default: "dry-run"
+        type: choice
+        options:
+          - dry-run
+          - collect
+          - post-P1
+          - post-P2
+          - post-P3
+
+concurrency:
+  group: sns-auto
+  cancel-in-progress: false
+
+permissions:
+  contents: write    # Vault 更新コミット用
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.d.outputs.action }}
+    steps:
+      - id: d
+        name: Determine action from cron or input
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "action=${{ github.event.inputs.action }}" >> "$GITHUB_OUTPUT"
+          else
+            case "${{ github.event.schedule }}" in
+              "0 19 * * *")   echo "action=collect" >> "$GITHUB_OUTPUT" ;;
+              "0 23 * * *")   echo "action=post-P1" >> "$GITHUB_OUTPUT" ;;
+              "30 3 * * *")   echo "action=post-P3" >> "$GITHUB_OUTPUT" ;;
+              "0 12 * * *")   echo "action=post-P2" >> "$GITHUB_OUTPUT" ;;
+              *)              echo "action=dry-run" >> "$GITHUB_OUTPUT" ;;
+            esac
+          fi
+
+  run:
+    runs-on: ubuntu-latest
+    needs: decide
+    if: needs.decide.outputs.action != ''
+    env:
+      TZ: Asia/Tokyo
+      X_HANDLE: ${{ secrets.X_HANDLE }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_KEY_SECRET: ${{ secrets.X_API_KEY_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o' }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      SLACK_NOTIFY_SUCCESS: ${{ vars.SLACK_NOTIFY_SUCCESS || 'false' }}
+      SNS_AUTO_DISABLED: ${{ vars.SNS_AUTO_DISABLED || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # Vault diff 用に履歴取得
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps (sns-auto)
+        working-directory: sns-auto
+        run: npm ci || npm install
+
+      - name: Run action
+        working-directory: sns-auto
+        run: |
+          case "${{ needs.decide.outputs.action }}" in
+            dry-run)
+              node scripts/sns-run.mjs --count=1
+              ;;
+            collect)
+              node scripts/sns-collect.mjs
+              ;;
+            post-P1)
+              node scripts/sns-run.mjs --live --count=1 --pillar=P1
+              ;;
+            post-P2)
+              node scripts/sns-run.mjs --live --count=1 --pillar=P2
+              ;;
+            post-P3)
+              node scripts/sns-run.mjs --live --count=1 --pillar=P3
+              ;;
+          esac
+
+      - name: Commit state & archive back to repo
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            sns-auto/content/sns-posts.json \
+            "_Vault/SNS/公開済/" \
+            "_Vault/SNS/ログ/" \
+            "_Vault/SNS/Daily/" \
+            "_Vault/SNS/ドラフト/" \
+            || true
+          if git diff --cached --quiet; then
+            echo "no changes to commit"
+          else
+            git commit -m "chore(sns-auto): ${{ needs.decide.outputs.action }} $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git push || { echo "push failed, possibly due to concurrent update"; exit 0; }
+          fi
