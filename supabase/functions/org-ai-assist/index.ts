@@ -10,6 +10,7 @@ import {
   createJsonResponse,
   createErrorResponse,
 } from '../_shared/cors.ts';
+import { alert } from '../_shared/alert.ts';
 
 // ========== 型定義 ==========
 
@@ -195,7 +196,14 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error("org-ai-assist error:", error instanceof Error ? error.message : "Unknown error");
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("org-ai-assist error:", msg);
+    await alert({
+      source: 'org-ai-assist',
+      level: 'error',
+      message: `org_ai_assist_failed: ${msg}`,
+      error,
+    });
     return createErrorResponse(req, "Internal server error", 500);
   }
 });

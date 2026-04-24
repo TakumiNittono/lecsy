@@ -59,7 +59,11 @@ final class TranscriptionCoordinator: ObservableObject {
     /// 取りこぼさない。
     private var pendingFlush: Task<Void, Never>?
     /// startLive の connect 中フラグ。prepare と startLive の二重接続を防ぐ。
-    private var isStartingLive: Bool = false
+    /// UI も `LiveCaptionView` の表示判定に使うため @Published。
+    /// prepared session が無い状態で録音を始めると自前 connect (~1-2s) が走るが、
+    /// その間 `isPreparing` も `isLiveActive` も false になり、字幕 View 自体が
+    /// 消えて「最初の数秒リアルタイムが出ない」と見えてしまうのを防ぐ。
+    @Published private(set) var isStartingLive: Bool = false
     /// アクティブ stream の connectionState 観察用。stream 差し替え時に作り直す。
     private var streamStateSubscription: AnyCancellable?
     /// アクティブ stream の finalizedSegments 観察用（絶対時刻への変換用 sink）。

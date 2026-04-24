@@ -55,12 +55,11 @@ export default async function JoinPage({ params, searchParams }: PageProps) {
   const deepLink = code ? `lecsy://invite?code=${encodeURIComponent(code)}` : null
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-white">
+    <main className="min-h-screen bg-white">
       <div className="max-w-xl mx-auto px-5 pt-16 pb-24">
         {/* Header / org card */}
-        <div className="text-center mb-8">
-          <span className="inline-flex items-center gap-2 px-3 py-1 mb-4 text-xs font-semibold uppercase tracking-wider text-blue-700 bg-blue-100 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+        <div className="text-center mb-10">
+          <span className="inline-flex items-center px-3 py-1 mb-5 text-[11px] font-medium uppercase tracking-[0.18em] text-gray-600 bg-gray-100 rounded-full">
             You&apos;re invited
           </span>
           {org.logo_url ? (
@@ -68,88 +67,88 @@ export default async function JoinPage({ params, searchParams }: PageProps) {
             <img
               src={org.logo_url}
               alt={`${org.name} logo`}
-              className="w-20 h-20 mx-auto mb-5 rounded-2xl object-cover shadow-sm border border-gray-200"
+              className="w-20 h-20 mx-auto mb-6 rounded-2xl object-cover border border-gray-200"
             />
           ) : (
-            <div className="w-20 h-20 mx-auto mb-5 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
-              <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gray-900 text-white flex items-center justify-center">
+              <svg className="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14l9-5-9-5-9 5 9 5z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
               </svg>
             </div>
           )}
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-2">
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-gray-900 mb-3">
             Welcome to {org.name}
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-500 text-[15px] leading-relaxed">
             Lecsy turns your lectures into real-time captions and a study-ready transcript.
           </p>
         </div>
 
         {/* Code-specific card (only when ?code=XXX is in the URL) */}
         {code && deepLink && (
-          <div className="bg-white rounded-2xl border-2 border-blue-600 shadow-sm p-6 sm:p-8 mb-6 text-center">
-            <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2">
+          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-7 sm:p-8 mb-6 text-center">
+            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-[0.18em] mb-3">
               Your invite code
             </p>
             <p
-              className="text-4xl font-bold tracking-[0.4em] font-mono text-gray-900 mb-5 select-all"
+              className="text-4xl font-semibold tracking-[0.4em] font-mono text-gray-900 mb-6 select-all"
               aria-label={`Invite code ${code.split('').join(' ')}`}
             >
               {code}
             </p>
             <a
               href={deepLink}
-              className="block w-full text-center h-14 leading-[3.5rem] rounded-2xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
+              className="block w-full text-center h-12 leading-[3rem] rounded-full bg-gray-900 text-white text-[15px] font-medium hover:bg-gray-800 active:bg-black transition-colors"
             >
               Open in Lecsy (iOS)
             </a>
             <Link
               href={`/android?code=${encodeURIComponent(code)}`}
-              className="mt-3 block w-full text-center h-14 leading-[3.5rem] rounded-2xl bg-gray-900 text-white font-semibold hover:bg-gray-800 transition-colors"
+              className="mt-3 block w-full text-center h-12 leading-[3rem] rounded-full bg-white text-gray-900 text-[15px] font-medium border border-gray-300 hover:bg-gray-50 transition-colors"
             >
               Open on Android
             </Link>
-            <p className="mt-3 text-xs text-gray-500">
-              Tap iOS if Lecsy is already installed. On Android the web app opens directly.
+            <p className="mt-4 text-[12px] text-gray-500 leading-relaxed">
+              Tap iOS if Lecsy is already installed. Android opens the web app.
             </p>
           </div>
         )}
 
         {/* Step list */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 sm:p-8 mb-6">
-          <ol className="space-y-5">
+        <div className="bg-white rounded-3xl border border-gray-200 p-7 sm:p-8 mb-6">
+          <ol className="space-y-6">
             <li className="flex gap-4">
-              <span className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center">
+              <span className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-900 text-white text-[13px] font-medium flex items-center justify-center">
                 1
               </span>
               <div>
-                <h2 className="font-semibold text-gray-900 mb-1">Install Lecsy from the App Store</h2>
-                <p className="text-sm text-gray-600">Free download. iPhone running iOS 17.6 or newer.</p>
+                <h2 className="font-semibold text-gray-900 mb-1 text-[15px]">Install Lecsy from the App Store</h2>
+                <p className="text-[13.5px] text-gray-500 leading-relaxed">Free download. iPhone on iOS 17.6 or newer.</p>
               </div>
             </li>
             <li className="flex gap-4">
-              <span className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center">
+              <span className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-900 text-white text-[13px] font-medium flex items-center justify-center">
                 2
               </span>
               <div>
-                <h2 className="font-semibold text-gray-900 mb-1">
+                <h2 className="font-semibold text-gray-900 mb-1 text-[15px]">
                   {code ? 'Tap "Open in Lecsy" above' : 'Tap "Have an invite code?"'}
                 </h2>
-                <p className="text-sm text-gray-600">
+                <p className="text-[13.5px] text-gray-500 leading-relaxed">
                   {code
-                    ? 'Lecsy will take the code automatically and sign you in.'
+                    ? 'Lecsy takes the code automatically and signs you in.'
                     : `Type the 6-digit code on your card. You'll be signed in to ${org.name} instantly.`}
                 </p>
               </div>
             </li>
             <li className="flex gap-4">
-              <span className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center">
+              <span className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-900 text-white text-[13px] font-medium flex items-center justify-center">
                 3
               </span>
               <div>
-                <h2 className="font-semibold text-gray-900 mb-1">Tap the red button when class starts</h2>
-                <p className="text-sm text-gray-600">
+                <h2 className="font-semibold text-gray-900 mb-1 text-[15px]">Tap the red button when class starts</h2>
+                <p className="text-[13.5px] text-gray-500 leading-relaxed">
                   Allow microphone access, then watch live captions appear as your professor speaks.
                 </p>
               </div>
@@ -162,31 +161,31 @@ export default async function JoinPage({ params, searchParams }: PageProps) {
           href={APP_STORE_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="block w-full text-center h-14 leading-[3.5rem] rounded-2xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
+          className="block w-full text-center h-12 leading-[3rem] rounded-full bg-gray-900 text-white text-[15px] font-medium hover:bg-gray-800 active:bg-black transition-colors"
         >
           Download Lecsy for iPhone
         </a>
-        <p className="mt-4 text-center text-sm text-gray-500">
+        <p className="mt-4 text-center text-[13px] text-gray-500">
           Already installed?{' '}
           {code && deepLink ? (
-            <a href={deepLink} className="text-blue-600 font-medium hover:underline">
+            <a href={deepLink} className="text-gray-900 font-medium hover:underline underline-offset-2">
               Open with code {code}
             </a>
           ) : (
-            <Link href="/login" className="text-blue-600 font-medium hover:underline">
+            <Link href="/login" className="text-gray-900 font-medium hover:underline underline-offset-2">
               Open the web app
             </Link>
           )}
         </p>
 
         {/* Privacy note — required for ESL/FERPA contexts */}
-        <div className="mt-10 p-5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-600 leading-relaxed">
-          <p className="font-semibold text-gray-800 mb-1">Your privacy in {org.name}</p>
+        <div className="mt-10 p-5 rounded-2xl bg-gray-50 border border-gray-200 text-[13.5px] text-gray-600 leading-relaxed">
+          <p className="font-semibold text-gray-900 mb-1">Your privacy in {org.name}</p>
           <p>
             Audio is processed for transcription and is never stored by Lecsy. Transcript text is scoped to
             your organization with row-level security. Before your first recording you&apos;ll see a one-time
             FERPA-aligned consent prompt. See our{' '}
-            <Link href="/privacy" className="text-blue-600 hover:underline">
+            <Link href="/privacy" className="text-gray-900 hover:underline underline-offset-2">
               Privacy Policy
             </Link>{' '}
             for details.

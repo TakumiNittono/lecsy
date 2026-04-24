@@ -88,16 +88,13 @@ export function InviteCodeForm() {
   }, [initialCode, autoSubmitted])
 
   return (
-    <div className="rounded-2xl border-2 border-blue-600 bg-blue-50/40 p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-        </svg>
-        <h2 className="font-semibold text-gray-900 text-base">Have an invite code?</h2>
+    <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="mb-4">
+        <h2 className="font-semibold text-gray-900 text-[15px]">Have an invite code?</h2>
+        <p className="mt-1 text-[13px] text-gray-500 leading-relaxed">
+          Enter the 6-digit code your teacher gave you.
+        </p>
       </div>
-      <p className="text-xs text-gray-600 mb-3">
-        Type the 6-digit code your teacher handed you.
-      </p>
       <input
         type="text"
         inputMode="numeric"
@@ -115,21 +112,29 @@ export function InviteCodeForm() {
         }}
         disabled={loading}
         autoFocus
-        className="w-full h-14 rounded-lg border border-gray-300 bg-white text-gray-900 text-2xl font-mono tracking-[0.5em] text-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+        aria-label="6-digit invite code"
+        className="w-full h-16 rounded-2xl border border-gray-200 bg-gray-50 text-gray-900 text-[28px] font-semibold font-mono tracking-[0.45em] text-center placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent focus:bg-white transition disabled:opacity-50"
       />
       <button
         onClick={() => submit(code)}
         disabled={loading || code.length !== 6}
-        className="mt-3 w-full h-12 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+        className="mt-4 w-full h-12 rounded-full bg-gray-900 text-white text-[15px] font-medium hover:bg-gray-800 active:bg-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-        </svg>
-        {loading ? "Joining..." : "Join class"}
+        {loading ? (
+          <span className="inline-flex items-center gap-2">
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Joining…
+          </span>
+        ) : (
+          <>Join class</>
+        )}
       </button>
       {error && (
-        <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200">
-          <p className="text-red-800 text-sm">{error}</p>
+        <div className="mt-4 p-3.5 rounded-2xl bg-red-50 border border-red-100">
+          <p className="text-red-700 text-[13.5px] leading-relaxed">{error}</p>
         </div>
       )}
     </div>

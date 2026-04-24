@@ -8,6 +8,7 @@ import {
   createJsonResponse,
   createErrorResponse,
 } from '../_shared/cors.ts';
+import { alert } from '../_shared/alert.ts';
 
 interface SubmitReportRequest {
   category: string;
@@ -91,7 +92,14 @@ serve(async (req) => {
       message: "Report submitted successfully",
     });
   } catch (error) {
-    console.error("Error:", error instanceof Error ? error.message : "Unknown error");
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Error:", msg);
+    await alert({
+      source: 'submit-report',
+      level: 'error',
+      message: `submit_report_failed: ${msg}`,
+      error,
+    });
     return createErrorResponse(req, "Failed to submit report", 500);
   }
 });

@@ -10,6 +10,7 @@
 // 要secret: OPENAI_API_KEY
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { alert, handleWithAlert } from '../_shared/alert.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const CAMPAIGN_END_MS = new Date('2026-06-01T00:00:00+09:00').getTime();
@@ -36,7 +37,7 @@ const LANGUAGE_LABEL: Record<string, string> = {
   pt: 'Portuguese (Brazilian)',
 };
 
-Deno.serve(async (req) => {
+Deno.serve(handleWithAlert('translate-realtime', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: CORS_HEADERS });
   }
@@ -104,6 +105,12 @@ Deno.serve(async (req) => {
   if (!oaRes.ok) {
     const errText = await oaRes.text();
     console.error(`[translate-realtime] OpenAI error ${oaRes.status}: ${errText}`);
+    await alert({
+      source: 'translate-realtime',
+      level: 'error',
+      message: `OpenAI translation failed (status=${oaRes.status})`,
+      context: { status: oaRes.status, user_id: user.id, target },
+    });
     return json({ error: 'openai_failed', status: oaRes.status, detail: errText }, 502);
   }
 
@@ -115,7 +122,7 @@ Deno.serve(async (req) => {
   }
 
   return json({ translated, target_lang: target }, 200);
-});
+}));
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {

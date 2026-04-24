@@ -3,6 +3,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import Stripe from 'https://esm.sh/stripe@14?target=denonext';
 import { createPreflightResponse, createJsonResponse, createErrorResponse } from '../_shared/cors.ts';
 import { requireOrgRole, writeAudit, HttpError } from '../_shared/auth.ts';
+import { alert } from '../_shared/alert.ts';
 
 interface Payload {
   org_id: string;
@@ -76,6 +77,12 @@ serve(async (req) => {
     return createJsonResponse(req, { url: session.url, session_id: session.id });
   } catch (e) {
     if (e instanceof HttpError) return createErrorResponse(req, e.message, e.status);
+    await alert({
+      source: 'org-checkout',
+      level: 'error',
+      message: `org_checkout internal_error: ${(e as Error).message}`,
+      error: e,
+    });
     return createErrorResponse(req, 'internal_error', 500);
   }
 });

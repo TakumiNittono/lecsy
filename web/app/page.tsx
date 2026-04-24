@@ -76,7 +76,7 @@ export default function Home() {
             mainEntity: [
               { "@type": "Question", name: "Is my data safe with Lecsy?", acceptedAnswer: { "@type": "Answer", text: "Audio is streamed to Deepgram for real-time transcription over an encrypted connection. Deepgram automatically deletes processed audio within 30 days. Lecsy itself never stores your audio. Transcript text syncs to our cloud only when you sign in. AI features send transcript text only (never audio) to OpenAI." } },
               { "@type": "Question", name: "Do I need internet to record and transcribe?", acceptedAnswer: { "@type": "Answer", text: "Real-time bilingual captions require internet because audio is streamed to Deepgram for transcription. If you're offline you can still record locally and transcribe later when you reconnect." } },
-              { "@type": "Question", name: "What languages does Lecsy support?", acceptedAnswer: { "@type": "Answer", text: "Lecsy supports 12 languages for transcription: English, Japanese, Spanish, French, German, Chinese, Korean, and more. AI summaries can be generated in a different language than the recording." } },
+              { "@type": "Question", name: "What languages does Lecsy support?", acceptedAnswer: { "@type": "Answer", text: "Lecsy supports 9 languages for transcription: English, Japanese, Spanish, French, German, Portuguese, Italian, Russian, and Hindi. AI summaries can be generated in a different language than the recording." } },
               { "@type": "Question", name: "How does Lecsy compare to Otter.ai?", acceptedAnswer: { "@type": "Answer", text: "Lecsy is built specifically for international students with real-time bilingual captions. Both Lecsy and Otter use cloud transcription for the paid tier, but Lecsy never stores your audio (Deepgram auto-deletes within 30 days). Lecsy Pro is $12.99/month vs Otter's $16.99/month, and Lecsy has a permanent Free plan." } },
               { "@type": "Question", name: "Is it legal to record lectures?", acceptedAnswer: { "@type": "Answer", text: "In most universities, recording lectures for personal study is permitted. Many schools encourage it as an accessibility accommodation. Check your university's policy." } },
               { "@type": "Question", name: "How accurate is the transcription?", acceptedAnswer: { "@type": "Answer", text: "Lecsy uses Deepgram Nova-3 multilingual model. Accuracy is typically 95%+ for clear English lecture audio and 90%+ for non-native speakers." } },
@@ -96,7 +96,7 @@ export default function Home() {
             operatingSystem: "iOS 17.6+",
             applicationCategory: "EducationApplication",
             offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-            description: "Free lecture recording and AI study app. Record unlimited lectures, transcribe offline, get AI summaries and exam prep in 12 languages.",
+            description: "Free lecture recording and AI study app. Record unlimited lectures, transcribe offline, get AI summaries and exam prep in 9 languages.",
             url: "https://www.lecsy.app/",
             downloadUrl: APP_STORE_URL,
             author: { "@type": "Person", name: "Takumi Nittono" },
@@ -165,7 +165,7 @@ export default function Home() {
 
             <p className="text-xl lg:text-2xl text-gray-500 leading-snug max-w-xl mb-10 tracking-tight">
               Record on iPhone. Transcribe offline. AI summaries and exam prep
-              in 12 languages. Free.
+              in 9 languages. Free.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -545,10 +545,10 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
               </svg>
               <h3 className="font-[family-name:var(--font-display)] font-bold text-gray-900 mb-1">
-                12 Languages
+                9 Languages
               </h3>
               <p className="text-gray-500 text-xs leading-relaxed">
-                English, Japanese, Chinese, Korean, Spanish, French, German, and more. Record in one language, read the summary in another.
+                English, Japanese, Spanish, French, German, Portuguese, Italian, Russian, Hindi. Record in one language, read the summary in another.
               </p>
             </div>
 
@@ -671,7 +671,7 @@ export default function Home() {
                   "On-device AI transcription (WhisperKit)",
                   "AI summaries (3 per month)",
                   "Exam prep mode (Q&A)",
-                  "12 languages",
+                  "9 languages",
                   "Synced audio playback",
                   "Bookmarks & search",
                   "PDF & Markdown export",
@@ -762,7 +762,7 @@ export default function Home() {
               },
               {
                 q: "What languages are supported?",
-                a: "Lecsy supports 12 languages including English, Japanese, Spanish, French, German, Chinese, Korean, and more. You can also get AI summaries in a different language than the recording \u2014 record in English, read the summary in Japanese."
+                a: "Lecsy supports 9 languages for transcription: English, Japanese, Spanish, French, German, Portuguese, Italian, Russian, and Hindi. You can also get AI summaries in a different language than the recording \u2014 record in English, read the summary in Japanese."
               },
               {
                 q: "How does this compare to Otter.ai?",

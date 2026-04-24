@@ -2,6 +2,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createPreflightResponse, createJsonResponse, createErrorResponse } from '../_shared/cors.ts';
 import { requireOrgRole, writeAudit, HttpError } from '../_shared/auth.ts';
+import { alert } from '../_shared/alert.ts';
 
 interface Row {
   email: string;
@@ -136,6 +137,12 @@ serve(async (req) => {
     return createJsonResponse(req, { successes, failures, summary: { total: body.rows.length, ok: successes.length, ng: failures.length } });
   } catch (e) {
     if (e instanceof HttpError) return createErrorResponse(req, e.message, e.status);
+    await alert({
+      source: 'org-csv-import',
+      level: 'error',
+      message: `org_csv_import internal_error: ${(e as Error).message}`,
+      error: e,
+    });
     return createErrorResponse(req, 'internal_error', 500);
   }
 });

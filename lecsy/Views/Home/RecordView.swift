@@ -15,6 +15,9 @@ struct RecordView: View {
     @StateObject private var orgService = OrganizationService.shared
     @StateObject private var authService = AuthService.shared
     @StateObject private var liveCoordinator = TranscriptionCoordinator.shared
+    // PlanService を @StateObject で観測する。LiveCaptionView の表示 gate に
+    // `planService.isPaid` を使うため、refresh 直後に Pro になっても即 UI 反映される。
+    @StateObject private var planService = PlanService.shared
     @StateObject private var ferpaConsent = FERPAConsentService.shared
     @State private var showLoginSheet = false
     @State private var currentLanguageDisplay: String = TranscriptionService.shared.transcriptionLanguage.displayName
@@ -71,9 +74,14 @@ struct RecordView: View {
 
                 Spacer()
 
-                // 中央: リアルタイム字幕。prepare 中（接続待ち）も表示して "Connecting…" を出す
-                if recordingService.isRecording &&
-                   (liveCoordinator.isLiveActive || liveCoordinator.isPreparing) {
+                // 中央: リアルタイム字幕。Pro ユーザーが録音を始めた瞬間から
+                // 必ず描画する。coordinator の isPreparing / isStartingLive を
+                // 条件に含めるやり方だと、observeRecording が Task 経由で
+                // isStartingLive=true を立てるまでに数十ms の空白が生まれ、
+                // 「最初出てなくて後から出てくる」ように見えていた。
+                // 表示の有無は "録音中かつ Pro" の2条件だけで決め、Connecting /
+                // Listening / Live の区別は LiveCaptionView の内部 phase に任せる。
+                if recordingService.isRecording && planService.isPaid {
                     LiveCaptionView(coordinator: liveCoordinator)
                         .padding(.horizontal, 16)
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -504,7 +512,13 @@ struct RecordView: View {
 
     @ViewBuilder
     private var lowAudioWarning: some View {
-        if showLowAudioWarning && recordingService.isRecording && !recordingService.isPaused {
+        // Pro 利用者は LiveCaptionView 内の MOVE CLOSER ピルで同等のガイダンスを
+        // 受けるため、ここの帯と二重表示になる。Free 利用者は LiveCaptionView を
+        // 出していない (planService.isPaid gate) ので、この帯が唯一の低音量警告。
+        if showLowAudioWarning
+            && recordingService.isRecording
+            && !recordingService.isPaused
+            && !planService.isPaid {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.caption2)
@@ -676,7 +690,6 @@ struct RecordView: View {
                     .background(Color.blue.opacity(0.06))
                     .clipShape(Capsule())
                 }
-
             }
         }
     }
@@ -890,12 +903,44 @@ struct RecordView: View {
         updatedLecture.transcriptStatus = .processing
         store.updateLecture(updatedLecture)
 
+        // Pre-normalize audio before transcription (both Deepgram Batch and
+        // WhisperKit fallback benefit). Peak-scan first (~5-10s for 1hr) and
+        // run the full ~30-60s offline render unless the recording is clearly
+        // near-field (peak ≥ -10dBFS ≈ half of full scale).
+        //
+        // 講義アプリなので base ケースは「机の上の iPhone が 3〜5m 先の話者を
+        // 拾う」= peak は典型的に -12 〜 -18dBFS。近接 mic (自分で喋る / 口元
+        // 10cm) だけが peak ≥ -10dBFS に乗るので、それ以外は全部 enhance する。
+        // gain は maxGainDB=15 でクランプされ、既に十分大きい音は 1.0 に
+        // falls back するので、閾値ギリギリの録音を enhance しても悪化しない。
+        let progress = TranscriptionProgressService.shared
+        progress.set(.preparing, for: lectureId)
+        var transcribeURL = audioURL
+        var enhancedURL: URL?
+        if let peakDB = try? await AudioEnhancementService.shared.peakDBFS(audioURL: audioURL),
+           peakDB.isFinite, peakDB < -10 {
+            AppLogger.info("Initial transcription: peak \(String(format: "%.1f", peakDB))dBFS < -10, enhancing", category: .transcription)
+            progress.set(.normalizing, for: lectureId)
+            if let e = try? await AudioEnhancementService.shared.enhance(audioURL: audioURL) {
+                enhancedURL = e
+                transcribeURL = e
+            }
+        }
+        progress.set(.transcribing, for: lectureId)
+
+        defer {
+            if let e = enhancedURL {
+                try? FileManager.default.removeItem(at: e)
+            }
+            progress.clear(for: lectureId)
+        }
+
         // Primary: Deepgram Prerecorded（有料プラン + オンライン + 認証済の時のみ）
         // Free プランは WhisperKit にフォールバック（= 旧フロー完全復元）
         if AuthService.shared.isAuthenticated && PlanService.shared.isPaid {
             do {
                 let dgResult = try await DeepgramBatchService.shared.transcribe(
-                    audioURL: audioURL,
+                    audioURL: transcribeURL,
                     language: transcriptionService.transcriptionLanguage.deepgramCode
                 )
                 guard var latest = store.getLecture(by: lectureId) else { return }
@@ -934,7 +979,7 @@ struct RecordView: View {
         }
 
         do {
-            let result = try await transcriptionService.transcribe(audioURL: audioURL, lectureId: lectureId)
+            let result = try await transcriptionService.transcribe(audioURL: transcribeURL, lectureId: lectureId)
 
             transcriptionService.onChunkCompleted = nil
             guard var latest = store.getLecture(by: lectureId) else { return }

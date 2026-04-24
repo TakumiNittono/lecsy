@@ -41,7 +41,7 @@
 - バッジ:**"FREE"**(Pro表記は一切しない)
 
 ### 枚 5 — 多言語
-- 大見出し:**"12言語に対応、留学生の味方"**
+- 大見出し:**"9言語に対応、留学生の味方"**
 - 国旗バッジ横並び:🇯🇵🇺🇸🇰🇷🇨🇳🇪🇸🇫🇷🇩🇪
 - 実画面:英→日 対訳ノート
 
@@ -179,8 +179,8 @@ xcrun simctl io "iPhone 17 Pro Max" screenshot ~/Desktop/lecsy-shots/01_raw.png
 - **撮影元画面**:AI サマリー画面で出力言語を日本語やスペイン語に切り替えた状態（サマリー言語ピッカー + 非英語サマリー本文が見える）
 - **上部コピー**:
   - Headline: **"Studying in your second language?"**
-  - Sub: "Record in English. Read AI summaries in your native language. 12 languages."
-- **国旗バッジ**:🇺🇸🇪🇸🇨🇳🇰🇷🇯🇵🇫🇷🇩🇪 を横一列
+  - Sub: "Record in English. Read AI summaries in your native language. 9 languages."
+- **国旗バッジ**:🇺🇸🇯🇵🇪🇸🇫🇷🇩🇪🇧🇷🇮🇹🇷🇺🇮🇳 を横一列 (en/ja/es/fr/de/pt/it/ru/hi)
 
 ### 枚 7 — OFFLINE TRANSCRIPTION
 - **撮影元画面**:文字起こし進行中(オフラインアイコンを見せる)
@@ -219,7 +219,7 @@ xcrun simctl io "iPhone 17 Pro Max" screenshot ~/Desktop/lecsy-shots/01_raw.png
 | 3 | Your voice stays on your iPhone. | Audio is never uploaded. Not to us, not to OpenAI, not to anyone. |
 | 4 | A 90-minute lecture, understood in 30 seconds. | Key points. Section outlines. Definitions. Automatically. |
 | 5 | AI writes your likely exam questions. | With model answers. The night before the test. |
-| 6 | Studying in your second language? | Record in English. Read AI summaries in your native language. 12 languages. |
+| 6 | Studying in your second language? | Record in English. Read AI summaries in your native language. 9 languages. |
 | 7 | Works in the basement lecture hall. | On-device transcription. No Wi-Fi required. |
 | 8 | Lock the screen. Keep recording. | Your battery can handle a full 3-hour lecture. |
 | 9 | Record on iPhone. Study on your laptop. | Search, copy, and review at lecsy.app. |

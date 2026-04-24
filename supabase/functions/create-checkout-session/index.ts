@@ -21,6 +21,7 @@ import {
   createJsonResponse,
   createErrorResponse,
 } from '../_shared/cors.ts';
+import { alert } from '../_shared/alert.ts';
 
 interface Payload {
   plan: 'pro' | 'student' | 'power';
@@ -123,6 +124,12 @@ serve(async (req) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[create-checkout-session]', msg);
+    await alert({
+      source: 'create-checkout-session',
+      level: 'error',
+      message: `create_checkout_session_failed: ${msg}`,
+      error: e,
+    });
     return createErrorResponse(req, msg, 500);
   }
 });

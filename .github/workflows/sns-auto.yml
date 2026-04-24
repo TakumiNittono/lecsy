@@ -94,13 +94,13 @@ jobs:
               node scripts/sns-collect.mjs
               ;;
             post-P1)
-              node scripts/sns-run.mjs --live --count=1 --pillar=P1
+              node scripts/sns-run.mjs --live --count=1 --pillar=P1 --ch=X
               ;;
             post-P2)
-              node scripts/sns-run.mjs --live --count=1 --pillar=P2
+              node scripts/sns-run.mjs --live --count=1 --pillar=P2 --ch=X
               ;;
             post-P3)
-              node scripts/sns-run.mjs --live --count=1 --pillar=P3
+              node scripts/sns-run.mjs --live --count=1 --pillar=P3 --ch=X
               ;;
           esac
 

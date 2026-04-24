@@ -63,3 +63,14 @@ yarn-error.log*
 # Skills
 skills-lock.json
 deno.lock
+
+.sentryclirc
+
+# Obsidian vault — user-specific workspace/cache (共有しないほうが良いもののみ)
+.obsidian/workspace
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.obsidian/plugins/**/data.json
+.trash/
+sns-auto/node_modules

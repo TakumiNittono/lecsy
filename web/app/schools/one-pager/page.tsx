@@ -66,7 +66,7 @@ export default function OnePager() {
               Lecture transcription, built for the ESL classroom.
             </h1>
             <p className="text-[13px] text-[#4A5B74] leading-relaxed max-w-[5in]">
-              Real-time bilingual captions. AI summaries in 12 languages. Program-wide admin
+              Real-time bilingual captions. AI summaries in 9 languages. Program-wide admin
               dashboard. Audio that never touches our servers. Designed specifically for
               Intensive English Programs and community-college ESL departments.
             </p>
@@ -78,7 +78,7 @@ export default function OnePager() {
               {
                 k: "01",
                 t: "Deepgram multilingual, live",
-                d: "Captions in 12 languages via Deepgram Nova-3, side-by-side, word-by-word.",
+                d: "Captions in 9 languages via Deepgram Nova-3, side-by-side, word-by-word.",
               },
               {
                 k: "02",
@@ -132,7 +132,7 @@ export default function OnePager() {
                 <div className="text-[10px] font-semibold uppercase text-[#8A9BB5] mb-1">Included</div>
                 <ul className="space-y-0.5 leading-[1.45]">
                   <li>• Up to 250 student seats (UF) / 100 (Santa Fe)</li>
-                  <li>• Real-time bilingual captions, 12 languages</li>
+                  <li>• Real-time bilingual captions, 9 languages</li>
                   <li>• AI summaries + exam-prep generation</li>
                   <li>• Org admin dashboard with per-student usage</li>
                   <li>• CSV export of program metrics</li>

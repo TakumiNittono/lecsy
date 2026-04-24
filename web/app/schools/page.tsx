@@ -28,7 +28,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "What does the pilot cover?",
-    a: "Through June 1, 2026, the pilot is completely free for UF ELI and Santa Fe College ESL. Included: the student iPhone app, real-time bilingual captions via Deepgram, AI summaries in 12 languages, an admin dashboard showing program-wide usage, and CSV export. Not included: SSO/SAML, HIPAA BAA, on-prem deployment. See the Pilot page for full scope.",
+    a: "Through June 1, 2026, the pilot is completely free for UF ELI and Santa Fe College ESL. Included: the student iPhone app, real-time bilingual captions via Deepgram, AI summaries in 9 languages, an admin dashboard showing program-wide usage, and CSV export. Not included: SSO/SAML, HIPAA BAA, on-prem deployment. See the Pilot page for full scope.",
   },
   {
     q: "What happens after the pilot?",
@@ -66,7 +66,7 @@ export default function SchoolsHome() {
           </h1>
 
           <p className="text-lg md:text-xl text-[#C8D1E0] leading-relaxed max-w-2xl mb-10">
-            Real-time bilingual captions. AI summaries in 12 languages. Program-wide
+            Real-time bilingual captions. AI summaries in 9 languages. Program-wide
             admin dashboard. Audio that never touches our servers. Designed specifically for
             Intensive English Programs, IEPs, and community-college ESL departments.
           </p>
@@ -174,7 +174,7 @@ export default function SchoolsHome() {
               {
                 kicker: "01",
                 title: "Deepgram multilingual, live",
-                body: "Real-time captions in 12 languages via Deepgram Nova-3. Students see the professor's words in English and in their native language, side-by-side, word-by-word — not after class, during class.",
+                body: "Real-time captions in 9 languages via Deepgram Nova-3. Students see the professor's words in English and in their native language, side-by-side, word-by-word — not after class, during class.",
               },
               {
                 kicker: "02",
@@ -261,7 +261,7 @@ export default function SchoolsHome() {
               <ul className="space-y-3 text-[#4A5B74]">
                 {[
                   "Up to 250 student seats (UF ELI) / 100 seats (Santa Fe)",
-                  "Real-time bilingual captions — 12 languages",
+                  "Real-time bilingual captions — 9 languages",
                   "AI summaries & exam-prep generation",
                   "Organization admin dashboard with per-student usage",
                   "CSV export of program-wide metrics",

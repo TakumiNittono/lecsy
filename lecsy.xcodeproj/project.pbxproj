@@ -7,11 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CD60FC112F991D8B0080C07B /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		CD60FC122F991D8B0080C07B /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 6F61BC236064406FB8A4ED99 /* Sentry */; };
+		CD60FC132F991D8B0080C07B /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		CD60FC142F991D8B0080C07B /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		CDF43A1A2F288977003A1A08 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDF4390A2F283C41003A1A0B /* WhisperKit */; };
 		CDF43A1B2F288977003A1A08 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = CDF4390B2F283C41003A1A0C /* Supabase */; };
 		CDF43BCD2F2939B2003A1A08 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDF43BCC2F2939B2003A1A08 /* WidgetKit.framework */; };
 		CDF43BCF2F2939B2003A1A08 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDF43BCE2F2939B2003A1A08 /* SwiftUI.framework */; };
 		CDF43BDC2F2939B3003A1A08 /* LecsyWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CDF43BCA2F2939B2003A1A08 /* LecsyWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E6831B0A7A4C4D4C8CBDC75E /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 6F61BC236064406FB8A4ED99 /* Sentry */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -112,8 +117,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CD60FC122F991D8B0080C07B /* Sentry in Frameworks */,
 				CDF43A1B2F288977003A1A08 /* Supabase in Frameworks */,
 				CDF43A1A2F288977003A1A08 /* WhisperKit in Frameworks */,
+				CD60FC112F991D8B0080C07B /* (null) in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,6 +128,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CD60FC132F991D8B0080C07B /* (null) in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -128,6 +136,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CD60FC142F991D8B0080C07B /* (null) in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -137,6 +146,7 @@
 			files = (
 				CDF43BCF2F2939B2003A1A08 /* SwiftUI.framework in Frameworks */,
 				CDF43BCD2F2939B2003A1A08 /* WidgetKit.framework in Frameworks */,
+				E6831B0A7A4C4D4C8CBDC75E /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -186,6 +196,7 @@
 				CDF438DB2F283C40003A1A08 /* Frameworks */,
 				CDF438DC2F283C40003A1A08 /* Resources */,
 				CDF43BDD2F2939B3003A1A08 /* Embed Foundation Extensions */,
+				0DD681467B98474987FFEAF5 /* Upload Debug Symbols to Sentry */,
 			);
 			buildRules = (
 			);
@@ -199,6 +210,7 @@
 			packageProductDependencies = (
 				CDF4390A2F283C41003A1A0B /* WhisperKit */,
 				CDF4390B2F283C41003A1A0C /* Supabase */,
+				6F61BC236064406FB8A4ED99 /* Sentry */,
 			);
 			productName = lecsy;
 			productReference = CDF438DE2F283C40003A1A08 /* lecsy.app */;
@@ -310,6 +322,7 @@
 			packageReferences = (
 				CDF439082F283C41003A1A09 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				CDF439092F283C41003A1A0A /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				01FFFE540E3F4F968B89F223 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CDF438DF2F283C40003A1A08 /* Products */;
@@ -354,6 +367,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		0DD681467B98474987FFEAF5 /* Upload Debug Symbols to Sentry */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${TARGET_NAME}",
+			);
+			name = "Upload Debug Symbols to Sentry";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script is responsible for uploading debug symbols and source context for Sentry.\nif which sentry-cli >/dev/null; then\n  export SENTRY_ORG=lecsy\n  export SENTRY_PROJECT=lecsy-ios\n  ERROR=$(sentry-cli debug-files upload --include-sources \"$DWARF_DSYM_FOLDER_PATH\" 2>&1 >/dev/null)\n  if [ ! $? -eq 0 ]; then\n    echo \"warning: sentry-cli - $ERROR\"\n  fi\nelse\n  echo \"warning: sentry-cli not installed, download from https://github.com/getsentry/sentry-cli/releases\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		CDF438DA2F283C40003A1A08 /* Sources */ = {
@@ -538,8 +569,10 @@
 				CODE_SIGN_ENTITLEMENTS = lecsy/lecsy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 12;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = G7LG228243;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = lecsy/Info.plist;
 				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = \"com.takumiNittono.word.lecsy\";\n    CFBundleURLSchemes =     (\n        lecsy\n    );\n}";
@@ -583,8 +616,10 @@
 				CODE_SIGN_ENTITLEMENTS = lecsy/lecsy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 12;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = G7LG228243;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = lecsy/Info.plist;
 				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = \"com.takumiNittono.word.lecsy\";\n    CFBundleURLSchemes =     (\n        lecsy\n    );\n}";
@@ -817,6 +852,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		01FFFE540E3F4F968B89F223 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa/";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
 		CDF439082F283C41003A1A09 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
@@ -836,6 +879,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		6F61BC236064406FB8A4ED99 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 01FFFE540E3F4F968B89F223 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
+		};
 		CDF4390A2F283C41003A1A0B /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = CDF439082F283C41003A1A09 /* XCRemoteSwiftPackageReference "WhisperKit" */;

@@ -63,6 +63,30 @@ final class DeepgramAudioCapture {
         return AVAudioFormat(streamDescription: &desc)!
     }()
 
+    // MARK: - Adaptive gain (far-field lecture boost)
+    //
+    // m4a ファイルは録音停止後に AudioEnhancementService で normalize されるが、
+    // live Deepgram stream はリアルタイム処理なので post-enhance が効かない。
+    // 大講堂・遠距離席で小さく録れた音声を Deepgram に渡す前にブーストしないと、
+    // Pro ユーザーの live captions がほぼ無言のまま終わる（お父様 2026-04-24 case）。
+    //
+    // 仕組み: 直近の smoothed peak を追いかけて、それが target (-6dBFS ≒ 0.5)
+    // に届くように gain を計算する。既に十分大きい音声 (near-field) は gain=1.0
+    // に fall back するので素通り。far-field だけが +6〜+20dB ブーストされる。
+    // 急峰は hard-clamp で防ぐ（真の limiter ではないが講義音声には十分）。
+
+    /// 直近の smoothed peak。start() 時に reset される。
+    private var gainRunningPeak: Float = 0.2
+    /// Peak follower の smoothing (1.0 に近いほど遅く追従)。~1秒分で安定する値。
+    private let gainSmoothing: Float = 0.95
+    /// Target peak (linear, ≒ -6dBFS)。これを上回っている間は gain=1.0。
+    private let gainTargetPeak: Float = 0.5
+    /// 最大 gain。20dB = 10x。これ以上はノイズフロアが膨らむだけ。
+    private let gainMaxLinear: Float = 10.0
+    /// Warm-up 中は gain を当てず peak の実測値を集める。~85ms×20 ≒ 1.7s で安定。
+    /// 近接 mic のユーザーが録音開始直後にクリップ歪みで不愉快になるのを防ぐ。
+    private var gainWarmupBuffersRemaining: Int = 20
+
     func start() throws {
         try startEngineAndTap()
         isRunning = true
@@ -104,6 +128,12 @@ final class DeepgramAudioCapture {
         input.installTap(onBus: 0, bufferSize: 4_096, format: nil) { [weak self] buffer, _ in
             self?.convertAndEmit(buffer: buffer)
         }
+
+        // Adaptive gain の warmup / running peak をリセットしておく。
+        // route change (ヘッドホン抜去等) 後は hw 特性が変わっている可能性があるので、
+        // 前セッションの推定値を引き継がず固まり直す方が安全。
+        gainRunningPeak = 0.2
+        gainWarmupBuffersRemaining = 20
 
         // 3秒経っても chunk が届かなければ警告。10秒で fatal 扱いにして
         // 停止させる（警告だけだと無音のまま Deepgram にゴミを流し続ける）。
@@ -276,7 +306,61 @@ final class DeepgramAudioCapture {
         }
     }
 
+    /// 直近 peak を追いかけて gain を当てる。float32 interleaved / non-interleaved
+    /// どちらにも対応。int16 など非対応 format では何もしない (まれ)。
+    private func applyAdaptiveGain(_ buffer: AVAudioPCMBuffer) {
+        guard buffer.format.commonFormat == .pcmFormatFloat32 else { return }
+        let frameCount = Int(buffer.frameLength)
+        guard frameCount > 0 else { return }
+        let channelCount = Int(buffer.format.channelCount)
+
+        // 各チャネルの絶対ピークを測る。
+        var bufPeak: Float = 0
+        if let nonInterleaved = buffer.floatChannelData {
+            for ch in 0..<channelCount {
+                let samples = nonInterleaved[ch]
+                for i in 0..<frameCount {
+                    let m = Swift.abs(samples[i])
+                    if m > bufPeak { bufPeak = m }
+                }
+            }
+        }
+        if bufPeak <= 0 { return }
+
+        // Running peak を smoothing で更新。
+        gainRunningPeak = gainSmoothing * gainRunningPeak + (1 - gainSmoothing) * Swift.max(bufPeak, 0.001)
+
+        // Warm-up 中は near-field / far-field の判定が固まらないので gain はかけない。
+        if gainWarmupBuffersRemaining > 0 {
+            gainWarmupBuffersRemaining -= 1
+            return
+        }
+
+        // Gain を算出 (減衰は一切しない)。
+        var gain = gainTargetPeak / gainRunningPeak
+        if gain < 1.0 { gain = 1.0 }
+        if gain > gainMaxLinear { gain = gainMaxLinear }
+        if gain == 1.0 { return }  // near-field は何もしない
+
+        // In-place でサンプル増幅 + hard-clamp。
+        if let nonInterleaved = buffer.floatChannelData {
+            for ch in 0..<channelCount {
+                let samples = nonInterleaved[ch]
+                for i in 0..<frameCount {
+                    let v = samples[i] * gain
+                    if v > 1.0 { samples[i] = 1.0 }
+                    else if v < -1.0 { samples[i] = -1.0 }
+                    else { samples[i] = v }
+                }
+            }
+        }
+    }
+
     private func convertAndEmit(buffer: AVAudioPCMBuffer) {
+        // 先に adaptive gain をかけてから 16kHz int16 へ変換し Deepgram に送る。
+        // 小さく録れた大講堂音声でも live captions が出るようにするのが目的。
+        applyAdaptiveGain(buffer)
+
         guard let converter else { return }
 
         let ratio = targetFormat.sampleRate / buffer.format.sampleRate

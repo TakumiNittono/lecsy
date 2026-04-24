@@ -585,6 +585,7 @@ struct LibraryView: View {
 struct LectureRow: View {
     let lecture: Lecture
     let searchQuery: String
+    @ObservedObject private var progress = TranscriptionProgressService.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -656,7 +657,7 @@ struct LectureRow: View {
                 if lecture.transcriptStatus == .processing || lecture.transcriptStatus == .downloading {
                     ProgressView()
                         .scaleEffect(0.5)
-                    Text(lecture.transcriptStatus == .downloading ? "Downloading..." : "Transcribing...")
+                    Text(processingLabel)
                         .font(.system(.caption2, design: .rounded))
                         .foregroundColor(.orange)
                 } else if lecture.transcriptStatus == .completed {
@@ -684,6 +685,15 @@ struct LectureRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// .processing 中のラベル。TranscriptionProgressService が stage を持って
+    /// いればそれを、なければ状態に応じたフォールバックを返す。
+    private var processingLabel: String {
+        if lecture.transcriptStatus == .downloading {
+            return "Downloading..."
+        }
+        return progress.text(for: lecture.id, fallback: "Transcribing...")
     }
 }
 

@@ -65,7 +65,7 @@ Lecsy: AI講義録音&文字起こし
 
 ### Promotional Text(170字・審査不要で随時更新可)
 ```
-🎓 2026年6月1日まで、全機能 完全無料。広告なし、課金なし、クレジットカード不要。録音・文字起こし・AI要約・試験モードがすべて使えます。音声は端末から一切出ないオンデバイス設計で、12言語に対応。
+🎓 2026年6月1日まで、全機能 完全無料。広告なし、課金なし、クレジットカード不要。録音・文字起こし・AI要約・試験モードがすべて使えます。音声は端末から一切出ないオンデバイス設計で、9言語(英・日・西・仏・独・葡・伊・露・ヒンディー)に対応。
 ```
 カウント:約125字 / 170字。
 
@@ -120,7 +120,7 @@ Free through June 1, 2026. No ads. No subscription. No credit card.
 • On-device speech-to-text (WhisperKit) — works in lecture halls with zero Wi-Fi
 • AI summaries: key points, section outlines, definitions
 • Exam Mode: AI generates likely test questions with model answers
-• 12 languages including English, Spanish, French, German, Chinese, Japanese, Korean
+• 9 languages: English, Japanese, Spanish, French, German, Portuguese, Italian, Russian, Hindi
 • Multilingual AI summaries — record in English, read the summary in your native language
 • Web access at lecsy.app — read, search, and copy transcripts on any laptop
 
@@ -147,7 +147,7 @@ Why that matters: Otter.ai is currently facing a class-action lawsuit over how i
 • Students who do not want their voice on someone else's server
 
 ■ What you get for free
-Every feature. Recording, transcription, AI summaries, Exam Mode, all 12 languages, web access — all of it. Daily limit is 50 AI summaries during the free period. No feature is paywalled.
+Every feature. Recording, transcription, AI summaries, Exam Mode, all 9 supported languages, web access — all of it. Daily limit is 50 AI summaries during the free period. No feature is paywalled.
 
 ■ Requirements
 • iOS 17.6 or later

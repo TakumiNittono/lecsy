@@ -65,22 +65,23 @@
 ### 電話スクリプト（Jen Homard 宛て）
 ```
 "Hi Jen, my name is Takumi. I'm the founder of lecsy, an iPhone
-app that helps ESL students transcribe lectures in 12 languages,
-completely offline. I'm based right here in Gainesville and I'd
-love to bring an iPhone over to Santa Fe and show you a 10-minute
-demo. We're offering free 4-week pilots to a few local schools.
-Would you have 15 minutes next week — Tuesday or Thursday?"
+app that helps ESL students transcribe lectures in 9 languages
+including Spanish, Portuguese, Russian, and Hindi — completely
+offline. I'm based right here in Gainesville and I'd love to bring
+an iPhone over to Santa Fe and show you a 10-minute demo. We're
+offering free 4-week pilots to a few local schools. Would you have
+15 minutes next week — Tuesday or Thursday?"
 ```
 
 ### コールドメール（Jen 宛て、現職確認後）
 ```
-Subject: Free pilot for Santa Fe ESL — 12-language lecture transcription app
+Subject: Free pilot for Santa Fe ESL — 9-language lecture transcription app
 
 Hi Jen,
 
 I'm Takumi, founder of lecsy. I'm based in Gainesville and just
 launched OPT. lecsy is an iPhone app that transcribes lectures in
-12 languages on-device — FERPA-safe, no servers, no setup.
+9 languages on-device — FERPA-safe, no servers, no setup.
 
 I'd love to offer Santa Fe College ESL a free 4-week pilot. Since
 I'm local, I can be hands-on for setup and student support.

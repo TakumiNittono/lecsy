@@ -90,14 +90,14 @@ final class SummaryService {
     }
 
     /// transcript content をアップロード → 要約生成。
-    /// outputLanguage: 'ja' / 'en' 等、要約結果の言語コード (省略時は 'ja')。
+    /// outputLanguage: 'en' / 'ja' 等、要約結果の言語コード (省略時は 'en' = FMCC パイロット想定)。
     func generateSummary(
         title: String,
         content: String,
         durationSeconds: Double?,
         language: String?,
         mode: SummaryMode = .summary,
-        outputLanguage: String = "ja"
+        outputLanguage: String = "en"
     ) async throws -> SummaryResult {
         guard AuthService.shared.currentUser != nil else {
             throw SummaryError.notSignedIn
@@ -167,7 +167,7 @@ final class SummaryService {
         content: String,
         durationSeconds: Double?,
         language: String?,
-        outputLanguage: String = "ja"
+        outputLanguage: String = "en"
     ) -> AsyncThrowingStream<StreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {

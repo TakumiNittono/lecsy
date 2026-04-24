@@ -2,6 +2,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createPreflightResponse, createJsonResponse, createErrorResponse } from '../_shared/cors.ts';
 import { requireSuperAdmin, writeAudit, HttpError } from '../_shared/auth.ts';
+import { alert } from '../_shared/alert.ts';
 
 interface Payload {
   org_id: string;
@@ -52,6 +53,12 @@ serve(async (req) => {
     return createJsonResponse(req, { ok: true, action: 'created', member_id: created.id });
   } catch (e) {
     if (e instanceof HttpError) return createErrorResponse(req, e.message, e.status);
+    await alert({
+      source: 'org-grant-ownership',
+      level: 'error',
+      message: `org_grant_ownership internal_error: ${(e as Error).message}`,
+      error: e,
+    });
     return createErrorResponse(req, 'internal_error', 500);
   }
 });

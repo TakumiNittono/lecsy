@@ -4,6 +4,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@13";
+import { alert } from "../_shared/alert.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
   apiVersion: "2023-10-16",
@@ -122,6 +123,11 @@ serve(async (req) => {
   // 環境変数の確認
   if (!webhookSecret) {
     console.error("[Stripe Webhook] STRIPE_WEBHOOK_SECRET is not configured");
+    await alert({
+      source: "stripe-webhook",
+      level: "critical",
+      message: "STRIPE_WEBHOOK_SECRET is not configured — all Stripe events will be rejected",
+    });
     return new Response("Server configuration error", { status: 500 });
   }
 
@@ -144,6 +150,12 @@ serve(async (req) => {
       event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
     } catch (signatureError) {
       console.error("[Stripe Webhook] Signature verification failed", signatureError instanceof Error ? signatureError.message : signatureError);
+      await alert({
+        source: "stripe-webhook",
+        level: "error",
+        message: "Stripe signature verification failed — possible misconfig or replay attempt",
+        error: signatureError,
+      });
       return new Response("Invalid signature", { status: 400 });
     }
 
@@ -317,6 +329,18 @@ serve(async (req) => {
 
           console.log(`[Stripe Webhook] Payment failed for subscription: ${subscriptionId}`);
         }
+        // Payment failure 自体は business event なので warning でアラート。
+        await alert({
+          source: "stripe-webhook",
+          level: "warning",
+          message: `Invoice payment failed`,
+          context: {
+            invoice_id: invoice.id,
+            customer: invoice.customer,
+            subscription_id: subscriptionId,
+            amount_due: invoice.amount_due,
+          },
+        });
         break;
       }
 
@@ -329,6 +353,12 @@ serve(async (req) => {
     });
   } catch (error) {
     logError("Unexpected error", error);
+    await alert({
+      source: "stripe-webhook",
+      level: "error",
+      message: "Unhandled error processing Stripe event",
+      error,
+    });
     // 内部エラーの詳細は返さない
     return new Response("Internal server error", { status: 500 });
   }

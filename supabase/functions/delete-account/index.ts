@@ -7,6 +7,7 @@ import {
   createJsonResponse,
   createErrorResponse,
 } from '../_shared/cors.ts';
+import { alert } from '../_shared/alert.ts';
 
 Deno.serve(async (req) => {
   // CORS プリフライト
@@ -50,7 +51,14 @@ Deno.serve(async (req) => {
 
     return createJsonResponse(req, { success: true });
   } catch (error) {
-    console.error("Error:", error instanceof Error ? error.message : "Unknown error");
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Error:", msg);
+    await alert({
+      source: 'delete-account',
+      level: 'critical',
+      message: `delete_account_failed: ${msg}`,
+      error,
+    });
     return createErrorResponse(req, "Internal server error", 500);
   }
 });

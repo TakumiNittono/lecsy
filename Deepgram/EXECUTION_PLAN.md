@@ -22,7 +22,7 @@
 
 **追加禁止**: Course Hierarchy 4階層、pgvector、Vocabulary自動抽出、Anki export、Exam Prep、Syllabus OCR、Push通知、Live Activities、Android。
 
-**例外条項**: ローンチ後（W9以降）、上位5本が完全動作したら1本だけ追加可。
+**例外条項の1本 (2026-04-21確定)**: ローンチ後 W09 以降、上位5本が完全動作したら、最初の追加機能は **Deepgramお試し枠** (Free ユーザーに Live字幕を初回30分 or 最初の1講義だけ解放、one-time)。Pro 転換率を上げる Free → Pro の導線。これ以外の機能追加は禁止。
 
 ---
 
@@ -66,20 +66,21 @@
 - **note**: 「Study Guide Quick」専用UI追加は不要。既存サマリー導線がそのまま該当
 - **Gate**: 既存`summarize`が10秒以内応答（人間側で計測）
 
-### W05: 5/12-5/18 — WhisperKit fallback化 → 段階削除
+### W05: 5/12-5/18 — WhisperKit fallback化 → 恒久配置化
 **Phase 1 (2026-04-14 完了): Deepgram優先 + WhisperKit fallback**
 - [x] `TranscriptionCoordinator.consumeFinalizedTranscript()` 追加
 - [x] `RecordView.saveLecture()` 改修: liveResultあり→そのまま採用、なし→WhisperKit
 - [x] 安全弁L1 (残高) / L3 (日次120分) は `deepgram-token` Edge Functionに実装済み
 - [x] 安全弁L2 (月次600分) も同関数に実装済み
 
-**Phase 2 (実機検証 1週間後)**
-- [ ] WhisperKit参照を完全削除 (`TranscriptionService.swift` -1500行、`WhisperKitModels/` フォルダ削除、`project.pbxproj`からSPM依存解除)
-- [x] `Info.plist` マイク用途文言書き換え（"on-device" → "processed via Deepgram, never stored by lecsy"）(2026-04-14 完了)
-- [x] `PrivacyInfo.xcprivacy` DataType更新（AudioData宣言、2026-04-14 完了）
+**Phase 2 (方針変更 2026-04-21): WhisperKit 恒久配置**
+- 【撤回】WhisperKit 完全削除タスクは**実行しない**。理由: (1) Free ユーザー文字起こしコスト$0、(2) 鉄則4「音声を lecsy サーバーに保存しない」との整合、(3) Deepgram単一依存リスク回避、(4) オフライン対応（飛行機・地下・寮Wi-Fi不安定）。
+- [ ] `TranscriptionService.swift` を `TranscriptionProvider` プロトコルで抽象化、Deepgram(Live+Batch) と WhisperKit パスを分離（1924行 → 700-800行目安）。**削除ではなく整理**。
+- [x] `Info.plist` マイク用途文言書き換え (2026-04-14 完了)
+- [x] `PrivacyInfo.xcprivacy` DataType更新 (2026-04-14 完了)
+- [ ] `Info.plist` 文言を "processed via Deepgram (Pro) or on-device (Free)" の両対応文言に再修正
 
-**判断基準**: Deepgram経路が500ユーザー × 1週間で98%以上成功なら Phase 2 実行。
-**Gate**: Phase 1 ✅ / Phase 2 は実運用検証後
+**Gate**: Phase 1 ✅ / Phase 2 はコード整理のみ、6/1 までに完了
 
 ### W06: 5/19-5/25 — Stripe Test mode 完全構築 ✅ **前倒し完了 (2026-04-14)**
 **Edge Functions (deployed)**
@@ -116,7 +117,15 @@
 - [x] `web/app/terms/page.tsx` 更新（Pro/Student価格、Deepgram経路、B2B/教育機関セクション追加）
 - **人間側スキップ (ユーザー指示)**: LLC, EIN, 銀行口座, 保険, App Store審査申請
 
-### W08: 6/01-6/07 — ローンチ準備 ✅ **AI担当分完了 (2026-04-14)**
+### W08: 6/01-6/07 — 全開ローンチ（収益レバー3本同日起動）
+
+**6/1 当日に解放するもの (方針確定 2026-04-21):**
+1. **Stripe Test → Live 切替** (Products/Prices/Webhook Secret)
+2. **B2C Pro $12.99/月 解放** — `update public.feature_flags set enabled=true where name='b2c_stripe_checkout'` で iOS Settings "View Plans"/"Manage Subscription" が即露出
+3. **AI翻訳サブスク $5/月 同時ローンチ** — B2C Pro より軽い中間プラン、翻訳機能のみ解放
+4. B2B Pro (Deepgram) は既に稼働中 → 合計 3本の収益レバーが同日ON
+
+**前提実装（済）**
 - [x] `supabase/functions/deepgram-balance-check/index.ts` deployed (auto-disable on低残高)
 - [x] `supabase/migrations/20260414100000_system_alerts.sql` applied
 - [x] `Deepgram/OPERATIONS.md` 運用マニュアル作成（Stripe Live切替手順、監視SQL、障害対応、cron設定）
@@ -125,15 +134,27 @@
 - [x] `lecsy/Services/BillingService.swift` をSettings画面に統合（"View Plans" / "Manage Subscription"）
 - [x] **www.lecsy.app に本番デプロイ** — privacy/terms/sitemap/landing/pricing 全部Deepgram実態に整合
 - [x] middleware に `/pricing` + SEOページ群を public で追加
-- **人間側 (ローンチ日)**: Stripe Live切替実行、ユーザー通知配信、SNS投稿
-- **Gate**: 24時間無事故、Pro課金1号獲得
 
-### W09-W12: 6/08-7/06 — Summer pilot運用
+**6/1 までに追加で必要なAIレーン作業**
+- [ ] AI翻訳サブスク用 Stripe Product/Price 作成（`lecsy_translate_monthly`, $5/月）
+- [ ] `supabase/functions/stripe-webhook/index.ts` で AI翻訳サブスクの price_id 分岐追加
+- [ ] iOS `PlanService` に `ProTier` enum (`.pro` / `.translateOnly` / `.orgPro`) 拡張
+- [ ] Web `/pricing` のバナー文言を "🚀 coming soon" → 本番文言に書き換え
+
+**人間側 (6/1 当日)**
+- Stripe Live切替実行、ユーザー通知配信、SNS投稿（日/韓/中コミュニティ）
+- `b2c_stripe_checkout` feature_flag を true に
+- Slack Webhook URL 発行 → `supabase secrets set SLACK_WEBHOOK_URL=...`
+
+**Gate**: 24時間無事故、B2C Pro課金1号 or AI翻訳サブスク課金1号 獲得
+
+### W09-W12: 6/08-7/06 — Summer pilot運用 + Deepgramお試し枠投入
 - UF ELI Summer pilot 開始、週次フィードバック会議
 - Santa Fe pilot 開始
-- **営業は2校のみ**。Tampa/Orlandoツアーはやらない（凍結スコープ）
-- 技術はバグ修正のみ、新機能禁止
-- **Gate (W12末)**: 2校パイロット稼働中、MRR $500以上、クラッシュ率<1%
+- **営業は2校 + FMCC**。Tampa/Orlandoツアーはやらない（凍結スコープ）
+- **W10 (6/15-6/21): Deepgramお試し枠を実装** — Free ユーザーが初回30分 or 最初の1講義だけ Live字幕を使える one-time 枠。`user_trial_realtime_usage` テーブル追加、`deepgram-token` Edge Function にトライアル判定、iOS で「お試し残り○分」バッジ表示、使い切り時の Pro誘導モーダル。これが**例外条項の1本**（残り追加禁止）
+- その他の技術はバグ修正のみ
+- **Gate (W12末)**: 2校パイロット稼働中、MRR $500以上、クラッシュ率<1%、お試し枠→Pro 転換率計測開始
 
 ### W13: 7/07-7/13 — 日本帰国準備
 - パイロット運用引き継ぎ資料作成

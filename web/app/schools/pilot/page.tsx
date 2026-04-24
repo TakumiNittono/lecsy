@@ -87,7 +87,7 @@ export default function PilotPage() {
             <ul className="space-y-3 text-[#4A5B74] text-[15px]">
               {[
                 "Student iPhone app (iOS 17.6+), unlimited recordings",
-                "Real-time bilingual captions via Deepgram (12 languages)",
+                "Real-time bilingual captions via Deepgram (9 languages)",
                 "AI summaries and exam-prep generation",
                 "Organization admin dashboard with per-student usage",
                 "CSV export of program-wide metrics",

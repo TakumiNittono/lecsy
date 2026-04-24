@@ -451,10 +451,15 @@ class RecordingService: NSObject, ObservableObject {
         do {
             // Only set category if it's not already correct.
             // Calling setCategory during active recording causes audio glitches.
-            if session.category != .playAndRecord {
+            // Always use `.measurement`: this is a lecture app — 90% of sessions
+            // are far-field (phone on desk, speaker 3〜30m away). .measurement
+            // disables iOS voice-processing (AGC / noise suppression / echo-
+            // cancel) which otherwise treats quiet far-field speech as noise
+            // and removes it. Near-field capture still works fine with raw audio.
+            if session.category != .playAndRecord || session.mode != .measurement {
                 try session.setCategory(
                     .playAndRecord,
-                    mode: .default,
+                    mode: .measurement,
                     options: [.defaultToSpeaker, .allowBluetooth]
                 )
             }
@@ -469,9 +474,11 @@ class RecordingService: NSObject, ObservableObject {
         guard !isAudioSessionPrepared else { return }
         let audioSession = AVAudioSession.sharedInstance()
         do {
+            // See restoreAudioSessionIfNeeded() for why `.measurement` is the
+            // only mode used by this lecture app.
             try audioSession.setCategory(
                 .playAndRecord,
-                mode: .default,
+                mode: .measurement,
                 options: [.defaultToSpeaker, .allowBluetooth]
             )
             try audioSession.setActive(true, options: [])
@@ -534,7 +541,7 @@ class RecordingService: NSObject, ObservableObject {
         do {
             try audioSession.setCategory(
                 .playAndRecord,
-                mode: .default,
+                mode: .measurement,
                 options: [.defaultToSpeaker, .allowBluetooth]
             )
             try audioSession.setActive(true, options: [])

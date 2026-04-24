@@ -12,6 +12,7 @@ struct LectureDetailView: View {
     @StateObject private var store = LectureStore.shared
     @StateObject private var audioPlayer = AudioPlayerService.shared
     @ObservedObject private var transcriptionStatus = TranscriptionService.shared
+    @ObservedObject private var progress = TranscriptionProgressService.shared
     @State private var title: String
     @State private var lecture: Lecture
     // PERF: Cached, token-stripped transcript. `stripWhisperTokens` is a
@@ -38,7 +39,7 @@ struct LectureDetailView: View {
     // result; loading/streaming/error state is read from the store.
     @StateObject private var summaryStore = SummaryGenerationStore.shared
     @State private var summaryResult: SummaryService.SummaryResult?
-    @AppStorage("summaryOutputLanguage") private var summaryOutputLanguage: String = "ja"
+    @AppStorage("summaryOutputLanguage") private var summaryOutputLanguage: String = "en"
 
     private let summaryLanguages: [(code: String, label: String)] = [
         ("ja", "日本語"),
@@ -221,6 +222,16 @@ struct LectureDetailView: View {
                     retryButton
                 }
 
+                // Re-transcribe (for completed transcriptions when audio still exists).
+                // Covers the case where live captions captured only a small portion of
+                // the lecture (low SNR / far-field mic) and the user wants to reprocess
+                // the full audio with the batch engine offline.
+                if lecture.transcriptStatus == .completed
+                    && lecture.audioPath != nil
+                    && !isRetrying {
+                    reTranscribeButton
+                }
+
                 // Transcript text
                 if lecture.transcriptStatus == .processing || (isRetrying && lecture.transcriptStatus != .completed) {
                     VStack(spacing: 12) {
@@ -248,7 +259,10 @@ struct LectureDetailView: View {
                         } else {
                             HStack(spacing: 8) {
                                 ProgressView()
-                                Text(isRetrying ? "Retrying..." : "Transcribing...")
+                                Text(progress.text(
+                                    for: lecture.id,
+                                    fallback: isRetrying ? "Retrying..." : "Transcribing..."
+                                ))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -532,6 +546,34 @@ struct LectureDetailView: View {
         .disabled(isRetrying)
     }
 
+    // MARK: - Re-transcribe Button (for completed recordings)
+    //
+    // For lectures recorded in difficult acoustics (large halls, far-field mic)
+    // the live-caption pass can capture only a fraction of the speech while the
+    // m4a file still holds the full audio. This button lets the user re-run the
+    // audio through the batch engine — which uses a different model and is
+    // generally more forgiving of low-SNR input than the realtime stream.
+    private var reTranscribeButton: some View {
+        Button(action: {
+            Task { await retryTranscription() }
+        }) {
+            HStack(spacing: 6) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Re-transcribe with audio boost")
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+            }
+            .foregroundColor(.blue)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Color.blue.opacity(0.08))
+            .clipShape(Capsule())
+        }
+        .disabled(isRetrying)
+        .accessibilityLabel("Re-transcribe this recording from audio")
+        .accessibilityHint("Reprocesses the saved audio when the live transcript missed parts of the lecture")
+    }
+
     // MARK: - Cancel & Retry Button
 
     private var cancelAndRetryButton: some View {
@@ -643,7 +685,7 @@ struct LectureDetailView: View {
                     }
                 } label: {
                     HStack(spacing: 3) {
-                        Text(summaryLanguages.first { $0.code == summaryOutputLanguage }?.label ?? "日本語")
+                        Text(summaryLanguages.first { $0.code == summaryOutputLanguage }?.label ?? "English")
                         Image(systemName: "chevron.down")
                     }
                     .font(.system(.caption, design: .rounded, weight: .medium))
@@ -843,8 +885,82 @@ struct LectureDetailView: View {
         store.updateLecture(updatedLecture)
         lecture = updatedLecture
 
-        // Progressive update: read latest from store to avoid overwriting title edits
         let transcriptionService = TranscriptionService.shared
+
+        // Pre-normalize the audio so faint far-field speech (large halls,
+        // distant speaker) is lifted toward peak before transcription. Both
+        // the Deepgram batch path and the WhisperKit fallback benefit equally
+        // — the お父様 2026-04-24 case (1-hour 大講堂 recording, only 2 minutes
+        // recognized) is the motivating scenario, and Free/WhisperKit-only
+        // users hit it just as hard as Pro users. Best-effort: if enhancement
+        // fails we fall through to raw audio.
+        let progress = TranscriptionProgressService.shared
+        progress.set(.normalizing, for: lectureId)
+        var transcribeURL = audioURL
+        var enhancedURL: URL?
+        do {
+            let e = try await AudioEnhancementService.shared.enhance(audioURL: audioURL)
+            enhancedURL = e
+            transcribeURL = e
+            AppLogger.info("Re-transcribe: audio enhanced before transcription", category: .transcription)
+        } catch {
+            AppLogger.warning("Audio enhancement failed (\(error.localizedDescription)) — using raw audio", category: .transcription)
+        }
+        progress.set(.transcribing, for: lectureId)
+
+        defer {
+            if let e = enhancedURL {
+                try? FileManager.default.removeItem(at: e)
+            }
+            progress.clear(for: lectureId)
+        }
+
+        // Primary path: Deepgram Prerecorded for Pro+auth users. Batch uses a
+        // different model than the realtime stream and tends to recover speech
+        // from low-SNR recordings (large halls, distant speaker) the live path
+        // silently dropped. Fall back to WhisperKit on any failure so offline /
+        // free users still get something.
+        if AuthService.shared.isAuthenticated && PlanService.shared.isPaid {
+            do {
+                let dgResult = try await DeepgramBatchService.shared.transcribe(
+                    audioURL: transcribeURL,
+                    language: transcriptionService.transcriptionLanguage.deepgramCode
+                )
+                guard var latest = store.getLecture(by: lectureId) else {
+                    isRetrying = false
+                    return
+                }
+                latest.transcriptText = dgResult.text
+                latest.transcriptSegments = dgResult.segments
+                latest.transcriptStatus = .completed
+                latest.language = transcriptionService.transcriptionLanguage
+                store.updateLecture(latest)
+                lecture = latest
+
+                let snapshot = latest
+                let langRaw = transcriptionService.transcriptionLanguage.rawValue
+                Task {
+                    await CloudSyncService.shared.uploadTranscriptIfEnabled(
+                        clientId: snapshot.id,
+                        title: snapshot.title,
+                        content: dgResult.text,
+                        createdAt: snapshot.createdAt,
+                        durationSeconds: snapshot.duration,
+                        language: langRaw
+                    )
+                }
+                isRetrying = false
+                return
+            } catch {
+                AppLogger.warning("Deepgram batch re-transcription failed (\(error.localizedDescription)) — falling back to WhisperKit", category: .transcription)
+                // continue to WhisperKit fallback
+            }
+        }
+
+        // Fallback: on-device WhisperKit on the same enhanced file (or the raw
+        // file if enhancement failed above). Progressive update avoids
+        // overwriting concurrent title edits by re-reading from the store
+        // per chunk.
         transcriptionService.onChunkCompleted = { partialText, partialSegments in
             guard var latest = store.getLecture(by: lectureId) else { return }
             latest.transcriptText = partialText
@@ -854,10 +970,13 @@ struct LectureDetailView: View {
         }
 
         do {
-            let result = try await transcriptionService.transcribe(audioURL: audioURL, lectureId: lectureId)
+            let result = try await transcriptionService.transcribe(audioURL: transcribeURL, lectureId: lectureId)
 
             transcriptionService.onChunkCompleted = nil
-            guard var latest = store.getLecture(by: lectureId) else { return }
+            guard var latest = store.getLecture(by: lectureId) else {
+                isRetrying = false
+                return
+            }
             latest.transcriptText = result.text
             latest.transcriptSegments = result.segments
             latest.transcriptStatus = .completed

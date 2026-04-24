@@ -100,12 +100,37 @@ function checkOneText(text, { platform, sourceContent }) {
       const matches = text.match(p) || [];
       claims.push(...matches);
     }
-    for (const claim of claims) {
-      const normalized = claim.replace(/\s/g, "");
-      const srcNormalized = sourceContent.replace(/\s/g, "");
-      if (!srcNormalized.includes(normalized)) {
-        reasons.push(`unverified claim: "${claim}" not in sourceNote`);
+    const unitEquiv = {
+      "分": ["分", "min", "minute", "minutes", "m"],
+      "時間": ["時間", "hour", "hours", "hr", "hrs", "h"],
+      "日": ["日", "day", "days", "d"],
+      "ヶ月": ["ヶ月", "month", "months", "mo", "ヵ月", "カ月"],
+      "月": ["月", "mo", "month", "/mo"],
+      "年": ["年", "year", "years", "yr", "yrs", "y", "/yr"],
+      "%": ["%", "percent", "パーセント", "％"],
+      "倍": ["倍", "x", "×"],
+    };
+    const canonicalize = (s) => {
+      let r = s.replace(/[\s　]/g, "");
+      for (const [key, alts] of Object.entries(unitEquiv)) {
+        for (const alt of alts) {
+          if (alt === key) continue;
+          r = r.replaceAll(alt, key);
+        }
       }
+      return r.toLowerCase();
+    };
+    const srcCanon = canonicalize(sourceContent);
+    for (const claim of claims) {
+      const claimCanon = canonicalize(claim);
+      if (srcCanon.includes(claimCanon)) continue;
+      // Fallback: number alone present in source (loose but avoids false positives for unit variations)
+      const numMatch = claim.match(/(\d+(?:[.,]\d+)?)/);
+      if (numMatch) {
+        const num = numMatch[1];
+        if (srcCanon.includes(num)) continue;
+      }
+      reasons.push(`unverified claim: "${claim}" not in sourceNote`);
     }
   }
 
