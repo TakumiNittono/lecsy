@@ -149,6 +149,16 @@
       ],
       "generatedAt": "2026-04-24T20:22:22.298Z",
       "blockedAt": "2026-04-24T20:22:22.414Z"
+    },
+    {
+      "id": "SNS-401",
+      "ch": "X",
+      "status": "blocked",
+      "reasons": [
+        "unverified claim: \"57%\" not in sourceNote"
+      ],
+      "generatedAt": "2026-04-24T20:47:49.823Z",
+      "blockedAt": "2026-04-24T20:47:49.908Z"
     }
   ]
 }
