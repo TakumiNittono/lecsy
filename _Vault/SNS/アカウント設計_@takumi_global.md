@@ -1,184 +1,173 @@
-# @takumi_global アカウント設計 (2026-04-24)
+# @takumi_global アカウント設計 v2 (2026-04-24)
 
-> 親: [[MOC_SNS]] / [[SNS/戦略_2026-04-24]]
-> この文書が sns-generate.mjs の tone / pillar / NG を決める。**迷ったらここに戻る。**
+> 親: [[MOC_SNS]]
+> **前版 (v1) は self-identity 過剰で捨てた。v2 は「問いに答える account」フレーム**
 
 ## TL;DR
 
-- **誰**: Florida で米国 B2B SaaS を作る個人開発者 (OPT 日本人)
-- **誰に**: 日本の indie 起業家 / OPT 日本人エンジニア / 米国挑戦予備軍
-- **何を**: Build in Public (40%) + OPT/米国起業 一次情報 (30%) + 技術 deep dive (30%)
-- **何語で**: 日本語 (2026-06 まで) → 英語を徐々に混ぜる (クロスオーバー表は [[SNS/戦略_2026-04-24]])
+- **誰** は minimum (Bio の 1 行のみ、本文では名乗らない)
+- **Voice (taste)** は strong (実測主義 / Apple 美学 / 誇大嫌い)
+- **何** を central (5 つの問いに答え続ける account)
+- **形式** = 全投稿が `Q + A (3 点)` 構造、自分語り禁止
 
----
+## Goal: 影響力 / fans を持つ、でも personal は出さない
 
-## 1. Identity
+「fans は Identity じゃなく Voice にしかつかない」が大前提。本名・家族・出自を出さずに fan を作るには:
 
-**一文で:** Florida で米国 B2B SaaS を作ってる個人開発者 / OPT 日本人
+1. **Voice (taste)** を尖らせる — 美学・批判の方向・ユーモアの癖で覚えさせる
+2. **Signature format** を固定 — 毎回 Q+A 3点 → "あ、takumi_global だ" の即時認識
+3. **Daily drumbeat** — 朝 08:00 / 昼 12:30 / 夜 21:00 JST の定時性
+4. **Memorable NG** — 「こういうのは書かない」が明確だと信頼が積み上がる
+5. **問いへの回答 reply** — DM・リプは返す (ただし personal な雑談はしない、問いには答える)
 
-- **Founder of Lecsy** ではなく **個人開発者** を主語に。Lecsy は畳めるが nittono は残る = 財産性
-- 「日本人 × OPT × 米国起業」が Unique Knowledge (Justin Welsh の執着)
-- "エンジニア" より "個人開発者" のほうが indie / B2B 両方に刺さる
+## Voice (taste) — 3 層
 
-## 2. Audience (優先順位つき)
+### 1. 実測主義
+- 「体感」「たぶん」「おそらく」禁止
+- 最後は必ず断定か選択肢提示で閉じる
+- 数字のない主張を書かない
 
-| # | 層 | なぜ | 直近のリターン |
-|---|---|---|---|
-| 1 | **日本 indie 起業家 / 個人開発者** | 応援・引用 RT・コラボ | フォロワー初期加速 |
-| 2 | **OPT / 留学中 日本人エンジニア** | 共感・DM 相談 | 将来のベータユーザー・採用 |
-| 3 | **日本→米国挑戦の予備軍** | 共感の広がり | 長期 distribution |
-| 4 | **米国 edtech 投資家 / B2B 担当** (後) | Lecsy の資金 / 提携 | 英語化後 |
+### 2. Apple 美学派 ([[feedback_lp_apple_aesthetic]] と整合)
+- モノクロ基調の美学
+- グラデ・パルスドット・ダサい多色 UI を言語化して嫌う
+- minimalism 寄りの判断 (「要らない」を積極的に書く)
 
-→ 最初の 3 ヶ月は **1 + 2** に絞る。米国 B2B は Lecsy の英語 LinkedIn が拾う。
+### 3. 誇大表現を嫌う
+- "業界初" "最速" "革新的" "シームレス" "AI-powered" を使わず、使われると皮肉る
+- AI slop / marketing 言語を翻訳して出す型 (「"シームレスな体験" = 説明できないから逃げてる」)
 
-## 3. Content Pillars (3 本の軸)
+## Voice を投稿に染み込ませる 3 型
 
-### P1 — Build in Public (40%)
-**何を:** Lecsy の数字・決定・失敗
-**例:**
-- 週次 MRR 公開
-- Deepgram コスト実測 ($0.003/min を 90 分授業で回したら)
-- FMCC パイロット進捗 (許可された範囲で)
-- pivot ログ (なぜ Web を B2B only に封印したか)
-- 失注の理由
-
-### P2 — OPT / 米国起業 一次情報 (30%)
-**何を:** 日本人が OPT 1 年で米国 B2B SaaS を立ち上げる現場感
-**例:**
-- LLC 設立直後 10 タスク ([[学び/LLC 設立直後10項目]] 素材)
-- Form 5472 の落とし穴
-- O-1A 実績構築 (OPT 中にやる)
-- コミカレ ESL 部門長への warm intro の取り方
-- ESL 営業の断られ方 5 パターン
-
-### P3 — 技術 deep dive (30%)
-**何を:** Deepgram × iOS × Supabase × AI のリアル
-**例:**
-- Deepgram nova-3 WebSocket 最小構成
-- WhisperKit vs Deepgram の使い分け (Free/Pro 境界設計)
-- Swift async/await 落とし穴 3 つ
-- Supabase Edge Function で credential rotation
-- Cursor/Claude Code 実使用ログ
-
-### 意識的に **入れない**
-- 一般マインド系 (Founder Mode / 時間管理 / 朝活 / 意識高い) — 差別化度ゼロ、AI slop と見分けつかない
-- 他社批判 (Otter / Notta / CLOVA 名指し)
-- 他人の記事/ツイートの論評だけの投稿 (一次情報なし)
-- 「今日の学び」系テンプレ
-
-## 4. Voice
-
-| 項目 | ルール |
-|---|---|
-| 一人称 | **「俺」** が基本 / ですます混ぜる時だけ「私」 |
-| 文体 | タメ口 7 : ですます 3 |
-| 断定 | 数字の裏付けがあれば断定 (「Deepgram は 1 分 \$0.003」) |
-| 絵文字 | 最大 1 個/投稿 |
-| ハッシュタグ | **禁止** (日本語 X では逆効果) |
-| 長さ | 単発 140 字 or スレッド 3-5 ツイ |
-| 構成 | 断定 → 数字/経験 → 問い or CTA |
-| CTA | DM / ニュースレター / (たまに) App Store |
-
-### 構造テンプレ (3 パターン)
-
-**A. 数字単発:**
-> [断定一行]
-> [数字の根拠 1-2行]
-> [自分なりの解釈 or 問い]
-
-**B. スレッド 3 ツイ:**
-> 1/3 問題提起 (俺は〜で困った)
-> 2/3 解決策 + 数字
-> 3/3 示唆 + DM 開放
-
-**C. 失敗告白:**
-> [何をやらかしたか]
-> [なぜそれが起きたか]
-> [今後どうするか / 学び]
-
-## 5. Profile 設定 (@takumi_global)
-
-### Handle (URL)
-**推奨変更: `@Ww83vjNwSLXhV6B` → `@takumi_global`**
-- x.com/settings/account/username で変更可 (空いてれば)
-- フォロワー少ない今が痛手最小
-- プロフィール URL が覚えやすい (名刺代わり)
-
-⚠️ 変更したら `.env.local` の `X_HANDLE=takumi_global` に更新必須。
-
-### Display Name
-**推奨: `Takumi Nittono / Lecsy`**
-- 名前 + 製品を 1 行で名刺化
-- indie 起業家界隈で「あ、Lecsy の人ね」と即認識される
-
-### Bio (120 字)
+### A. 断定で閉じる型
 ```
-Florida で米国 B2B SaaS を作る個人開発者
-米国語学学校向け講義AI『Lecsy』 @lecsyapp
-Deepgram × Claude × iOS × Supabase
-OPT 1年、失敗含めて公開で作る
+Q: X は Y と Z どっち？
+
+A:
+• 数字 1
+• 数字 2
+• 条件分岐
+
+[結論 1 行] → Y 一択。迷うな。
 ```
 
-### Bio (英語版 LinkedIn 用)
+### B. NG 提示で閉じる型
 ```
-Building a lecture AI for U.S. language schools.
-Solo dev, OPT, Florida. Swift + Deepgram + Claude.
-Japanese immigrant founder building in public.
-```
+Q: X を設計するなら何に気をつける？
 
-### Header Image (提案 3 案)
+A:
+• 選ぶべき (1-2 行)
+• 避けるべき (1-2 行)
+• 罠 (1-2 行)
 
-**案1 (テキストのみ・Apple 寄せ):**
-```
-[白背景]
-Building in public from Florida
-—
-Japanese solo dev → U.S. B2B SaaS
-@lecsyapp
+[avoid 1 行] → これをやったら UX が死ぬ。
 ```
 
-**案2 (製品 + 実績):**
-Lecsy アプリのスクショ + "90 min lecture → AI summary in 3 sec"
+### C. AI slop 翻訳型 (たまに)
+```
+"シームレスな AI 体験" を翻訳すると:
+• 実装の詳細を説明したくない
+• 遅延が隠せないから presentation で誤魔化す
+• 数字で比較されたくない
 
-**案3 (顔 + タイムライン):**
-顔写真 + "OPT 2026-06 → LLC → STEM OPT → H-1B" のビジュアルライン
+実測 TTFB 300 ms と書けば済む話。
+```
 
-→ **案1 推奨** (Apple 寄せ tone と揃う、長期的にブレない)
+## 答える 5 問
 
-### Pinned Tweet
-→ 別ファイル: [[SNS/ピン留めツイート_ドラフト]]
-5 ツイの自己紹介スレッド。投稿 → pin → プロフィール完成
+この account に来た読者が `Q: ... の答えをください` で受け取れる 5 つ。**他の Q は捨てる**。
 
-## 6. NG (絶対やらない)
+| # | 問い | pillar |
+|---|---|---|
+| 1 | **Deepgram と WhisperKit、どう使い分ける？** | P3 技術 |
+| 2 | **iOS でリアルタイム音声処理、どこで落とす？** | P3 技術 |
+| 3 | **AI × 教育プロダクトのユニットエコノミクスは？** | P1 数字 |
+| 4 | **米国の語学学校にどう売り込む？** | P2 GTM |
+| 5 | **OPT 1 年で技術者が LLC 立てるなら何をいつやる？** | P2 法務 |
 
-- 他アプリ名指し批判 (Otter / Notta / CLOVA)
-- 政治 / 宗教 / ジェンダー論
-- 「すべての〜」「みんな〜」「世の中〜」の一般化
-- Vault に無い数字を書く (guardrail が弾くが、ここでも禁止明記)
-- @メンションで他人に話しかける (誤爆事故)
-- 深夜 0-5 時の感情投稿 (翌朝まで寝かせる)
-- "今日の学び" / "朝のルーティン" / "モーニングページ" 系テンプレ
-- 未発表機能の予告 (WWDC 前は特に警戒)
+→ **投稿は全部この 5 問の派生形**。他は書かない。
 
-## 7. 測定指標 (月次で見る)
+## 全投稿の必須形式
 
-- **フォロワー数**: 6/1 までに 500、9/1 までに 1500
-- **engagement rate**: 平均 2%+ (いいね+リプ+RT / インプ)
-- **DM 数/月**: 10+ (返信できる人のリストが本当の財産)
-- **Substack 登録数** (始めたら): X フォロワーの 5%+ がコンバート
-- **失敗投稿 (削除 or guardrail block)**: 月 3 件以内
+```
+Q: [問いを短く]
 
-## 8. このドキュメントの運用
+A:
+• [要点 1 + 実測数字]
+• [要点 2 + 選択肢 / 代替案]
+• [要点 3 + 具体手順 or 次アクション]
 
-- **変更の主導権はあなた**。AI が勝手に書き換えない
-- 月初に 5 分で見直し: audience / pillar / voice が古くなってないか
-- pillar 配分 (40/30/30) は 3 ヶ月ごとに再チューニング
+[必要なら出典 / Vault link / CTA]
+```
+
+- **Q は必ず書く** (内部的でも OK、見出し or ツイ冒頭)
+- **A の 3 点は必ず分ける** (まとめ読みを助ける)
+- **数字なしの A は書かない** (抽象論禁止)
+- **出典は Vault にあるものだけ**
+
+## flagship: 毎週金曜 17:00 JST「今週解けた問題」
+
+週 1 の大玉スレッド。3-5 ツイで 1 つの Q を深掘り:
+1. 問いの背景 (なぜこれが問題か)
+2. 試した選択肢 + 結果 (数字)
+3. 最適解 (条件付き)
+4. 失敗パターン (避けるべき罠)
+5. CTA (DM / Substack)
+
+→ これが後の Substack 化・書籍化の素材になる。
+
+## 語り手の設定 (minimal、本文では基本出さない)
+
+- **Allow**: Takumi (下の名前のみ) / Florida / OPT 中 / AA 取得 / Lecsy 作ってる
+- **NG**: Nittono / 苗字 / 家族 / 学校名 / 市 / 年齢 / Founder / 〜した (完了形)
+- **動詞ルール**: 「作ってる / Building / 攻めてる / 営業中」のみ。「Founder / Built / Sold / Launched」は **2026-06-01 ローンチ後**に段階的解禁
+
+## bio (v2)
+
+```
+iOS 音声 AI と米国 B2B 教育、AI × 教育のコスト構造について書いてる
+Florida / OPT / Lecsy 作ってる
+lecsy.app
+```
+
+→ 4 行。自己定義よりトピック定義。
+
+## Display name (v2)
+
+**推奨: `Lecsy / Building` or `Takumi (Lecsy)`**
+- "Nittono" 系は出さない
+- Founder 系の肩書きも書かない
+- `takumi_global` のままでも良い
+
+## 書かないことリスト（確定）
+
+- 「今日 X した」系の日報
+- 「今週の進捗」系の自分語り
+- マインド系 / 朝活 / ルーティン / 精神論
+- 他社名指し批判 (Otter は / Notta は)
+- 捏造エピソード (体験年数・回数・感情)
+- Founder / 完了形 / 達成 claim
+- 本名 / 家族 / 学校名 / 市
+- Vault に無い数字
+
+## NG ワード（guardrail で自動ブロック）
+
+- 本名系: `Nittono`, `新藤`, `ニットノ`
+- 肩書き claim: `Founder`, `Founded`, `CEO`
+- 完了形 overclaim: `launched`, `sold to`, `built a company`
+- 競合: `Otter は`, `Notta は`, `CLOVA は`
+- 誇大: `業界No.1`, `業界最安`, `唯一無二`
+- 誇張: `すべての`, `全員が`, `みんな`
+- 言語の嘘: `100+ languages`, `12 言語`
+
+## KPI (main = b + d)
+
+- **DM が週 5 件、コア読者 30 人** (quality)
+- **B2B 商談 1 件がここ経由で発生** (distribution)
+- フォロワー数は副次指標
 
 ## 関連
 
-- [[MOC_SNS]] / [[SNS/戦略_2026-04-24]] / [[SNS/運用ルール]]
-- [[SNS/tone_sample]] (このドキュメントの tone を具現化した例)
+- [[MOC_SNS]] / [[SNS/tone_sample]] / [[SNS/在庫_マップ]]
 - [[SNS/ピン留めツイート_ドラフト]]
-- [[SNS/在庫_マップ]] (pillar に沿った候補 31 本)
-- [[学び/Justin Welsh LinkedIn 3段階システム]] (Unique Knowledge 理論)
-- [[学び/Work in Public 戦略]]
+- [[SNS/戦略_2026-04-24]] (上位戦略)
+- memory: [[feedback_no_real_name]] [[feedback_value_first]] [[feedback_no_fabrication]] [[feedback_no_founder_claim]]

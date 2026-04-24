@@ -16,17 +16,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VAULT = path.resolve(__dirname, "../../lecsy/_Vault");
+const VAULT = path.resolve(__dirname, "../../_Vault");
 
 const NG_KEYWORDS = [
+  // 本名 / 身上 (memory: feedback_no_real_name)
+  "Nittono", "新藤", "ニットノ",
+  // 肩書き claim (6/1 ローンチ前禁止、memory: feedback_no_founder_claim)
+  "Founder", "Founded", "CEO",
+  // 完了形 overclaim
+  "を launch", "をローンチした", "sold to", "built a company", "を達成した",
   // 競合攻撃 (Otter を叩くのは長期的に負け)
   "Otter は", "Notta は", "CLOVA は",
   // 政治
   "Trump", "Biden", "自民党", "立憲",
   // 炎上系 fire take
   "クソ", "ゴミ", "バカ", "アホ", "死ね", "殺", "終わってる",
-  // 誇大表現 (Lecsy 仕様に反する)
-  "業界No.1", "業界最安", "最速の", "唯一無二",
+  // 誇大表現 (voice で嫌う + 自分も書かない)
+  "業界No.1", "業界最安", "最速の", "唯一無二", "業界初", "革新的", "シームレス",
   // 未確認誇張
   "すべての学生が", "全員が", "100%",
 ];
