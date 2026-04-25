@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
+import { ADMIN_OPERATOR_EMAIL, isAdminOperator } from "@/utils/adminOperator";
 
-// Personal admin sign-in for the super-admin (nittonotakumi@gmail.com).
+// Personal admin sign-in for the operator (ADMIN_OPERATOR_EMAIL).
 // /login is locked to invite-code only for the B2B classroom pilot, so this
 // is the only web entry point left for the operator console at /admin.
-// Non-super-admins who land here and sign in will hit /admin's own
-// isSuperAdmin gate and get bounced to /app — there is no privilege
-// escalation here, this page is just the front door.
+// The hard gate is in middleware + utils/isSuperAdmin — this page only
+// adds a UX-level email check so we don't email codes to wrong addresses.
 
 function AdminLoginForm() {
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +58,10 @@ function AdminLoginForm() {
     const email = emailInput.trim();
     if (!email) {
       setError("Please enter your email address.");
+      return;
+    }
+    if (!isAdminOperator(email)) {
+      setError("This address isn't authorized for the operator console.");
       return;
     }
     try {
@@ -142,7 +146,7 @@ function AdminLoginForm() {
               Operator sign-in
             </h1>
             <p className="text-gray-500 text-[15px] leading-relaxed">
-              Restricted to lecsy operators. Sign in to reach the admin console.
+              Restricted to <span className="font-mono text-gray-700">{ADMIN_OPERATOR_EMAIL}</span>. Other accounts are rejected.
             </p>
           </div>
 

@@ -1,16 +1,15 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { isAdminOperator } from '@/utils/adminOperator'
 
 export const dynamic = 'force-dynamic'
-
-const SUPER_ADMIN_EMAIL = 'nittonotakumi@gmail.com'
 
 export async function POST(req: Request) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (user.email !== SUPER_ADMIN_EMAIL) {
+  if (!isAdminOperator(user.email)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 

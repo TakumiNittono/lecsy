@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isAdminOperator } from '@/utils/adminOperator'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -127,10 +128,27 @@ export async function updateSession(request: NextRequest) {
   const isProtectedB2B = path.startsWith('/org') || path.startsWith('/admin')
   if (!user) {
     const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    if (isProtectedB2B) {
-      url.searchParams.set('redirect', path)
+    // /admin/* は /login (招待コード専用) ではなく /admin/login に飛ばす。
+    // /login だと招待コードしか UI が出ないのでオペレーターが入れない。
+    if (path.startsWith('/admin')) {
+      url.pathname = '/admin/login'
+    } else {
+      url.pathname = '/login'
+      if (isProtectedB2B) {
+        url.searchParams.set('redirect', path)
+      }
     }
+    return NextResponse.redirect(url)
+  }
+
+  // /admin/* (except /admin/login, which is handled above) はオペレーター
+  // メール 1 件にハードロック。ページ側でも isSuperAdmin() で同じ判定を
+  // するが、middleware で先に弾いておくと RSC レンダリングを節約できる
+  // し、API ルート (/api/admin/*) も同じ壁の内側に入る。
+  if (path.startsWith('/admin') && !isAdminOperator(user.email)) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/app'
+    url.search = ''
     return NextResponse.redirect(url)
   }
 
