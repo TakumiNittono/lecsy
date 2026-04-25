@@ -131,15 +131,27 @@ function recentlyBlocked(state, id, windowH = 6) {
 
 function pickCandidates(inv, state, { count, lang, id, pillar }) {
   if (id) return inv.filter((r) => r.id === id);
-  let pool = inv.filter((r) => !alreadyPosted(state, r.id));
+  // ベース pool: 投稿済 30日 + 直近6時間に blocked のものを除外
+  let pool = inv.filter(
+    (r) => !alreadyPosted(state, r.id) && !recentlyBlocked(state, r.id)
+  );
   if (lang) pool = pool.filter((r) => r.lang === lang);
-  if (pillar) pool = pool.filter((r) => r.pillar === pillar);
-  const scored = pool.map((r) => ({
-    ...r,
-    score: r.lastPosted ? Date.parse(r.lastPosted) || 0 : -1,
-  }));
-  scored.sort((a, b) => a.score - b.score);
-  return scored.slice(0, count);
+
+  const scoreOf = (r) => (r.lastPosted ? Date.parse(r.lastPosted) || 0 : -1);
+  const sorted = (arr) => [...arr].sort((a, b) => scoreOf(a) - scoreOf(b));
+
+  // Tier 1: pillar 完全一致 (cron が --pillar=P1/P2/P3 で指定する想定)
+  const tier1 = pillar ? sorted(pool.filter((r) => r.pillar === pillar)) : sorted(pool);
+
+  // Tier 2: pillar フィルタを外した全候補 (Inventory 枯渇 → AI Daily 含む)
+  const tier2 = pillar
+    ? sorted(pool.filter((r) => r.pillar !== pillar))
+    : [];
+
+  // 最低 8 件キープして retry 余力を確保 (1 件目が error/blocked でも次へ)
+  const merged = [...tier1, ...tier2];
+  const minPick = Math.max(count * 5, 8);
+  return merged.slice(0, minPick);
 }
 
 function openLog() {
@@ -313,6 +325,11 @@ async function main() {
             { label: "length", value: String(post.text.length) },
           ],
         });
+      }
+      // count 達成したら以降の候補を消費しない (fail-safe で多めに pick してるため)
+      if (successCount >= args.count) {
+        log(`-- reached target count=${args.count}, stop iterating`);
+        break;
       }
     } catch (err) {
       errorCount++;
