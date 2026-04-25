@@ -213,8 +213,9 @@ async function main() {
   })();
   const daily = parseDaily(today);
   const inv = parseInventory();
-  const allItems = daily.length > 0 ? daily : inv;
-  log(`source: ${daily.length > 0 ? `Daily.md (${daily.length} items)` : `Inventory (${inv.length} items)`}`);
+  // Daily と Inventory を merge: pillar=P1/P2/P3 cron は Inventory から、pillar=AI cron は Daily から拾える
+  const allItems = [...daily, ...inv];
+  log(`source: Daily.md (${daily.length} items) + Inventory (${inv.length} items) = ${allItems.length}`);
   const state = loadState();
   const cands = pickCandidates(allItems, state, args);
 
