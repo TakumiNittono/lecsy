@@ -206,7 +206,11 @@ async function main() {
     return;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = (() => {
+    // JST date — matches sns-collect.mjs Daily file naming.
+    const ms = Date.now() + 9 * 3600 * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  })();
   const daily = parseDaily(today);
   const inv = parseInventory();
   const allItems = daily.length > 0 ? daily : inv;

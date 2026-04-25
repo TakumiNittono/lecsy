@@ -280,6 +280,76 @@
       "status": "error",
       "error": "no source content for SNS-104",
       "erroredAt": "2026-04-25T12:35:48.758Z"
+    },
+    {
+      "id": "AI-f785155d",
+      "ch": "X",
+      "lang": "ja",
+      "status": "dry-run",
+      "tweetId": null,
+      "url": null,
+      "postedAt": "2026-04-25T15:48:44.646Z",
+      "generatedAt": "2026-04-25T15:48:44.644Z"
+    },
+    {
+      "id": "AI-f785155d",
+      "ch": "X",
+      "lang": "ja",
+      "status": "dry-run",
+      "tweetId": null,
+      "url": null,
+      "postedAt": "2026-04-25T15:56:19.073Z",
+      "generatedAt": "2026-04-25T15:56:19.070Z"
+    },
+    {
+      "id": "AI-f785155d",
+      "ch": "X",
+      "lang": "ja",
+      "status": "dry-run",
+      "tweetId": null,
+      "url": null,
+      "postedAt": "2026-04-25T15:56:21.878Z",
+      "generatedAt": "2026-04-25T15:56:21.876Z"
+    },
+    {
+      "id": "AI-f785155d",
+      "ch": "X",
+      "lang": "ja",
+      "status": "dry-run",
+      "tweetId": null,
+      "url": null,
+      "postedAt": "2026-04-25T15:56:27.567Z",
+      "generatedAt": "2026-04-25T15:56:27.563Z"
+    },
+    {
+      "id": "AI-f785155d",
+      "ch": "X",
+      "lang": "ja",
+      "status": "dry-run",
+      "tweetId": null,
+      "url": null,
+      "postedAt": "2026-04-25T15:56:37.642Z",
+      "generatedAt": "2026-04-25T15:56:37.640Z"
+    },
+    {
+      "id": "AI-6a4b53c5",
+      "ch": "X",
+      "lang": "ja",
+      "status": "dry-run",
+      "tweetId": null,
+      "url": null,
+      "postedAt": "2026-04-25T15:56:40.401Z",
+      "generatedAt": "2026-04-25T15:56:40.398Z"
+    },
+    {
+      "id": "AI-c62ed384",
+      "ch": "X",
+      "lang": "ja",
+      "status": "dry-run",
+      "tweetId": null,
+      "url": null,
+      "postedAt": "2026-04-25T15:56:43.277Z",
+      "generatedAt": "2026-04-25T15:56:43.274Z"
     }
   ]
 }

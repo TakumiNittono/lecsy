@@ -24,10 +24,14 @@ const DAILY_DIR = path.join(VAULT, "SNS/Daily");
 
 const AI_KEYWORDS = [
   "AI", "GPT", "Claude", "Gemini", "LLM", "OpenAI", "Anthropic",
-  "agent", "fine-tun", "benchmark", "RAG", "embedding", "token",
-  "context window", "Llama", "Mistral", "xAI", "Grok",
-  "reasoning model", "vision model", "multimodal",
+  "agent", "agents", "agentic", "fine-tun", "benchmark", "RAG", "embedding", "token", "tokens",
+  "context window", "Llama", "Mistral", "xAI", "Grok", "DeepSeek", "Qwen",
+  "reasoning model", "vision model", "multimodal", "diffusion",
   "AI SDK", "Cursor", "Copilot", "inference", "transformer",
+  "Hugging Face", "HuggingFace", "Devin", "Cognition", "Replicate",
+  "MCP", "tool use", "tool-use", "function calling",
+  "prompt", "prompt engineering", "chain of thought", "CoT",
+  "GPU", "H100", "B200", "TPU",
 ];
 
 const EXCLUDE_PATTERNS = [
@@ -49,18 +53,56 @@ const EXCLUDE_PATTERNS = [
 ];
 
 const FEEDS = [
-  // T0: 一次ソース (high priority) — builder 向け news が多い
-  { name: "HN front page", url: "https://news.ycombinator.com/rss", weight: 1.5, filter: "ai-keyword" },
-  { name: "Vercel AI SDK", url: "https://github.com/vercel/ai/releases.atom", weight: 1.4, filter: "none" },
-  { name: "Google AI blog", url: "https://blog.google/technology/ai/rss/", weight: 0.9, filter: "none" },
-  // T1: コミュニティ
+  // T0: 一次ソース — AI labs / model providers (highest weight)
+  { name: "HN front page", url: "https://news.ycombinator.com/rss", weight: 1.6, filter: "ai-keyword" },
+  { name: "HN best", url: "https://hnrss.org/best", weight: 1.4, filter: "ai-keyword" },
+  { name: "HN AI keyword", url: "https://hnrss.org/newest.rss?q=AI+OR+LLM+OR+GPT+OR+Claude+OR+Gemini+OR+Anthropic+OR+OpenAI", weight: 1.3, filter: "none" },
+  { name: "Google AI blog", url: "https://blog.google/technology/ai/rss/", weight: 1.2, filter: "none" },
+  { name: "Google DeepMind blog", url: "https://deepmind.google/blog/rss.xml", weight: 1.3, filter: "none" },
+  { name: "NVIDIA blog", url: "https://blogs.nvidia.com/feed/", weight: 0.9, filter: "ai-keyword" },
+  { name: "AWS ML blog", url: "https://aws.amazon.com/blogs/machine-learning/feed/", weight: 0.9, filter: "none" },
+  { name: "HuggingFace blog", url: "https://huggingface.co/blog/feed.xml", weight: 1.3, filter: "none" },
+
+  // T1: Builder ecosystem / SDKs / dev tools
+  { name: "Vercel AI SDK", url: "https://github.com/vercel/ai/releases.atom", weight: 1.0, filter: "none" },
+  { name: "Anthropic releases (GH)", url: "https://github.com/anthropics/anthropic-sdk-typescript/releases.atom", weight: 1.1, filter: "none" },
+  { name: "OpenAI SDK releases (GH)", url: "https://github.com/openai/openai-node/releases.atom", weight: 1.1, filter: "none" },
+  { name: "llama.cpp releases (GH)", url: "https://github.com/ggerganov/llama.cpp/releases.atom", weight: 0.9, filter: "none" },
+  { name: "vLLM releases (GH)", url: "https://github.com/vllm-project/vllm/releases.atom", weight: 0.9, filter: "none" },
+
+  // T2: Research / Papers (atom is more reliable than rss for arxiv)
+  { name: "arxiv cs.AI (atom)", url: "https://rss.arxiv.org/atom/cs.AI", weight: 0.7, filter: "none" },
+  { name: "arxiv cs.CL (atom)", url: "https://rss.arxiv.org/atom/cs.CL", weight: 0.7, filter: "none" },
+  { name: "arxiv cs.LG (atom)", url: "https://rss.arxiv.org/atom/cs.LG", weight: 0.6, filter: "none" },
+
+  // T3: Community (Reddit needs Mozilla UA — handled in fetchFeed)
   { name: "r/LocalLLaMA", url: "https://www.reddit.com/r/LocalLLaMA/.rss", weight: 1.0, filter: "none" },
-  { name: "r/MachineLearning", url: "https://www.reddit.com/r/MachineLearning/.rss", weight: 0.8, filter: "ai-keyword" },
-  { name: "arxiv cs.AI", url: "http://export.arxiv.org/rss/cs.AI", weight: 0.6, filter: "none" },
-  { name: "arxiv cs.CL", url: "http://export.arxiv.org/rss/cs.CL", weight: 0.6, filter: "none" },
-  // T2: ツール
-  { name: "LangChain blog", url: "https://blog.langchain.dev/rss/", weight: 1.0, filter: "none" },
+  { name: "r/MachineLearning", url: "https://www.reddit.com/r/MachineLearning/.rss", weight: 0.9, filter: "ai-keyword" },
+  { name: "r/singularity", url: "https://www.reddit.com/r/singularity/.rss", weight: 0.7, filter: "ai-keyword" },
+  { name: "r/OpenAI", url: "https://www.reddit.com/r/OpenAI/.rss", weight: 0.8, filter: "none" },
+  { name: "r/ClaudeAI", url: "https://www.reddit.com/r/ClaudeAI/.rss", weight: 0.8, filter: "none" },
+
+  // T4: Builder voices (newsletters / personal blogs)
+  { name: "Simon Willison", url: "https://simonwillison.net/atom/everything/", weight: 1.3, filter: "none" },
+  { name: "Latent Space", url: "https://www.latent.space/feed", weight: 1.2, filter: "none" },
+  { name: "Sebastian Raschka", url: "https://magazine.sebastianraschka.com/feed", weight: 1.1, filter: "none" },
+  { name: "Ethan Mollick", url: "https://www.oneusefulthing.org/feed", weight: 1.0, filter: "none" },
+  { name: "Import AI", url: "https://importai.substack.com/feed", weight: 1.0, filter: "none" },
+  { name: "Andrej Karpathy (HN)", url: "https://hnrss.org/newest?q=karpathy", weight: 1.1, filter: "none" },
+
+  // T5: Tech press AI verticals
+  { name: "TechCrunch AI", url: "https://techcrunch.com/category/artificial-intelligence/feed/", weight: 0.7, filter: "none" },
+  { name: "The Decoder", url: "https://the-decoder.com/feed/", weight: 0.8, filter: "none" },
+  { name: "VentureBeat AI", url: "https://venturebeat.com/category/ai/feed/", weight: 0.7, filter: "none" },
+  { name: "Ars Technica AI", url: "https://arstechnica.com/ai/feed/", weight: 0.8, filter: "none" },
+  { name: "MIT Tech Review", url: "https://www.technologyreview.com/feed/", weight: 0.7, filter: "ai-keyword" },
 ];
+
+function todayJst() {
+  // JST date regardless of host TZ — cron design assumes JST day boundaries.
+  const ms = Date.now() + 9 * 3600 * 1000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
 
 function parseArgs() {
   const args = { date: null, dry: false };
@@ -68,7 +110,7 @@ function parseArgs() {
     if (a.startsWith("--date=")) args.date = a.slice(7);
     else if (a === "--dry") args.dry = true;
   }
-  if (!args.date) args.date = new Date().toISOString().slice(0, 10);
+  if (!args.date) args.date = todayJst();
   return args;
 }
 
@@ -99,15 +141,20 @@ function cleanText(s, maxLen = 300) {
 }
 
 async function fetchFeed(feed) {
+  const isReddit = /reddit\.com/i.test(feed.url);
+  const ua = isReddit
+    ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    : "takumi_global-news-collector/1.0 (+https://github.com/TakumiNittono/lecsy)";
   const parser = new Parser({
     timeout: 15000,
     headers: {
-      "User-Agent": "takumi_global-news-collector/1.0 (+https://github.com/TakumiNittono/lecsy)",
+      "User-Agent": ua,
+      "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.8",
     },
   });
   try {
     const parsed = await parser.parseURL(feed.url);
-    const items = (parsed.items || []).slice(0, 20).map((it) => ({
+    const items = (parsed.items || []).slice(0, 40).map((it) => ({
       source: feed.name,
       weight: feed.weight,
       title: cleanText(it.title, 200),
@@ -151,7 +198,7 @@ function dedupe(items) {
 }
 
 function buildSnapshot(date, items) {
-  const top = items.slice(0, 10);
+  const top = items.slice(0, 30);
   const sections = top.map((it, i) => {
     return `### ${i + 1}. [${it.source}] ${it.title}
 - URL: ${it.url}
