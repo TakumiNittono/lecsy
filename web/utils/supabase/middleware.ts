@@ -79,6 +79,20 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse
   }
 
+  // /admin/login はオペレーター用の公開エントリ。/login が招待コード専用に
+  // なったので、super-admin が自分のアカウントでサインインする入口がここ
+  // しかない。super-admin かどうかは /admin の page 側で再チェックする。
+  if (path === '/admin/login' || path === '/admin/login/') {
+    const { data: { user: authedUser } } = await supabase.auth.getUser()
+    if (authedUser) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/admin'
+      url.search = ''
+      return NextResponse.redirect(url)
+    }
+    return supabaseResponse
+  }
+
   // /android entry is public (it's the invite-code gate itself).
   // /android/* deeper paths require an authenticated session (anon redeemed)
   // and are routed back to /android by the page if no membership exists.
