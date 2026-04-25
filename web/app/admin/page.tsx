@@ -7,6 +7,42 @@ import GrantOwnershipButton from './GrantOwnershipButton'
 
 export const dynamic = 'force-dynamic'
 
+const DAY_MS = 24 * 60 * 60 * 1000
+const RECENT_TX_LIMIT = 30
+const TOP_USERS_LIMIT = 10
+const ACTIVITY_WINDOW_DAYS = 30
+
+function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return 'Never'
+  const ms = new Date(iso).getTime()
+  if (!ms) return 'Never'
+  const diff = Date.now() - ms
+  if (diff < 0) return 'just now'
+  if (diff < 60_000) return 'just now'
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3600_000)}h ago`
+  if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`
+  return new Date(iso).toLocaleDateString()
+}
+
+function formatDuration(seconds: number | null | undefined): string {
+  const s = Math.max(0, Math.round(Number(seconds) || 0))
+  if (s === 0) return '—'
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m`
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  return m === 0 ? `${h}h` : `${h}h ${m}m`
+}
+
+function formatHours(seconds: number): string {
+  if (!seconds) return '0h'
+  const hours = seconds / 3600
+  if (hours < 0.1) return `${Math.round(seconds / 60)}m`
+  if (hours < 10) return `${hours.toFixed(1)}h`
+  return `${Math.round(hours)}h`
+}
+
 export default async function AdminPage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -15,44 +51,67 @@ export default async function AdminPage() {
     redirect('/app')
   }
 
-  // service_roleクライアント（RLSバイパス）で全データ取得
+  // service_role クライアント（RLS バイパス）で全データ取得
   const admin = createAdminClient()
 
-  // 全組織を取得
-  const { data: orgs } = await admin
-    .from('organizations')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const now = Date.now()
+  const since24h = new Date(now - DAY_MS).toISOString()
+  const since7d = new Date(now - 7 * DAY_MS).toISOString()
+  const sinceWindow = new Date(now - ACTIVITY_WINDOW_DAYS * DAY_MS).toISOString()
 
-  // 全メンバー数を組織ごとにカウント
-  const { data: memberCounts } = await admin
-    .from('organization_members')
-    .select('org_id')
+  // 並列で取得 — 全部 head/limit 付きなので RLS バイパスでも軽い
+  const [
+    orgsRes,
+    memberCountsRes,
+    transcriptCountRes,
+    subsRes,
+    betaOrgRes,
+    recentTxRes,
+    tx24hCountRes,
+    tx7dCountRes,
+    txWindowRes,
+    usersRes,
+  ] = await Promise.all([
+    admin.from('organizations').select('*').order('created_at', { ascending: false }),
+    admin.from('organization_members').select('org_id, user_id'),
+    admin.from('transcripts').select('*', { count: 'exact', head: true }),
+    admin.from('subscriptions').select('status'),
+    admin.from('organizations').select('id, slug, name').eq('slug', 'lecsy-beta').maybeSingle(),
+    admin
+      .from('transcripts')
+      .select('id, user_id, title, duration, language, source, created_at')
+      .order('created_at', { ascending: false })
+      .limit(RECENT_TX_LIMIT),
+    admin.from('transcripts').select('*', { count: 'exact', head: true }).gte('created_at', since24h),
+    admin.from('transcripts').select('*', { count: 'exact', head: true }).gte('created_at', since7d),
+    admin
+      .from('transcripts')
+      .select('user_id, duration, created_at, language')
+      .gte('created_at', sinceWindow),
+    // listUsers は 1 リクエストでメール / last_sign_in_at をまとめて取れる。
+    // 現状の登録人数なら 1 ページで十分。1000 を超えたらページネーション
+    // を足す。
+    admin.auth.admin.listUsers({ perPage: 1000 }),
+  ])
+
+  const orgs = orgsRes.data || []
+  const memberCounts = memberCountsRes.data || []
+  const transcriptCount = transcriptCountRes.count ?? 0
+  const subs = subsRes.data || []
+  const betaOrg = betaOrgRes.data
+  const recentTx = recentTxRes.data || []
+  const tx24h = tx24hCountRes.count ?? 0
+  const tx7d = tx7dCountRes.count ?? 0
+  const txWindow = txWindowRes.data || []
+  const allUsers = usersRes.data?.users || []
 
   const countByOrg: Record<string, number> = {}
-  memberCounts?.forEach((m: any) => {
+  memberCounts.forEach((m: any) => {
     countByOrg[m.org_id] = (countByOrg[m.org_id] || 0) + 1
   })
 
-  // 全文字起こし数
-  const { count: transcriptCount } = await admin
-    .from('transcripts')
-    .select('*', { count: 'exact', head: true })
-
-  // 全サブスクリプション
-  const { data: subs } = await admin
-    .from('subscriptions')
-    .select('status')
-
-  const activeSubs = subs?.filter((s: any) => s.status === 'active').length || 0
-  const totalSubs = subs?.length || 0
-
-  // Lecsy Beta org の情報取得（フェーズ1-2のコア）
-  const { data: betaOrg } = await admin
-    .from('organizations')
-    .select('id, slug, name')
-    .eq('slug', 'lecsy-beta')
-    .maybeSingle()
+  const activeSubs = subs.filter((s: any) => s.status === 'active').length
+  const totalSubs = subs.length
 
   const { count: betaMemberCount } = betaOrg
     ? await admin
@@ -62,11 +121,66 @@ export default async function AdminPage() {
         .eq('status', 'active')
     : { count: 0 }
 
+  // ユーザーのメール / 最終ログインを map 化
+  const emailByUid = new Map<string, string>()
+  const lastSignInByUid = new Map<string, string>()
+  for (const u of allUsers) {
+    if (u.email) emailByUid.set(u.id, u.email)
+    if (u.last_sign_in_at) lastSignInByUid.set(u.id, u.last_sign_in_at)
+  }
+
+  // 30 日ウィンドウのユーザー集計 (録音回数 / 合計秒数 / 直近録音時刻 / 言語数)
+  type UserStat = {
+    user_id: string
+    count: number
+    seconds: number
+    lastTxAt: string | null
+    languages: Set<string>
+  }
+  const statsByUid = new Map<string, UserStat>()
+  let totalWindowSeconds = 0
+  for (const t of txWindow as any[]) {
+    if (!t.user_id) continue
+    const cur = statsByUid.get(t.user_id) || {
+      user_id: t.user_id,
+      count: 0,
+      seconds: 0,
+      lastTxAt: null,
+      languages: new Set<string>(),
+    }
+    cur.count += 1
+    cur.seconds += Number(t.duration) || 0
+    if (!cur.lastTxAt || t.created_at > cur.lastTxAt) cur.lastTxAt = t.created_at
+    if (t.language) cur.languages.add(t.language)
+    statsByUid.set(t.user_id, cur)
+    totalWindowSeconds += Number(t.duration) || 0
+  }
+  const activeUsers30d = statsByUid.size
+
+  const topUsers = [...statsByUid.values()]
+    .sort((a, b) => b.seconds - a.seconds || b.count - a.count)
+    .slice(0, TOP_USERS_LIMIT)
+
+  // Top users の "last seen" は max(transcript.created_at, auth.last_sign_in_at)
+  const lastSeenForUid = (uid: string): string | null => {
+    const tx = statsByUid.get(uid)?.lastTxAt || null
+    const sign = lastSignInByUid.get(uid) || null
+    if (tx && sign) return tx > sign ? tx : sign
+    return tx || sign
+  }
+
+  // 全登録ユーザーのうち、30日以内に何らかのアクティビティ (sign-in or 録音) があった数
+  const liveLast30d = allUsers.filter((u) => {
+    const last = lastSeenForUid(u.id)
+    if (!last) return false
+    return new Date(last).getTime() >= now - ACTIVITY_WINDOW_DAYS * DAY_MS
+  }).length
+
   const handleSignOut = async () => {
     'use server'
     const supabase = createClient()
     await supabase.auth.signOut()
-    redirect('/login')
+    redirect('/admin/login')
   }
 
   return (
@@ -99,7 +213,7 @@ export default async function AdminPage() {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Platform Admin</h1>
         <p className="text-gray-600 mb-8">Manage all organizations and users across Lecsy.</p>
 
-        {/* 🧪 Lecsy Beta Testers — Private beta access management */}
+        {/* Lecsy Beta Testers — Private beta access */}
         {betaOrg && (
           <div className="mb-8 rounded-xl border-2 border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50 p-6">
             <div className="flex items-center justify-between">
@@ -134,55 +248,102 @@ export default async function AdminPage() {
           </div>
         )}
 
-        {/* Platform Stats */}
+        {/* Stats — totals */}
+        <div className="grid md:grid-cols-4 gap-6 mb-6">
+          <StatCard label="Organizations" value={orgs.length} accent="purple" />
+          <StatCard label="Total Members" value={memberCounts.length} accent="blue" />
+          <StatCard label="Active Subscriptions" value={`${activeSubs} / ${totalSubs}`} accent="green" />
+          <StatCard label="Total Transcripts" value={transcriptCount} accent="amber" />
+        </div>
+
+        {/* Stats — activity (last N days) */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-medium text-gray-500">Organizations</h2>
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{orgs?.length || 0}</p>
-          </div>
+          <StatCard label="Recordings · 24h" value={tx24h} accent="indigo" />
+          <StatCard label="Recordings · 7d" value={tx7d} accent="indigo" />
+          <StatCard label={`Hours · ${ACTIVITY_WINDOW_DAYS}d`} value={formatHours(totalWindowSeconds)} accent="rose" />
+          <StatCard label={`Active users · ${ACTIVITY_WINDOW_DAYS}d`} value={`${activeUsers30d} / ${allUsers.length}`} accent="emerald" sub={`live ${liveLast30d}`} />
+        </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-medium text-gray-500">Total Members</h2>
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              </div>
+        {/* Top users + Recent activity (2 column on desktop) */}
+        <div className="grid lg:grid-cols-2 gap-6 mb-8">
+          <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-900">Top users · last {ACTIVITY_WINDOW_DAYS}d</h2>
+              <span className="text-xs text-gray-500">by recorded time</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{memberCounts?.length || 0}</p>
-          </div>
+            {topUsers.length === 0 ? (
+              <div className="p-6 text-sm text-gray-500">No recordings in this window yet.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                    <tr>
+                      <th className="text-left px-4 py-2">User</th>
+                      <th className="text-right px-4 py-2">Recs</th>
+                      <th className="text-right px-4 py-2">Time</th>
+                      <th className="text-left px-4 py-2">Last seen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topUsers.map((u) => {
+                      const email = emailByUid.get(u.user_id) || u.user_id.slice(0, 8) + '…'
+                      const last = lastSeenForUid(u.user_id)
+                      return (
+                        <tr key={u.user_id} className="border-t border-gray-100">
+                          <td className="px-4 py-3 text-gray-900 break-all">{email}</td>
+                          <td className="px-4 py-3 text-right text-gray-700">{u.count}</td>
+                          <td className="px-4 py-3 text-right text-gray-700">{formatDuration(u.seconds)}</td>
+                          <td className="px-4 py-3 text-gray-500">{formatRelativeTime(last)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-medium text-gray-500">Active Subscriptions</h2>
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
+          <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-900">Recent activity</h2>
+              <span className="text-xs text-gray-500">last {RECENT_TX_LIMIT} recordings</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{activeSubs} / {totalSubs}</p>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-medium text-gray-500">Total Transcripts</h2>
-              <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+            {recentTx.length === 0 ? (
+              <div className="p-6 text-sm text-gray-500">No transcripts saved to the cloud yet.</div>
+            ) : (
+              <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
+                    <tr>
+                      <th className="text-left px-4 py-2">When</th>
+                      <th className="text-left px-4 py-2">User</th>
+                      <th className="text-left px-4 py-2">Title</th>
+                      <th className="text-right px-4 py-2">Dur</th>
+                      <th className="text-left px-4 py-2">Lang</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentTx.map((t: any) => {
+                      const email = t.user_id ? (emailByUid.get(t.user_id) || t.user_id.slice(0, 8) + '…') : 'anon'
+                      return (
+                        <tr key={t.id} className="border-t border-gray-100">
+                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap" title={new Date(t.created_at).toLocaleString()}>
+                            {formatRelativeTime(t.created_at)}
+                          </td>
+                          <td className="px-4 py-3 text-gray-900 break-all">{email}</td>
+                          <td className="px-4 py-3 text-gray-700 max-w-[18ch] truncate" title={t.title || ''}>
+                            {t.title || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-700">{formatDuration(t.duration)}</td>
+                          <td className="px-4 py-3 text-gray-500 uppercase">{t.language || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{transcriptCount ?? 0}</p>
-          </div>
+            )}
+          </section>
         </div>
 
         {/* Organizations List */}
@@ -197,7 +358,7 @@ export default async function AdminPage() {
             </Link>
           </div>
 
-          {orgs && orgs.length > 0 ? (
+          {orgs.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -261,7 +422,49 @@ export default async function AdminPage() {
             </div>
           )}
         </div>
+
+        <p className="mt-6 text-xs text-gray-400">
+          Data is fetched fresh on each load. Cmd+R to refresh. Activity windows are rolling
+          ({ACTIVITY_WINDOW_DAYS}d / 7d / 24h) computed from <code>transcripts.created_at</code> and
+          <code> auth.users.last_sign_in_at</code>. Deepgram realtime minute counters
+          (<code>user_*_realtime_usage</code>) exist as caps but are not yet incremented client-side
+          — wire that up to surface live minutes here.
+        </p>
       </div>
     </main>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  accent,
+  sub,
+}: {
+  label: string
+  value: string | number
+  accent: 'purple' | 'blue' | 'green' | 'amber' | 'indigo' | 'rose' | 'emerald'
+  sub?: string
+}) {
+  const accentMap: Record<string, string> = {
+    purple: 'bg-purple-100 text-purple-700',
+    blue: 'bg-blue-100 text-blue-700',
+    green: 'bg-green-100 text-green-700',
+    amber: 'bg-amber-100 text-amber-700',
+    indigo: 'bg-indigo-100 text-indigo-700',
+    rose: 'bg-rose-100 text-rose-700',
+    emerald: 'bg-emerald-100 text-emerald-700',
+  }
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-medium text-gray-500">{label}</h2>
+        <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${accentMap[accent]}`}>
+          live
+        </span>
+      </div>
+      <p className="text-3xl font-bold text-gray-900">{value}</p>
+      {sub && <p className="mt-1 text-xs text-gray-500">{sub}</p>}
+    </div>
   )
 }
