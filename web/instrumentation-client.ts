@@ -7,6 +7,10 @@ import * as Sentry from "@sentry/nextjs";
 Sentry.init({
   dsn: "https://cc46d9bd288bc33d3d8b1a96f628c831@o4511258720665600.ingest.us.sentry.io/4511258783645696",
 
+  // Dev (npm run dev) からの誤送出を止める。Next.js は dev でも window で
+  // instrumentation-client を実行するので、ここでも prod 限定 gate を入れる。
+  enabled: process.env.NODE_ENV === 'production',
+
   // Replay は学生招待フォーム等に突っ込むので、FERPA 観点で全テキスト/メディアをマスク。
   // エラー発生時のみ録画 (session sampling は 0)。
   integrations: [

@@ -41,10 +41,14 @@ export async function GET(
     // ferpa_consented_at lets the dashboard prove to a Dean / compliance
     // officer that students acknowledged the consent prompt before any
     // audio was streamed.
+    // status='active' でフィルタしないと、pending メンバー (user_id NULL) が混入する。
+    // 後段の auth.admin.getUserById(null) は auth-js が UUID バリデーションで throw。
     supabase
       .from('organization_members')
       .select('user_id, role, ferpa_consented_at')
-      .eq('org_id', orgId),
+      .eq('org_id', orgId)
+      .eq('status', 'active')
+      .not('user_id', 'is', null),
     // Org-scoped AI actions (cross-summary, glossary generation).
     supabase
       .from('org_ai_usage_logs')
