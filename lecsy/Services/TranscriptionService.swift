@@ -763,7 +763,9 @@ class TranscriptionService: ObservableObject {
             let duration = try await asset.load(.duration)
             let durationSeconds = duration.seconds
             if durationSeconds.isNaN || durationSeconds < 1.0 {
-                AppLogger.warning("Audio too short: \(durationSeconds)s", category: .transcription)
+                // ユーザーの誤タップ (録音開始→即停止) で頻発するため、Sentry には送らない。
+                // os.log には残す。
+                AppLogger.debug("Audio too short: \(durationSeconds)s", category: .transcription)
                 throw TranscriptionError.audioFileTooShort
             }
             audioDuration = durationSeconds
@@ -814,6 +816,10 @@ class TranscriptionService: ObservableObject {
         // Note: if audioDuration == 0 (couldn't determine), still use chunked path
         // to avoid a potential infinite Whisper loop on a long file
         if audioDuration > 0 && audioDuration <= shortAudioThreshold {
+            // chunked path 同様、背景で GPU 投入すると `kIOGPUCommand...
+            // BackgroundExecutionNotPermitted` で死ぬので前面復帰まで待つ。
+            // 以前は短い音声 (≤60s) だけこの gate を素通りして必ず失敗していた。
+            await awaitForegroundIfNeeded()
             do {
                 return try await runSingleTranscription(whisperKit: currentKit, audioURL: workingURL, decodeOptions: decodeOptions)
             } catch is TimeoutError {
@@ -858,6 +864,7 @@ class TranscriptionService: ObservableObject {
             )
         }
 
+        // 完全に decode 失敗 (model 自体の問題) は今まで通り throw する。
         guard let whisperResult = whisperResults.first else {
             AppLogger.error("WhisperKit returned no results", category: .transcription)
             throw TranscriptionError.emptyTranscriptionResult
@@ -873,14 +880,17 @@ class TranscriptionService: ObservableObject {
 
         let fullText = Self.stripWhisperTokens(whisperResult.text)
 
-        if fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            AppLogger.warning("Transcription produced empty text", category: .transcription)
-            throw TranscriptionError.emptyTranscriptionResult
-        }
-
+        // text が空 = 録音は成功したが発話が無かった (silent recording)。
+        // 旧コードはこれを throw していたので "Failed" バッジが出てユーザーに
+        // 「アプリが壊れた」誤解を与えていた。successful empty として返し、
+        // 表示側で "No speech detected" と明示する。
         state = .completed
         progress = 1.0
         onChunkCompleted = nil
+
+        if fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            AppLogger.info("Transcription produced empty text — treating as silent recording", category: .transcription)
+        }
 
         return TranscriptionResult(
             text: fullText,
@@ -1211,9 +1221,11 @@ class TranscriptionService: ObservableObject {
         // incrementally throughout the loop, so no O(n) rebuild here.
         let fullText = runningText
 
+        // 全 chunk が無音で終わった = 録音は成功したが発話が無かった。
+        // throw すると "Failed" 扱いになるので successful empty を返す。表示側で
+        // "No speech detected" と明示する。runSingleTranscription と同じ方針。
         if fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            AppLogger.warning("Chunked transcription produced empty text", category: .transcription)
-            throw TranscriptionError.emptyTranscriptionResult
+            AppLogger.info("Chunked transcription produced empty text — treating as silent recording", category: .transcription)
         }
 
         state = .completed

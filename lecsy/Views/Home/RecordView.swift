@@ -32,6 +32,7 @@ struct RecordView: View {
     @State private var showAIConsentSheet = false
     @State private var pendingAudioURL: URL?
     @State private var pendingDuration: TimeInterval = 0
+    @State private var pendingStartedAt: Date?
     @State private var lowAudioSeconds: Int = 0
     @State private var showLowAudioWarning = false
     @State private var recordingDotOpacity: Double = 1.0
@@ -43,6 +44,7 @@ struct RecordView: View {
     @State private var recoveredURL: URL?
     @State private var recoveredDuration: TimeInterval = 0
     @State private var recoveredTitle: String = ""
+    @State private var recoveredStartedAt: Date?
     @State private var hasCheckedRecovery = false
     @State private var ringPulse = false
     @State private var isMaxDurationStop = false
@@ -248,7 +250,7 @@ struct RecordView: View {
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showTitleSheet) {
-            TitleInputSheet(defaultTitle: defaultRecordingTitle()) { title, courseName, classId in
+            TitleInputSheet(defaultTitle: defaultRecordingTitle(for: pendingStartedAt)) { title, courseName, classId in
                 Task { @MainActor in
                     await saveLecture(title: title, courseName: courseName, classId: classId)
                 }
@@ -302,7 +304,8 @@ struct RecordView: View {
                     if let recovered = await recordingService.recoverOrphanedRecording() {
                         recoveredURL = recovered.url
                         recoveredDuration = recovered.duration
-                        recoveredTitle = recovered.title
+                        recoveredStartedAt = recovered.startedAt
+                        recoveredTitle = recovered.title.isEmpty ? defaultRecordingTitle(for: recovered.startedAt) : recovered.title
                         showRecoverySheet = true
                     }
                 }
@@ -312,7 +315,8 @@ struct RecordView: View {
             guard let saved = saved else { return }
             recoveredURL = saved.url
             recoveredDuration = saved.duration
-            recoveredTitle = saved.title
+            recoveredStartedAt = saved.startedAt
+            recoveredTitle = saved.title.isEmpty ? defaultRecordingTitle(for: saved.startedAt) : saved.title
             isMaxDurationStop = recordingService.stoppedAtMaxDuration
             recordingService.stoppedAtMaxDuration = false
             recordingService.unexpectedlySavedRecording = nil
@@ -769,6 +773,9 @@ struct RecordView: View {
 
     private func stopRecording() {
         pendingDuration = recordingService.recordingDuration
+        // Capture before stopRecording() — RecordingService nils recordingStartTime on stop.
+        // createdAt must equal the recording's start instant so Library sort matches the title.
+        pendingStartedAt = recordingService.recordingStartTime
         guard let audioURL = recordingService.stopRecording() else {
             recordingError = UserFacingError(
                 title: "Recording Not Saved",
@@ -802,7 +809,7 @@ struct RecordView: View {
 
         var lecture = Lecture(
             title: title,
-            createdAt: Date(),
+            createdAt: pendingStartedAt ?? Date(),
             duration: pendingDuration,
             audioPath: audioURL,
             transcriptStatus: liveResult != nil ? .completed : .notStarted,
@@ -822,6 +829,7 @@ struct RecordView: View {
         pendingAudioURL = nil
         pendingDuration = 0
         pendingBookmarks = []
+        pendingStartedAt = nil
 
         NotificationCenter.default.post(name: .lectureRecordingCompleted, object: nil)
 
@@ -857,7 +865,7 @@ struct RecordView: View {
 
         let lecture = Lecture(
             title: title,
-            createdAt: Date(),
+            createdAt: recoveredStartedAt ?? Date(),
             duration: recoveredDuration,
             audioPath: audioURL,
             transcriptStatus: .notStarted,
@@ -870,6 +878,7 @@ struct RecordView: View {
         recoveredURL = nil
         recoveredDuration = 0
         recoveredTitle = ""
+        recoveredStartedAt = nil
 
         NotificationCenter.default.post(name: .lectureRecordingCompleted, object: nil)
 
@@ -885,12 +894,14 @@ struct RecordView: View {
         recoveredURL = nil
         recoveredDuration = 0
         recoveredTitle = ""
+        recoveredStartedAt = nil
     }
 
-    private func defaultRecordingTitle() -> String {
+    private func defaultRecordingTitle(for date: Date? = nil) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d, yyyy HH:mm"
-        return "Lecture \(formatter.string(from: Date()))"
+        let anchor = date ?? recordingService.recordingStartTime ?? Date()
+        return "Lecture \(formatter.string(from: anchor))"
     }
 
     private func startTranscription(for lecture: Lecture) async {
@@ -999,7 +1010,13 @@ struct RecordView: View {
                 latest.transcriptStatus = .failed
                 store.updateLecture(latest)
             }
-            AppLogger.error("Transcription failed: \(error)", category: .recording)
+            // ユーザーの誤タップ等で起きる "audio too short" は Sentry に出さない (debug のみ)。
+            // 真の失敗だけ Sentry に上げて、issue 一覧をノイズフリーに保つ。
+            if let tx = error as? TranscriptionError, case .audioFileTooShort = tx {
+                AppLogger.debug("Transcription skipped (audio too short)", category: .recording)
+            } else {
+                AppLogger.error("Transcription failed: \(error)", category: .recording)
+            }
 
             await MainActor.run {
                 lastFailedLectureId = lecture.id
