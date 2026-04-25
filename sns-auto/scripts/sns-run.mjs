@@ -37,13 +37,14 @@ const LOG_DIR = path.join(VAULT, "SNS/ログ");
 const ARCHIVE_DIR = path.join(VAULT, "SNS/公開済");
 
 function parseArgs() {
-  const args = { live: false, count: 3, lang: null, id: null, pillar: null };
+  const args = { live: false, count: 3, lang: null, id: null, pillar: null, ch: null };
   for (const a of process.argv.slice(2)) {
     if (a === "--live") args.live = true;
     else if (a.startsWith("--count=")) args.count = parseInt(a.slice(8), 10);
     else if (a.startsWith("--lang=")) args.lang = a.slice(7);
     else if (a.startsWith("--id=")) args.id = a.slice(5);
     else if (a.startsWith("--pillar=")) args.pillar = a.slice(9);
+    else if (a.startsWith("--ch=")) args.ch = a.slice(5);
   }
   return args;
 }
@@ -129,12 +130,13 @@ function recentlyBlocked(state, id, windowH = 6) {
   );
 }
 
-function pickCandidates(inv, state, { count, lang, id, pillar }) {
+function pickCandidates(inv, state, { count, lang, id, pillar, ch }) {
   if (id) return inv.filter((r) => r.id === id);
   // ベース pool: 投稿済 30日 + 直近6時間に blocked のものを除外
   let pool = inv.filter(
     (r) => !alreadyPosted(state, r.id) && !recentlyBlocked(state, r.id)
   );
+  if (ch) pool = pool.filter((r) => r.ch === ch); // LI 行を X cron から除外
   if (lang) pool = pool.filter((r) => r.lang === lang);
 
   const scoreOf = (r) => (r.lastPosted ? Date.parse(r.lastPosted) || 0 : -1);
