@@ -104,12 +104,12 @@ Q: [ニュース 1 文]
 A:
 • [数字 1 つ]
 • [実装判断 or 比較]
-[出典: URL]
+[出典: sourceContent に URL があればその URL、無ければソース名 (例: Anthropic Engineering Blog)]
 
-## スレッド (3 ツイ、各 90 字以内日本語 + URL は最後のみ)
+## スレッド (3 ツイ、各 90 字以内日本語、URL は 3/3 のみ)
 1/3: Q + 背景 1 行
 2/3: A 要点 + 数字
-3/3: taste 1 行 + 出典 URL
+3/3: taste 1 行 + 出典 (URL or ソース名)
 
 # プラットフォーム規則
 ${platformRule}
@@ -119,7 +119,7 @@ ${platformRule}
 # 絶対ルール (違反は即却下)
 - sourceContent に書いてある事実 (数字・固有名詞・社名・人名・日付) 以外を使わない
 - **数字は source と exact match**。四捨五入・近似・概算・桁変更禁止
-- 出典 URL を必ず本文に含める (voice の核)
+- 出典は必ず本文に含める。sourceContent に URL がある時のみその URL を書く。無ければソース名のみ (例: 「出典: Anthropic Engineering」)。**URL を絶対に fabricate しない**
 - 推測や一般論で数字を作らない。source に数字がなければ数字を書かない
 - **自社製品 (Lecsy / lecsy / 講義AI) を本文で言及しない** (bio 例外)
 - 本名 (Nittono/新藤/ニットノ) 禁止
@@ -229,7 +229,16 @@ export async function generatePost(cand) {
     if (!jsonMatch) throw new Error(`OpenAI did not return JSON:\n${text}`);
     parsed = JSON.parse(jsonMatch[0]);
   }
-  if (!parsed.mode || !parsed.text) throw new Error(`Invalid shape: ${text}`);
+  if (!parsed.mode) throw new Error(`Invalid shape (no mode): ${text}`);
+  if (parsed.mode === "thread") {
+    if (!Array.isArray(parsed.thread) || !parsed.thread.length) {
+      throw new Error(`Invalid shape (thread mode without thread array): ${text}`);
+    }
+    // thread mode で text 欠落時は thread[0] を補完 (LLM が忘れがち)
+    if (!parsed.text) parsed.text = parsed.thread[0];
+  } else if (!parsed.text) {
+    throw new Error(`Invalid shape (single mode without text): ${text}`);
+  }
 
   return {
     id: cand.id,
