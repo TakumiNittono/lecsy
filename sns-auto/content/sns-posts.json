@@ -237,6 +237,27 @@
       "url": "https://x.com/Ww83vjNwSLXhV6B/status/2048381078948204625",
       "postedAt": "2026-04-26T12:38:01.076Z",
       "generatedAt": "2026-04-26T12:38:00.849Z"
+    },
+    {
+      "id": "SNS-501",
+      "ch": "X",
+      "status": "error",
+      "error": "no source content for SNS-501",
+      "erroredAt": "2026-04-26T23:39:08.064Z"
+    },
+    {
+      "id": "SNS-502",
+      "ch": "X",
+      "status": "error",
+      "error": "no source content for SNS-502",
+      "erroredAt": "2026-04-26T23:39:08.196Z"
+    },
+    {
+      "id": "SNS-503",
+      "ch": "X",
+      "status": "error",
+      "error": "no source content for SNS-503",
+      "erroredAt": "2026-04-26T23:39:08.274Z"
     }
   ]
 }
