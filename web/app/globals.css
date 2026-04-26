@@ -4,7 +4,18 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #0B1B3B;
+
+  /* Lecsy brand blue (echoes the iOS app icon).
+     Deep = primary, Mid = action, Bright = highlight, Sky = surface tint. */
+  --brand-deep:   #1E5BD9;
+  --brand-mid:    #2F6FE8;
+  --brand-bright: #60A5FA;
+  --brand-sky:    #EFF4FF;
+  --brand-mist:   #F6F9FF;
+  --ink:          #0B1B3B;
+  --ink-soft:     #475A7E;
+  --ink-mute:     #8294B5;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -159,6 +170,87 @@ select option {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* ─── Lecsy LP — flowing blue surfaces ─── */
+
+/* Soft mesh that drifts behind hero / CTA. Three radial blobs in brand blues
+   on a near-white base; background-position animates for a slow flow. */
+.mesh-flow {
+  background-color: #FDFEFF;
+  background-image:
+    radial-gradient(60% 50% at 12% 18%, rgba(96,165,250,0.32) 0%, transparent 60%),
+    radial-gradient(55% 45% at 88% 22%, rgba(47,111,232,0.28) 0%, transparent 65%),
+    radial-gradient(70% 60% at 50% 110%, rgba(30,91,217,0.22) 0%, transparent 60%);
+  background-size: 180% 180%, 180% 180%, 180% 180%;
+  animation: meshDrift 22s ease-in-out infinite alternate;
+}
+
+.mesh-deep {
+  background-color: #0A1A3D;
+  background-image:
+    radial-gradient(55% 45% at 18% 25%, rgba(96,165,250,0.45) 0%, transparent 60%),
+    radial-gradient(50% 45% at 82% 75%, rgba(47,111,232,0.5) 0%, transparent 65%),
+    radial-gradient(60% 50% at 50% 50%, rgba(30,91,217,0.3) 0%, transparent 70%);
+  background-size: 180% 180%, 180% 180%, 180% 180%;
+  animation: meshDrift 26s ease-in-out infinite alternate;
+}
+
+@keyframes meshDrift {
+  0%   { background-position: 0% 0%, 100% 0%, 50% 100%; }
+  100% { background-position: 20% 10%, 80% 20%, 60% 90%; }
+}
+
+/* Subtle vertical float for hero card. */
+.float-y {
+  animation: floatY 7s ease-in-out infinite;
+}
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+/* Waveform bars breathing — height cycles smoothly. */
+.wave-bar {
+  animation: waveBreath 1.6s ease-in-out infinite;
+  transform-origin: bottom;
+}
+@keyframes waveBreath {
+  0%, 100% { transform: scaleY(0.55); }
+  50%      { transform: scaleY(1); }
+}
+
+/* Card lift with blue-tinted shadow. */
+.card-lift {
+  transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
+}
+.card-lift:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 20px 40px -16px rgba(30, 91, 217, 0.22),
+    0 8px 18px -10px rgba(30, 91, 217, 0.18);
+  border-color: rgba(47, 111, 232, 0.35);
+}
+
+/* Diagonal soft band (echoes app icon's diagonal split). */
+.brand-diagonal {
+  background: linear-gradient(118deg,
+    var(--brand-deep) 0%,
+    var(--brand-mid) 38%,
+    var(--brand-bright) 100%);
+}
+
+/* Stagger reveal — pair with .animate-fade-in-up. */
+.reveal-1 { animation-delay: 0.05s; }
+.reveal-2 { animation-delay: 0.15s; }
+.reveal-3 { animation-delay: 0.25s; }
+.reveal-4 { animation-delay: 0.35s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mesh-flow, .mesh-deep, .float-y, .wave-bar,
+  .animate-fade-in-up, .animate-fade-in, .animate-pulse-slow, .animate-slide-in {
+    animation: none !important;
+  }
 }
 
 /* Hover effects */
