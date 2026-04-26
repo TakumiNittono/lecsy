@@ -196,6 +196,37 @@
       "url": "https://x.com/Ww83vjNwSLXhV6B/status/2048184824922550405",
       "postedAt": "2026-04-25T23:38:10.485Z",
       "generatedAt": "2026-04-25T23:38:10.280Z"
+    },
+    {
+      "id": "SNS-501",
+      "ch": "X",
+      "status": "error",
+      "error": "no source content for SNS-501",
+      "erroredAt": "2026-04-26T05:54:54.385Z"
+    },
+    {
+      "id": "SNS-502",
+      "ch": "X",
+      "status": "error",
+      "error": "no source content for SNS-502",
+      "erroredAt": "2026-04-26T05:54:54.448Z"
+    },
+    {
+      "id": "SNS-503",
+      "ch": "X",
+      "status": "error",
+      "error": "no source content for SNS-503",
+      "erroredAt": "2026-04-26T05:54:54.499Z"
+    },
+    {
+      "id": "AI-6a4b53c5",
+      "ch": "X",
+      "lang": "ja",
+      "status": "posted",
+      "tweetId": "2048279645351469404",
+      "url": "https://x.com/Ww83vjNwSLXhV6B/status/2048279645351469404",
+      "postedAt": "2026-04-26T05:54:57.381Z",
+      "generatedAt": "2026-04-26T05:54:57.209Z"
     }
   ]
 }
