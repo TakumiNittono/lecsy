@@ -300,6 +300,16 @@
       "status": "error",
       "error": "no source content for SNS-503",
       "erroredAt": "2026-04-27T13:13:53.304Z"
+    },
+    {
+      "id": "AI-152cb1f3",
+      "ch": "X",
+      "lang": "ja",
+      "status": "posted",
+      "tweetId": "2048759030311526714",
+      "url": "https://x.com/Ww83vjNwSLXhV6B/status/2048759030311526714",
+      "postedAt": "2026-04-27T13:39:51.722Z",
+      "generatedAt": "2026-04-27T13:39:51.407Z"
     }
   ]
 }
