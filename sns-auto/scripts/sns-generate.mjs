@@ -74,11 +74,18 @@ function findByName(dir, name) {
 function buildSystemPrompt(tone, ch, lang) {
   const charBudget = ch === "LI"
     ? "2000-2500 字 (LinkedIn)"
-    : `**日本語 1 字 = X の 2 unit**。URL は 23 unit 固定。上限 280 units。
+    : `**X 文字数 (絶対遵守、超えたら却下)**:
+- 日本語 1 字 = 2 X-unit / ASCII = 1 / URL = 23 (固定)
+- 1 ツイ上限 280 X-unit
+- 単発 (single): **日本語 80 字以下** + URL 1 つ → 80×2 + 23 = 183 unit、安全マージン込みで 80 字を超えない
+- thread (3 ツイ): 各ツイ 日本語 70 字以下、URL は 3/3 のみ
+- 出力前に **必ず字数を数えて 80 字以下か確認**。超えたら削る
 
-単発 (mode: single): **本文 日本語 100 字以内** + URL 1 つ。これを超える内容は thread にする。
+書き出す前のチェック:
+1. mode=single なら本文 (URL を除く) が 80 字以下か？
+2. mode=thread なら各ツイが 70 字以下か？
 
-thread 推奨 (内容が重い時): 3 ツイ、各 90 字以内 日本語 + 最後のツイに URL。
+thread 推奨 (内容が重い時): 3 ツイ、各 70 字以下 日本語 + 最後のツイに URL。
 - 1/3: Q + 背景 1 行
 - 2/3: A (要点 + 数字)
 - 3/3: 比較 + taste + URL`;
@@ -142,7 +149,10 @@ ${platformRule}
 }`;
 }
 
-function buildUserPrompt(cand, sourceContent) {
+function buildUserPrompt(cand, sourceContent, prevReasons) {
+  const retryNote = prevReasons && prevReasons.length
+    ? `\n\n# 前回 attempt の guardrail 違反 (今回は必ず直す)\n${prevReasons.map((r) => `- ${r}`).join("\n")}\n\n特に length 超過は **本文を 80 字以下に削る or thread に分割**。NG keyword は語彙を入れ替える。`
+    : "";
   if (cand.sourceUrl) {
     // AI news item mode (Daily.md から)
     return `# 今日の AI ニュース item で投稿を書いてください
@@ -163,7 +173,7 @@ ${sourceContent.slice(0, 4000)}
 - Q+A 構造、出典 URL を必ず本文に
 - 数字は上記サマリにある物のみ、無ければ数字を書かない
 - builder (個人開発者) が「自分のプロジェクトに持ち帰れる」形で
-- Lecsy / 自社製品に言及しない
+- Lecsy / 自社製品に言及しない${retryNote}
 
 JSON で出力してください。`;
   }
@@ -181,11 +191,11 @@ JSON で出力してください。`;
 \`\`\`
 ${sourceContent.slice(0, 6000)}
 \`\`\`
-
+${retryNote}
 上記 tone・規則に従って JSON で出力してください。`;
 }
 
-export async function generatePost(cand) {
+export async function generatePost(cand, opts = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not set");
 
@@ -214,7 +224,7 @@ export async function generatePost(cand) {
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: buildSystemPrompt(tone, cand.ch, cand.lang || "ja") },
-      { role: "user", content: buildUserPrompt(cand, sourceContent) },
+      { role: "user", content: buildUserPrompt(cand, sourceContent, opts.prevReasons) },
     ],
   });
 

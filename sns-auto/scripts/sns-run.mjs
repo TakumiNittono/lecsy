@@ -267,14 +267,16 @@ async function main() {
 
       let post = null;
       let gr = null;
+      let prevReasons = null;
       const MAX_ATTEMPTS = 3;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         log(`-- ${cand.id}: generate (attempt ${attempt}/${MAX_ATTEMPTS})`);
-        post = await generatePost(cand);
+        post = await generatePost(cand, { prevReasons });
         log(`-- ${cand.id}: mode=${post.mode} textLen=${post.text.length}`);
         gr = checkPost(post, sourceContent);
         if (gr.pass) break;
         log(`-- ${cand.id}: attempt ${attempt} blocked: ${gr.reasons.join("; ")}`);
+        prevReasons = gr.reasons;
       }
 
       if (!gr.pass) {

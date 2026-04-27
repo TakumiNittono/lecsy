@@ -109,13 +109,19 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            sns-auto/content/sns-posts.json \
-            "_Vault/SNS/公開済/" \
-            "_Vault/SNS/ログ/" \
-            "_Vault/SNS/Daily/" \
-            "_Vault/SNS/ドラフト/" \
-            || true
+          # Stage existing paths only — missing pathspec aborts modern `git add` and silently drops everything.
+          # ログ/ は意図的に外す (auto-generated transcripts、git に入れない方針)
+          for p in \
+            "sns-auto/content/sns-posts.json" \
+            "_Vault/SNS/公開済" \
+            "_Vault/SNS/Daily" \
+            "_Vault/SNS/ドラフト"; do
+            if [ -e "$p" ]; then
+              git add "$p"
+            else
+              echo "skip missing: $p"
+            fi
+          done
           if git diff --cached --quiet; then
             echo "no changes to commit"
           else
