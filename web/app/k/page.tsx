@@ -30,22 +30,6 @@ const STATUS_LABEL: Record<AppStatus, string> = {
   error: 'エラー',
 };
 
-const QUICK_QUESTIONS = [
-  '今の状態は良くなっていますか？',
-  '今、命に危険はありますか？',
-  '次に何をする予定ですか？',
-  'どの薬を使っていますか？',
-  '酸素の状態はどうですか？',
-  '肺の状態はどうですか？',
-  '熱は下がっていますか？',
-  '面会しても大丈夫ですか？',
-  'もう一度ゆっくり説明してもらえますか？',
-  '通訳が来るまで待てますか？',
-  '家族に何かできることはありますか？',
-  '今すぐ決める必要がありますか？',
-  '何かサインする必要がありますか？',
-];
-
 const MAX_ITEMS = 20;
 
 export default function KPage() {
@@ -269,14 +253,6 @@ export default function KPage() {
     }
   }, [questionEn]);
 
-  const onQuickQuestion = useCallback(
-    (q: string) => {
-      setQuestionJa(q);
-      void onTranslateQuestion(q);
-    },
-    [onTranslateQuestion]
-  );
-
   return (
     <main className="mx-auto max-w-2xl px-4 py-6 pb-32">
       <header className="mb-4">
@@ -316,23 +292,6 @@ export default function KPage() {
           Doctor / Nurse said
         </h2>
         <TranscriptFeed items={items} interim={interim} />
-      </section>
-
-      <section className="mt-8">
-        <h2 className="mb-2 text-xs uppercase tracking-wider text-slate-400">
-          Quick Questions
-        </h2>
-        <div className="grid grid-cols-1 gap-2">
-          {QUICK_QUESTIONS.map((q) => (
-            <button
-              key={q}
-              onClick={() => onQuickQuestion(q)}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-3 text-left text-base text-slate-100 active:bg-slate-800"
-            >
-              {q}
-            </button>
-          ))}
-        </div>
       </section>
 
       <section className="mt-8">
