@@ -422,11 +422,16 @@ export default function KPage() {
       </div>
 
       <section className="mt-4 flex-1">
-        <TranscriptFeed items={items} interim={interim} />
+        <TranscriptFeed items={items} />
       </section>
 
-      {/* sticky bottom: 入力 + 翻訳結果 + Show/Speak だけ。 */}
+      {/* sticky bottom: interim (リアルタイム聞き取り) + 入力 + 翻訳結果。 */}
       <section className="sticky bottom-0 -mx-4 border-t border-slate-800 bg-slate-950/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur">
+        {interim && (
+          <div className="mb-2 rounded-lg border border-dashed border-emerald-500/40 bg-emerald-950/20 px-3 py-2">
+            <div className="text-sm text-emerald-300/80">{interim}</div>
+          </div>
+        )}
         <div className="relative">
           <textarea
             value={questionJa}
@@ -530,10 +535,8 @@ function dotColor(status: AppStatus): string {
 
 function TranscriptFeed({
   items,
-  interim,
 }: {
   items: TranscriptItem[];
-  interim: string;
 }) {
   const itemRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const lastScrolledRef = useRef<string | null>(null);
@@ -550,10 +553,10 @@ function TranscriptFeed({
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [items]);
 
-  if (items.length === 0 && !interim) {
+  if (items.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/40 px-3 py-8 text-center text-sm text-slate-500">
-        Start Listening を押すと、英語の会話が日本語でここに流れます。
+        Start を押すと、英語の会話が日本語でここに流れます。
       </div>
     );
   }
@@ -561,7 +564,7 @@ function TranscriptFeed({
     <div className="space-y-3">
       {/* 確定 item は古→新で上から下へ。新しいものが入った瞬間に画面センターへスクロール。
           英語と日本語のペアは順序を厳守 (各 item の id で固定)。後から来た翻訳が
-          先のものを追い越して並ぶことはない。 */}
+          先のものを追い越して並ぶことはない。interim は sticky bottom 側で表示。 */}
       {items.map((it) => (
         <div
           key={it.id}
@@ -581,11 +584,6 @@ function TranscriptFeed({
           <div className="mt-1.5 text-xs text-slate-400">{it.english}</div>
         </div>
       ))}
-      {interim && (
-        <div className="rounded-lg border border-dashed border-emerald-500/40 bg-emerald-950/20 p-3">
-          <div className="text-sm text-emerald-300/80">{interim}</div>
-        </div>
-      )}
     </div>
   );
 }
