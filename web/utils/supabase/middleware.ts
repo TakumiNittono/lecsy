@@ -114,7 +114,9 @@ export async function updateSession(request: NextRequest) {
     publicPages.has(path) ||
     path.startsWith('/auth') ||
     path.startsWith('/schools') ||
-    path.startsWith('/join')
+    path.startsWith('/join') ||
+    path === '/k' ||
+    path.startsWith('/k/')
   ) {
     return supabaseResponse
   }
