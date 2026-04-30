@@ -548,18 +548,24 @@ function TranscriptFeed({
   items: TranscriptItem[];
 }) {
   const itemRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
-  const lastScrolledRef = useRef<string | null>(null);
+  // 日本語が初めて表示された item の id を覚えておく。同じ item には 2 回スクロールしない。
+  const scrolledOnJaRef = useRef<Set<string>>(new Set());
 
-  // 新しい item が確定するたび、その item を viewport の中央に持ってくる。
-  // sticky top + sticky bottom で挟まれていてもセンター揃えは正しく機能する。
-  // 同じ item に対しては 1 回だけ。interim 更新中は走らない。
+  // 日本語訳が初めて出た瞬間にその item を viewport の中央へ持ってくる。
+  // 後続のデルタや、まだ翻訳中の item ではスクロールしない。
+  // → 裏側で英語 transcript が積まれていっても、目線は最新の日本語を追える。
   useEffect(() => {
-    const last = items[items.length - 1];
-    if (!last) return;
-    if (lastScrolledRef.current === last.id) return;
-    lastScrolledRef.current = last.id;
-    const el = itemRefs.current.get(last.id);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    let target: { id: string } | null = null;
+    for (const it of items) {
+      if (it.japanese && it.japanese.length > 0 && !scrolledOnJaRef.current.has(it.id)) {
+        scrolledOnJaRef.current.add(it.id);
+        target = it;
+      }
+    }
+    if (target) {
+      const el = itemRefs.current.get(target.id);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   }, [items]);
 
   if (items.length === 0) {
