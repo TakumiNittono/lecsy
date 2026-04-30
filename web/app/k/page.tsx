@@ -123,9 +123,10 @@ export default function KPage() {
     const trimmed = english.trim();
     if (!trimmed) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // チャット風: 新しいものが末尾。古いものは押し上がる。
     setItems((prev) => {
-      const next = [{ id, english: trimmed, isFinal: true, ts: Date.now() }, ...prev];
-      return next.slice(0, MAX_ITEMS);
+      const next = [...prev, { id, english: trimmed, isFinal: true, ts: Date.now() }];
+      return next.slice(-MAX_ITEMS);
     });
     const shouldTranslate = trimmed.length > 2 && /\s|[.!?]/.test(trimmed) || trimmed.length > 6;
     if (!shouldTranslate) {
@@ -342,7 +343,7 @@ export default function KPage() {
   }, [questionEn]);
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6 pb-32">
+    <main className="mx-auto flex min-h-[100dvh] max-w-2xl flex-col px-4 pt-6">
       <header className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Hospital Live Interpreter</h1>
@@ -383,17 +384,17 @@ export default function KPage() {
         )}
       </div>
 
-      <section className="mt-6">
+      <section className="mt-6 flex-1">
         <h2 className="mb-2 text-xs uppercase tracking-wider text-slate-400">
           Doctor / Nurse said
         </h2>
         <TranscriptFeed items={items} interim={interim} />
       </section>
 
-      <section className="mt-8">
-        <h2 className="mb-2 text-xs uppercase tracking-wider text-slate-400">
-          Ask in Japanese
-        </h2>
+      <SafetyNotice />
+
+      {/* sticky bottom: 入力欄は常に画面の一番下に残る。スクロールしても見える。 */}
+      <section className="sticky bottom-0 -mx-4 border-t border-slate-800 bg-slate-950/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur">
         <textarea
           value={questionJa}
           onChange={(e) => setQuestionJa(e.target.value)}
@@ -442,8 +443,6 @@ export default function KPage() {
         )}
       </section>
 
-      <SafetyNotice />
-
       {showLarge && questionEn && (
         <LargeEnglishModal
           english={questionEn}
@@ -482,6 +481,13 @@ function TranscriptFeed({
   items: TranscriptItem[];
   interim: string;
 }) {
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  // 新しい item が来たら最下部に自動スクロール (interim 更新では走らない、
+  // 確定単位だけ動かすことで読みやすさを優先)。
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [items.length]);
+
   if (items.length === 0 && !interim) {
     return (
       <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/40 px-3 py-8 text-center text-sm text-slate-500">
@@ -491,13 +497,7 @@ function TranscriptFeed({
   }
   return (
     <div className="space-y-3">
-      {/* interim は常に最上部。話している今の言葉が一番目立つ位置に出る。 */}
-      {interim && (
-        <div className="rounded-lg border border-dashed border-emerald-500/40 bg-emerald-950/20 p-3">
-          <div className="text-sm text-emerald-300/80">{interim}</div>
-        </div>
-      )}
-      {/* 確定 item は新→古で上から積まれる。pushFinal が unshift しているのでそのまま map。 */}
+      {/* 確定 item は古→新で上から下へ。新着が下に積まれていき、古いものが押し上がる。 */}
       {items.map((it) => (
         <div
           key={it.id}
@@ -513,6 +513,13 @@ function TranscriptFeed({
           <div className="mt-1.5 text-xs text-slate-400">{it.english}</div>
         </div>
       ))}
+      {/* interim は feed の末尾。今喋っている言葉がいつも一番下、入力欄のすぐ上に出る。 */}
+      {interim && (
+        <div className="rounded-lg border border-dashed border-emerald-500/40 bg-emerald-950/20 p-3">
+          <div className="text-sm text-emerald-300/80">{interim}</div>
+        </div>
+      )}
+      <div ref={bottomRef} />
     </div>
   );
 }
