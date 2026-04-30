@@ -24,16 +24,6 @@ type TranscriptItem = {
   ts: number;
 };
 
-const STATUS_LABEL: Record<AppStatus, string> = {
-  idle: '停止中',
-  requesting: 'マイク準備中…',
-  listening: '聞き取り中',
-  paused: '一時停止中',
-  speaking: '英語を読み上げ中・マイク一時停止',
-  reconnecting: '接続を復帰中…',
-  error: 'エラー',
-};
-
 const MAX_ITEMS = 20;
 
 export default function KPage() {
@@ -359,33 +349,28 @@ export default function KPage() {
 
   return (
     <main className="mx-auto flex min-h-[100dvh] max-w-2xl flex-col px-4">
-      {/* sticky top: ヘッダー + ボタン群が常に画面上に固定。スクロールしても消えない。 */}
+      {/* sticky top: タイトル + ステータスドット + 操作ボタンを上に固定。 */}
       <div className="sticky top-0 z-20 -mx-4 border-b border-slate-800 bg-slate-950/95 px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] backdrop-blur">
-        <header className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-bold">Hospital Live Interpreter</h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              英語→日本語リアルタイム通訳 / 日本語質問の英訳
-            </p>
+        <header className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${dotColor(status)} ${status === 'listening' ? 'animate-pulse' : ''}`} />
+            <h1 className="truncate text-base font-semibold">Hospital Live Interpreter</h1>
           </div>
           <Link
             href="/k/library"
-            className="shrink-0 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 active:bg-slate-800"
+            className="shrink-0 text-xs text-slate-400 active:text-slate-200"
           >
             履歴
           </Link>
         </header>
 
-        <StatusBar status={status} />
-
-        {/* ボタン: idle 時は Start のみ。live 時は Pause/Resume + Stop の 2 つ常駐。 */}
-        <div className="mt-3 flex gap-2">
+        <div className="flex gap-2">
           {!isLive ? (
             <button
               onClick={startListening}
               className="flex-1 rounded-xl bg-emerald-500 px-4 py-3.5 text-base font-semibold text-emerald-950 active:bg-emerald-400"
             >
-              Start Listening
+              Start
             </button>
           ) : (
             <>
@@ -400,7 +385,7 @@ export default function KPage() {
                 <button
                   onClick={pauseListening}
                   disabled={status !== 'listening'}
-                  className="flex-1 rounded-xl bg-amber-400 px-4 py-3.5 text-base font-semibold text-amber-950 active:bg-amber-300 disabled:opacity-40"
+                  className="flex-1 rounded-xl bg-slate-700 px-4 py-3.5 text-base font-semibold text-slate-100 active:bg-slate-600 disabled:opacity-40"
                 >
                   Pause
                 </button>
@@ -416,22 +401,17 @@ export default function KPage() {
         </div>
 
         {errorMsg && (
-          <div className="mt-3 rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+          <div className="mt-2 rounded-lg bg-red-950/50 px-3 py-2 text-sm text-red-200">
             {errorMsg}
           </div>
         )}
       </div>
 
       <section className="mt-4 flex-1">
-        <h2 className="mb-2 text-xs uppercase tracking-wider text-slate-400">
-          Doctor / Nurse said
-        </h2>
         <TranscriptFeed items={items} interim={interim} />
       </section>
 
-      <SafetyNotice />
-
-      {/* sticky bottom: 入力欄は常に画面の一番下に残る。スクロールしても見える。 */}
+      {/* sticky bottom: 入力 + 翻訳結果 + Show/Speak だけ。 */}
       <section className="sticky bottom-0 -mx-4 border-t border-slate-800 bg-slate-950/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur">
         <textarea
           value={questionJa}
@@ -440,45 +420,39 @@ export default function KPage() {
           rows={2}
           className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-base text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none"
         />
-        <div className="mt-2 flex flex-wrap gap-2">
-          <button
-            onClick={() => onTranslateQuestion()}
-            disabled={!questionJa.trim() || translatingQ}
-            className="flex-1 rounded-lg bg-sky-500 px-4 py-3 font-semibold text-sky-950 active:bg-sky-400 disabled:opacity-40"
-          >
-            {translatingQ ? 'Translating…' : 'Translate to English'}
-          </button>
-          <button
-            onClick={() => {
-              setQuestionJa('');
-              setQuestionEn('');
-            }}
-            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-3 text-slate-200 active:bg-slate-800"
-          >
-            Clear
-          </button>
-        </div>
+        <button
+          onClick={() => onTranslateQuestion()}
+          disabled={!questionJa.trim() || translatingQ}
+          className="mt-2 w-full rounded-lg bg-sky-500 px-4 py-3 font-semibold text-sky-950 active:bg-sky-400 disabled:opacity-40"
+        >
+          {translatingQ ? 'Translating…' : 'Translate to English'}
+        </button>
 
         {questionEn && (
-          <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900 p-3">
-            <div className="text-xs uppercase tracking-wider text-slate-400">English</div>
-            <div className="mt-1 text-lg leading-snug text-slate-100">{questionEn}</div>
-            <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3">
+            <div className="rounded-lg bg-slate-900 px-3 py-2.5 text-base leading-snug text-slate-100">
+              {questionEn}
+            </div>
+            <div className="mt-2 flex gap-2">
               <button
                 onClick={() => setShowLarge(true)}
                 className="flex-1 rounded-lg bg-amber-400 px-4 py-3 font-semibold text-amber-950 active:bg-amber-300"
               >
-                Show English Large
+                Show
               </button>
               <button
                 onClick={onSpeakEnglish}
                 className="flex-1 rounded-lg bg-emerald-500 px-4 py-3 font-semibold text-emerald-950 active:bg-emerald-400"
               >
-                Speak English
+                Speak
               </button>
             </div>
           </div>
         )}
+
+        <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+          会話補助のためのツール。重要な医療判断は必ずスタッフに確認を。音声は保存されません。
+        </p>
       </section>
 
       {showLarge && questionEn && (
@@ -493,23 +467,16 @@ export default function KPage() {
   );
 }
 
-function StatusBar({ status }: { status: AppStatus }) {
-  const color =
-    status === 'listening'
-      ? 'bg-emerald-500'
-      : status === 'speaking'
-      ? 'bg-amber-400'
-      : status === 'reconnecting' || status === 'requesting'
-      ? 'bg-sky-500'
-      : status === 'error'
-      ? 'bg-rose-500'
-      : 'bg-slate-500';
-  return (
-    <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
-      <span className={`inline-block h-2.5 w-2.5 rounded-full ${color} ${status === 'listening' ? 'animate-pulse' : ''}`} />
-      <span className="text-sm text-slate-200">{STATUS_LABEL[status]}</span>
-    </div>
-  );
+function dotColor(status: AppStatus): string {
+  switch (status) {
+    case 'listening': return 'bg-emerald-500';
+    case 'speaking': return 'bg-amber-400';
+    case 'paused': return 'bg-slate-400';
+    case 'reconnecting':
+    case 'requesting': return 'bg-sky-500';
+    case 'error': return 'bg-rose-500';
+    default: return 'bg-slate-600';
+  }
 }
 
 function TranscriptFeed({
@@ -571,26 +538,6 @@ function TranscriptFeed({
         </div>
       )}
     </div>
-  );
-}
-
-function SafetyNotice() {
-  return (
-    <footer className="mt-10 rounded-lg border border-slate-800 bg-slate-900/50 p-4 text-xs leading-relaxed text-slate-400">
-      <p className="font-semibold text-slate-300">Safety / 安全のお知らせ</p>
-      <p className="mt-2">
-        このツールは会話補助のためのものです。翻訳には誤りが含まれる可能性があります。これは正式な医療通訳ではありません。重要な医療判断は、必ず病院スタッフまたは正式な通訳に確認してください。
-      </p>
-      <p className="mt-2">
-        音声は保存されません。会話の文字起こしと翻訳のみ、お使いの端末からだけ後で見られるよう保存されます (匿名)。
-      </p>
-      <p className="mt-2 text-slate-500">
-        This tool is for communication support only. It may make mistakes. It is not a certified
-        medical interpreter. For important medical decisions, please confirm with hospital staff or a
-        certified interpreter. Audio is never stored. Transcripts and translations are saved
-        anonymously and visible only on this device.
-      </p>
-    </footer>
   );
 }
 
