@@ -436,8 +436,9 @@ export default function KPage() {
       {/* sticky bottom: interim (リアルタイム聞き取り) + 入力 + 翻訳結果。 */}
       <section className="sticky bottom-0 -mx-4 border-t border-slate-800 bg-slate-950/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur">
         {interim && (
-          <div className="mb-2 rounded-lg border border-dashed border-emerald-500/40 bg-emerald-950/20 px-3 py-2">
-            <div className="text-sm text-emerald-300/80">{interim}</div>
+          <div className="mb-2 flex items-start gap-2 rounded-lg border border-emerald-500/50 bg-emerald-950/40 px-3 py-2.5">
+            <span className="mt-1.5 inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400" />
+            <div className="flex-1 text-base leading-snug text-emerald-100">{interim}</div>
           </div>
         )}
         <div className="relative">
