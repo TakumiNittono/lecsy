@@ -314,8 +314,10 @@ export default function KPage() {
     }
   }, [questionJa, saveTurn]);
 
-  const onSpeakEnglish = useCallback(async () => {
-    if (!questionEn.trim()) return;
+  // text を英語として TTS 再生。listening 中は mic を mute して loopback を防ぐ。
+  const speakText = useCallback(async (text: string) => {
+    const t = text.trim();
+    if (!t) return;
     const wasListening = socketRef.current?.readyState === WebSocket.OPEN;
     mutedRef.current = true;
     if (wasListening) setStatus('speaking');
@@ -324,7 +326,7 @@ export default function KPage() {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/k-tts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: questionEn }),
+        body: JSON.stringify({ text: t }),
       });
       if (!res.ok) throw new Error('tts_failed');
       const blob = await res.blob();
@@ -343,7 +345,11 @@ export default function KPage() {
       mutedRef.current = false;
       if (wasListening) setStatus('listening');
     }
-  }, [questionEn]);
+  }, []);
+
+  const onSpeakEnglish = useCallback(() => {
+    void speakText(questionEn);
+  }, [speakText, questionEn]);
 
   const isLive = status === 'listening' || status === 'paused' || status === 'speaking' || status === 'reconnecting' || status === 'requesting';
 
@@ -408,7 +414,7 @@ export default function KPage() {
       </div>
 
       <section className="mt-4 flex-1">
-        <TranscriptFeed items={items} interim={interim} />
+        <TranscriptFeed items={items} interim={interim} onSpeak={(text) => void speakText(text)} />
       </section>
 
       {/* sticky bottom: 入力 + 翻訳結果 + Show/Speak だけ。 */}
@@ -467,6 +473,25 @@ export default function KPage() {
   );
 }
 
+function SpeakerIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M11 5L6 9H2v6h4l5 4V5z" />
+      <path d="M15.5 8.5a5 5 0 010 7" />
+      <path d="M19 5a10 10 0 010 14" />
+    </svg>
+  );
+}
+
 function dotColor(status: AppStatus): string {
   switch (status) {
     case 'listening': return 'bg-emerald-500';
@@ -482,9 +507,11 @@ function dotColor(status: AppStatus): string {
 function TranscriptFeed({
   items,
   interim,
+  onSpeak,
 }: {
   items: TranscriptItem[];
   interim: string;
+  onSpeak: (text: string) => void;
 }) {
   const itemRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const lastScrolledRef = useRef<string | null>(null);
@@ -523,8 +550,17 @@ function TranscriptFeed({
           className="rounded-lg border border-slate-800 bg-slate-900 p-3"
         >
           {it.japanese ? (
-            <div className="text-lg font-medium leading-snug text-emerald-200">
-              {it.japanese}
+            <div className="flex items-start gap-2">
+              <div className="flex-1 text-lg font-medium leading-snug text-emerald-200">
+                {it.japanese}
+              </div>
+              <button
+                onClick={() => onSpeak(it.english)}
+                aria-label="英語を読み上げる"
+                className="shrink-0 rounded-md p-1.5 text-slate-400 active:bg-slate-800 active:text-slate-100"
+              >
+                <SpeakerIcon className="h-4 w-4" />
+              </button>
             </div>
           ) : (
             <div className="text-sm text-slate-500">翻訳中…</div>
