@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createClient } from '@/utils/supabase/client';
 
 const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://bjqilokchrqfxzimfnpm.supabase.co';
@@ -50,27 +52,98 @@ export default function KPage() {
   const reconnectAttemptsRef = useRef(0);
   const stoppedManuallyRef = useRef(false);
 
+  // Supabase: 匿名ログイン + 現セッション。
+  const supabase = useMemo(() => createClient(), []);
+  const sessionIdRef = useRef<string | null>(null);
+  const userIdRef = useRef<string | null>(null);
+
+  // 起動時に匿名 auth。既にログイン済ならそれを使う。
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        userIdRef.current = data.user.id;
+        return;
+      }
+      const { data: signed, error } = await supabase.auth.signInAnonymously();
+      if (cancelled) return;
+      if (error) {
+        // 匿名 auth が project で disabled の場合など。保存は諦めるが live 通訳は続行。
+        console.warn('[k] anon sign-in failed, history will not be saved', error);
+        return;
+      }
+      userIdRef.current = signed.user?.id ?? null;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
+
+  // 現セッションを担保。なければ作成。auth が無ければ null を返す。
+  const ensureSession = useCallback(async (): Promise<string | null> => {
+    if (sessionIdRef.current) return sessionIdRef.current;
+    if (!userIdRef.current) return null;
+    const title = new Date().toLocaleString('ja-JP', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const { data, error } = await supabase
+      .from('k_sessions')
+      .insert({ user_id: userIdRef.current, title })
+      .select('id')
+      .single();
+    if (error || !data) {
+      console.warn('[k] session insert failed', error);
+      return null;
+    }
+    sessionIdRef.current = data.id;
+    return data.id;
+  }, [supabase]);
+
+  const saveTurn = useCallback(
+    async (kind: 'said' | 'question', english: string, japanese: string) => {
+      const sid = await ensureSession();
+      if (!sid) return;
+      const { error } = await supabase.from('k_turns').insert({
+        session_id: sid,
+        kind,
+        english,
+        japanese,
+      });
+      if (error) console.warn('[k] turn insert failed', error);
+    },
+    [supabase, ensureSession]
+  );
+
   const pushFinal = useCallback((english: string) => {
     const trimmed = english.trim();
     if (!trimmed) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    // 最新を先頭に積む。古いものは末尾に流れる。
     setItems((prev) => {
       const next = [{ id, english: trimmed, isFinal: true, ts: Date.now() }, ...prev];
       return next.slice(0, MAX_ITEMS);
     });
-    // 翻訳: 極短 (2 文字以下、または英字 1 単語のみ) はスキップして API 浪費を避ける。
     const shouldTranslate = trimmed.length > 2 && /\s|[.!?]/.test(trimmed) || trimmed.length > 6;
-    if (!shouldTranslate) return;
-    // ストリーミング: delta が来た瞬間に該当 item の japanese を伸ばしていく。
-    void translateStream(trimmed, 'en-to-ja', (delta) => {
-      setItems((prev) =>
-        prev.map((it) =>
-          it.id === id ? { ...it, japanese: (it.japanese ?? '') + delta } : it
-        )
-      );
-    });
-  }, []);
+    if (!shouldTranslate) {
+      // 翻訳しないが履歴には残す (英語のみ)
+      void saveTurn('said', trimmed, '');
+      return;
+    }
+    void (async () => {
+      const ja = await translateStream(trimmed, 'en-to-ja', (delta) => {
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id === id ? { ...it, japanese: (it.japanese ?? '') + delta } : it
+          )
+        );
+      });
+      void saveTurn('said', trimmed, ja);
+    })();
+  }, [saveTurn]);
 
   const startListening = useCallback(async () => {
     setErrorMsg(null);
@@ -190,6 +263,8 @@ export default function KPage() {
     stoppedManuallyRef.current = true;
     cleanup();
     setStatus('idle');
+    // 次回 Start Listening で新セッションを開始する。
+    sessionIdRef.current = null;
   }, []);
 
   const cleanup = useCallback(() => {
@@ -223,16 +298,17 @@ export default function KPage() {
     setTranslatingQ(true);
     setQuestionEn('');
     try {
-      // ストリーミング: token が来るたび英文を伸ばしていく。即座に最初の単語が見える。
-      await translateStream(src, 'ja-to-en', (delta) => {
+      const en = await translateStream(src, 'ja-to-en', (delta) => {
         setQuestionEn((prev) => prev + delta);
       });
+      // 質問は kind='question'。english=訳, japanese=元の質問。
+      void saveTurn('question', en, src);
     } catch {
       setErrorMsg('翻訳に失敗しました。もう一度お試しください。');
     } finally {
       setTranslatingQ(false);
     }
-  }, [questionJa]);
+  }, [questionJa, saveTurn]);
 
   const onSpeakEnglish = useCallback(async () => {
     if (!questionEn.trim()) return;
@@ -267,11 +343,19 @@ export default function KPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-6 pb-32">
-      <header className="mb-4">
-        <h1 className="text-xl font-bold">Hospital Live Interpreter</h1>
-        <p className="text-xs text-slate-400 mt-1">
-          英語→日本語リアルタイム通訳 / 日本語質問の英訳
-        </p>
+      <header className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Hospital Live Interpreter</h1>
+          <p className="text-xs text-slate-400 mt-1">
+            英語→日本語リアルタイム通訳 / 日本語質問の英訳
+          </p>
+        </div>
+        <Link
+          href="/k/library"
+          className="shrink-0 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 active:bg-slate-800"
+        >
+          履歴
+        </Link>
       </header>
 
       <StatusBar status={status} />
@@ -440,11 +524,14 @@ function SafetyNotice() {
       <p className="mt-2">
         このツールは会話補助のためのものです。翻訳には誤りが含まれる可能性があります。これは正式な医療通訳ではありません。重要な医療判断は、必ず病院スタッフまたは正式な通訳に確認してください。
       </p>
-      <p className="mt-2">音声・会話内容は保存されません (in-memory only)。</p>
+      <p className="mt-2">
+        音声は保存されません。会話の文字起こしと翻訳のみ、お使いの端末からだけ後で見られるよう保存されます (匿名)。
+      </p>
       <p className="mt-2 text-slate-500">
         This tool is for communication support only. It may make mistakes. It is not a certified
         medical interpreter. For important medical decisions, please confirm with hospital staff or a
-        certified interpreter. Audio is not stored.
+        certified interpreter. Audio is never stored. Transcripts and translations are saved
+        anonymously and visible only on this device.
       </p>
     </footer>
   );
