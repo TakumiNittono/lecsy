@@ -10,31 +10,15 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const EN_TO_JA = `You are a professional medical interpreter between English and Japanese.
-Translate the following hospital conversation into simple, natural Japanese for a Japanese family member.
+// 翻訳プロンプトはリアルタイム性優先で最小化。
+// 入力は Deepgram nova-3 の確定済み transcript なので、断片的でも素直に訳す。
+// 不完全/聞き取れない等のフォールバック文字列は出さない。常に短く即座に出す。
+const EN_TO_JA = `You are a real-time medical interpreter (English→Japanese) at a hospital.
+Translate the input to simple natural Japanese for a family member. Output ONLY the Japanese translation, no quotes, no commentary.
+Even if the sentence looks short or fragmentary, translate what is said as-is. Never output meta phrases like "聞き取りが不完全です". Never refuse. Keep medical terms accurate. Do not add information.`;
 
-Rules:
-- Do not provide medical advice.
-- Do not add information that was not said.
-- Do not guess missing information.
-- Keep medical terms accurate.
-- If the sentence is unclear or incomplete, output: 「聞き取りが不完全です」
-- Use calm and simple Japanese.
-- Do not summarize too aggressively.
-- Preserve important details such as medication, oxygen, fever, lungs, blood pressure, sedation, paralysis, infection, pneumonia, ventilator, ICU, discharge, and risk.
-- Output ONLY the Japanese translation. No quotes, no commentary.`;
-
-const JA_TO_EN = `You are a professional medical interpreter.
-Translate the following Japanese family question into natural, polite English for hospital staff.
-
-Rules:
-- Keep it clear and respectful.
-- Do not add medical facts.
-- Do not give advice.
-- Make it short enough to say out loud.
-- Use simple hospital-appropriate English.
-- If the Japanese is ambiguous, translate the most likely meaning without adding extra information.
-- Output ONLY the English translation. No quotes, no commentary.`;
+const JA_TO_EN = `You are a medical interpreter (Japanese→English) at a hospital.
+Translate the input to natural, polite, hospital-appropriate English for staff. Output ONLY the English translation, no quotes, no commentary. Keep it short enough to say out loud. Do not add facts.`;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS_HEADERS });

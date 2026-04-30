@@ -51,12 +51,18 @@ export default function KPage() {
   const stoppedManuallyRef = useRef(false);
 
   const pushFinal = useCallback((english: string) => {
+    const trimmed = english.trim();
+    if (!trimmed) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // 最新を先頭に積む。古いものは末尾に流れる。
     setItems((prev) => {
-      const next = [...prev, { id, english, isFinal: true, ts: Date.now() }];
-      return next.slice(-MAX_ITEMS);
+      const next = [{ id, english: trimmed, isFinal: true, ts: Date.now() }, ...prev];
+      return next.slice(0, MAX_ITEMS);
     });
-    void translateEnToJa(english).then((ja) => {
+    // 翻訳: 極短 (2 文字以下、または英字 1 単語のみ) はスキップして API 浪費を避ける。
+    const shouldTranslate = trimmed.length > 2 && /\s|[.!?]/.test(trimmed) || trimmed.length > 6;
+    if (!shouldTranslate) return;
+    void translateEnToJa(trimmed).then((ja) => {
       if (!ja) return;
       setItems((prev) => prev.map((it) => (it.id === id ? { ...it, japanese: ja } : it)));
     });
@@ -395,26 +401,28 @@ function TranscriptFeed({
   }
   return (
     <div className="space-y-3">
-      {items.slice().reverse().map((it) => (
+      {/* interim は常に最上部。話している今の言葉が一番目立つ位置に出る。 */}
+      {interim && (
+        <div className="rounded-lg border border-dashed border-emerald-500/40 bg-emerald-950/20 p-3">
+          <div className="text-sm text-emerald-300/80">{interim}</div>
+        </div>
+      )}
+      {/* 確定 item は新→古で上から積まれる。pushFinal が unshift しているのでそのまま map。 */}
+      {items.map((it) => (
         <div
           key={it.id}
           className="rounded-lg border border-slate-800 bg-slate-900 p-3"
         >
-          <div className="text-sm text-slate-300">{it.english}</div>
           {it.japanese ? (
-            <div className="mt-2 text-lg font-medium leading-snug text-emerald-200">
+            <div className="text-lg font-medium leading-snug text-emerald-200">
               {it.japanese}
             </div>
           ) : (
-            <div className="mt-2 text-sm text-slate-500">翻訳中…</div>
+            <div className="text-sm text-slate-500">翻訳中…</div>
           )}
+          <div className="mt-1.5 text-xs text-slate-400">{it.english}</div>
         </div>
       ))}
-      {interim && (
-        <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/40 p-3">
-          <div className="text-sm text-slate-500">{interim}</div>
-        </div>
-      )}
     </div>
   );
 }
