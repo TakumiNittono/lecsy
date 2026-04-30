@@ -478,16 +478,16 @@ export default function KPage() {
         </button>
 
         {questionEn && (
-          <div className="mt-3 flex items-start gap-2 rounded-lg bg-slate-900 px-3 py-2.5">
-            <div className="flex-1 text-base leading-snug text-slate-100">
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-300/30 bg-amber-50 px-4 py-3 shadow-sm">
+            <div className="flex-1 text-xl font-medium leading-relaxed tracking-tight text-slate-900">
               {questionEn}
             </div>
             <button
               onClick={() => void speakText(questionEn)}
               aria-label="英語を読み上げる"
-              className="shrink-0 rounded-md p-1.5 text-slate-400 active:bg-slate-700 active:text-slate-100"
+              className="shrink-0 rounded-md p-1.5 text-slate-600 active:bg-amber-100 active:text-slate-900"
             >
-              <SpeakerIcon className="h-4 w-4" />
+              <SpeakerIcon className="h-5 w-5" />
             </button>
           </div>
         )}
