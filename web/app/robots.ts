@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/app/', '/api/', '/login', '/auth/', '/schools/', '/schools', '/admin/', '/org/'],
+        disallow: ['/app/', '/api/', '/login', '/auth/', '/schools/', '/schools', '/admin/', '/org/', '/k', '/k/'],
       },
     ],
     sitemap: 'https://www.lecsy.app/sitemap.xml',

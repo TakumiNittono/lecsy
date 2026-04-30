@@ -100,3 +100,13 @@ verify_jwt = false
 # 母用 MP3 文字起こし (PINゲートで保護、JWT不要)
 [functions.mv3-transcribe]
 verify_jwt = false
+
+# /k Hospital Live Interpreter (公開、JWT不要、IPレート制限はEdge側で)
+[functions.k-deepgram-token]
+verify_jwt = false
+
+[functions.k-translate]
+verify_jwt = false
+
+[functions.k-tts]
+verify_jwt = false

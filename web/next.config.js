@@ -11,7 +11,7 @@ const nextConfig = {
     return [
       // Marketing / dashboard surfaces: keep mic/camera/geo blocked.
       {
-        source: '/((?!android).*)',
+        source: '/((?!android|k).*)',
         headers: [
           ...baseSecurityHeaders,
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
@@ -27,6 +27,21 @@ const nextConfig = {
       },
       {
         source: '/android',
+        headers: [
+          ...baseSecurityHeaders,
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' },
+        ],
+      },
+      // /k Hospital Live Interpreter — needs microphone for live captions.
+      {
+        source: '/k',
+        headers: [
+          ...baseSecurityHeaders,
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' },
+        ],
+      },
+      {
+        source: '/k/:path*',
         headers: [
           ...baseSecurityHeaders,
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' },
