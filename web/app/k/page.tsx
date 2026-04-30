@@ -351,11 +351,9 @@ export default function KPage() {
     void speakText(questionEn);
   }, [speakText, questionEn]);
 
-  // 画面の transcript だけ消す。Supabase の履歴は触らない (履歴ページから後で見れる)。
-  // セッションは継続するので、続けて喋ればまた同じセッションに積まれる。
-  const onClearScreen = useCallback(() => {
-    setItems([]);
-    setInterim('');
+  const onClearQuestion = useCallback(() => {
+    setQuestionJa('');
+    setQuestionEn('');
   }, []);
 
   const isLive = status === 'listening' || status === 'paused' || status === 'speaking' || status === 'reconnecting' || status === 'requesting';
@@ -369,21 +367,12 @@ export default function KPage() {
             <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${dotColor(status)} ${status === 'listening' ? 'animate-pulse' : ''}`} />
             <h1 className="truncate text-base font-semibold">Hospital Live Interpreter</h1>
           </div>
-          <div className="flex shrink-0 gap-1.5">
-            <button
-              onClick={onClearScreen}
-              disabled={items.length === 0 && !interim}
-              className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 active:bg-slate-800 disabled:opacity-40"
-            >
-              クリア
-            </button>
-            <Link
-              href="/k/library"
-              className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 active:bg-slate-800"
-            >
-              履歴
-            </Link>
-          </div>
+          <Link
+            href="/k/library"
+            className="shrink-0 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 active:bg-slate-800"
+          >
+            履歴
+          </Link>
         </header>
 
         <div className="flex gap-2">
@@ -435,13 +424,35 @@ export default function KPage() {
 
       {/* sticky bottom: 入力 + 翻訳結果 + Show/Speak だけ。 */}
       <section className="sticky bottom-0 -mx-4 border-t border-slate-800 bg-slate-950/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur">
-        <textarea
-          value={questionJa}
-          onChange={(e) => setQuestionJa(e.target.value)}
-          placeholder="日本語で質問を入力..."
-          rows={2}
-          className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-base text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none"
-        />
+        <div className="relative">
+          <textarea
+            value={questionJa}
+            onChange={(e) => setQuestionJa(e.target.value)}
+            placeholder="日本語で質問を入力..."
+            rows={2}
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 pr-9 text-base text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none"
+          />
+          {(questionJa || questionEn) && (
+            <button
+              onClick={onClearQuestion}
+              aria-label="入力をクリア"
+              className="absolute right-1.5 top-1.5 rounded-md p-1.5 text-slate-400 active:bg-slate-700 active:text-slate-100"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+                aria-hidden
+              >
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
         <button
           onClick={() => onTranslateQuestion()}
           disabled={!questionJa.trim() || translatingQ}
