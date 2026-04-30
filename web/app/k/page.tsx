@@ -351,6 +351,13 @@ export default function KPage() {
     void speakText(questionEn);
   }, [speakText, questionEn]);
 
+  // 画面の transcript だけ消す。Supabase の履歴は触らない (履歴ページから後で見れる)。
+  // セッションは継続するので、続けて喋ればまた同じセッションに積まれる。
+  const onClearScreen = useCallback(() => {
+    setItems([]);
+    setInterim('');
+  }, []);
+
   const isLive = status === 'listening' || status === 'paused' || status === 'speaking' || status === 'reconnecting' || status === 'requesting';
 
   return (
@@ -362,12 +369,21 @@ export default function KPage() {
             <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${dotColor(status)} ${status === 'listening' ? 'animate-pulse' : ''}`} />
             <h1 className="truncate text-base font-semibold">Hospital Live Interpreter</h1>
           </div>
-          <Link
-            href="/k/library"
-            className="shrink-0 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 active:bg-slate-800"
-          >
-            履歴
-          </Link>
+          <div className="flex shrink-0 gap-1.5">
+            <button
+              onClick={onClearScreen}
+              disabled={items.length === 0 && !interim}
+              className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 active:bg-slate-800 disabled:opacity-40"
+            >
+              クリア
+            </button>
+            <Link
+              href="/k/library"
+              className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 active:bg-slate-800"
+            >
+              履歴
+            </Link>
+          </div>
         </header>
 
         <div className="flex gap-2">
