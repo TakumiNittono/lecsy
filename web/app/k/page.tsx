@@ -35,7 +35,6 @@ export default function KPage() {
   const [questionJa, setQuestionJa] = useState('');
   const [questionEn, setQuestionEn] = useState('');
   const [translatingQ, setTranslatingQ] = useState(false);
-  const [showLarge, setShowLarge] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -347,10 +346,6 @@ export default function KPage() {
     }
   }, []);
 
-  const onSpeakEnglish = useCallback(() => {
-    void speakText(questionEn);
-  }, [speakText, questionEn]);
-
   const onClearQuestion = useCallback(() => {
     setQuestionJa('');
     setQuestionEn('');
@@ -462,24 +457,17 @@ export default function KPage() {
         </button>
 
         {questionEn && (
-          <div className="mt-3">
-            <div className="rounded-lg bg-slate-900 px-3 py-2.5 text-base leading-snug text-slate-100">
+          <div className="mt-3 flex items-start gap-2 rounded-lg bg-slate-900 px-3 py-2.5">
+            <div className="flex-1 text-base leading-snug text-slate-100">
               {questionEn}
             </div>
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={() => setShowLarge(true)}
-                className="flex-1 rounded-lg bg-amber-400 px-4 py-3 font-semibold text-amber-950 active:bg-amber-300"
-              >
-                Show
-              </button>
-              <button
-                onClick={onSpeakEnglish}
-                className="flex-1 rounded-lg bg-emerald-500 px-4 py-3 font-semibold text-emerald-950 active:bg-emerald-400"
-              >
-                Speak
-              </button>
-            </div>
+            <button
+              onClick={() => void speakText(questionEn)}
+              aria-label="英語を読み上げる"
+              className="shrink-0 rounded-md p-1.5 text-slate-400 active:bg-slate-700 active:text-slate-100"
+            >
+              <SpeakerIcon className="h-4 w-4" />
+            </button>
           </div>
         )}
 
@@ -488,14 +476,6 @@ export default function KPage() {
         </p>
       </section>
 
-      {showLarge && questionEn && (
-        <LargeEnglishModal
-          english={questionEn}
-          japanese={questionJa}
-          onClose={() => setShowLarge(false)}
-          onSpeak={onSpeakEnglish}
-        />
-      )}
     </main>
   );
 }
@@ -600,44 +580,6 @@ function TranscriptFeed({
           <div className="text-sm text-emerald-300/80">{interim}</div>
         </div>
       )}
-    </div>
-  );
-}
-
-function LargeEnglishModal({
-  english,
-  japanese,
-  onClose,
-  onSpeak,
-}: {
-  english: string;
-  japanese: string;
-  onClose: () => void;
-  onSpeak: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-white text-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <span className="text-sm font-semibold">Show to staff</span>
-        <button
-          onClick={onClose}
-          className="rounded-md bg-slate-900 px-3 py-1 text-sm font-semibold text-white"
-        >
-          Close
-        </button>
-      </div>
-      <div className="flex flex-1 flex-col justify-center px-6">
-        <p className="text-3xl font-bold leading-tight sm:text-4xl">{english}</p>
-        <p className="mt-6 text-base text-slate-500">{japanese}</p>
-      </div>
-      <div className="border-t border-slate-200 p-4">
-        <button
-          onClick={onSpeak}
-          className="w-full rounded-xl bg-emerald-500 px-4 py-4 text-lg font-semibold text-white active:bg-emerald-400"
-        >
-          Speak English
-        </button>
-      </div>
     </div>
   );
 }
