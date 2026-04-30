@@ -139,7 +139,7 @@ export default function KSessionPage() {
               }`}
             >
               <div className="text-[10px] uppercase tracking-wider text-slate-500">
-                {t.kind === 'said' ? 'Doctor / Nurse said' : '家族の質問'}
+                {t.kind === 'said' ? 'Speaker' : '家族の質問'}
               </div>
               {t.japanese && (
                 <div className="mt-1 text-lg font-medium leading-snug text-emerald-200">
