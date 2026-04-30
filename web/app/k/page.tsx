@@ -42,6 +42,9 @@ export default function KPage() {
   const mutedRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
   const stoppedManuallyRef = useRef(false);
+  // 翻訳直列化用キュー: 前の翻訳が完了するまで次は始まらない。
+  // 結果として日本語は必ず上の item から順に埋まる。
+  const translateQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   // Supabase: 匿名ログイン + 現セッション。
   const supabase = useMemo(() => createClient(), []);
@@ -125,16 +128,21 @@ export default function KPage() {
       void saveTurn('said', trimmed, '');
       return;
     }
-    void (async () => {
-      const ja = await translateStream(trimmed, 'en-to-ja', (delta) => {
-        setItems((prev) =>
-          prev.map((it) =>
-            it.id === id ? { ...it, japanese: (it.japanese ?? '') + delta } : it
-          )
-        );
-      });
-      void saveTurn('said', trimmed, ja);
-    })();
+    // チェーン: 前の翻訳が終わってから次を開始。例外でチェーンが切れないように catch。
+    translateQueueRef.current = translateQueueRef.current.then(async () => {
+      try {
+        const ja = await translateStream(trimmed, 'en-to-ja', (delta) => {
+          setItems((prev) =>
+            prev.map((it) =>
+              it.id === id ? { ...it, japanese: (it.japanese ?? '') + delta } : it
+            )
+          );
+        });
+        void saveTurn('said', trimmed, ja);
+      } catch (e) {
+        console.warn('[k] translate failed', e);
+      }
+    });
   }, [saveTurn]);
 
   const startListening = useCallback(async () => {
