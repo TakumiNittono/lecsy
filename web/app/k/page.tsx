@@ -414,7 +414,7 @@ export default function KPage() {
       </div>
 
       <section className="mt-4 flex-1">
-        <TranscriptFeed items={items} interim={interim} onSpeak={(text) => void speakText(text)} />
+        <TranscriptFeed items={items} interim={interim} />
       </section>
 
       {/* sticky bottom: 入力 + 翻訳結果 + Show/Speak だけ。 */}
@@ -514,11 +514,9 @@ function dotColor(status: AppStatus): string {
 function TranscriptFeed({
   items,
   interim,
-  onSpeak,
 }: {
   items: TranscriptItem[];
   interim: string;
-  onSpeak: (text: string) => void;
 }) {
   const itemRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const lastScrolledRef = useRef<string | null>(null);
@@ -557,17 +555,8 @@ function TranscriptFeed({
           className="rounded-lg border border-slate-800 bg-slate-900 p-3"
         >
           {it.japanese ? (
-            <div className="flex items-start gap-2">
-              <div className="flex-1 text-lg font-medium leading-snug text-emerald-200">
-                {it.japanese}
-              </div>
-              <button
-                onClick={() => onSpeak(it.english)}
-                aria-label="英語を読み上げる"
-                className="shrink-0 rounded-md p-1.5 text-slate-400 active:bg-slate-800 active:text-slate-100"
-              >
-                <SpeakerIcon className="h-4 w-4" />
-              </button>
+            <div className="text-lg font-medium leading-snug text-emerald-200">
+              {it.japanese}
             </div>
           ) : (
             <div className="text-sm text-slate-500">翻訳中…</div>
