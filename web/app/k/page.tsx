@@ -62,9 +62,13 @@ export default function KPage() {
     // 翻訳: 極短 (2 文字以下、または英字 1 単語のみ) はスキップして API 浪費を避ける。
     const shouldTranslate = trimmed.length > 2 && /\s|[.!?]/.test(trimmed) || trimmed.length > 6;
     if (!shouldTranslate) return;
-    void translateEnToJa(trimmed).then((ja) => {
-      if (!ja) return;
-      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, japanese: ja } : it)));
+    // ストリーミング: delta が来た瞬間に該当 item の japanese を伸ばしていく。
+    void translateStream(trimmed, 'en-to-ja', (delta) => {
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === id ? { ...it, japanese: (it.japanese ?? '') + delta } : it
+        )
+      );
     });
   }, []);
 
@@ -219,8 +223,10 @@ export default function KPage() {
     setTranslatingQ(true);
     setQuestionEn('');
     try {
-      const en = await translateJaToEn(src);
-      setQuestionEn(en ?? '');
+      // ストリーミング: token が来るたび英文を伸ばしていく。即座に最初の単語が見える。
+      await translateStream(src, 'ja-to-en', (delta) => {
+        setQuestionEn((prev) => prev + delta);
+      });
     } catch {
       setErrorMsg('翻訳に失敗しました。もう一度お試しください。');
     } finally {
@@ -500,28 +506,47 @@ function pickMime(): string | null {
   return null;
 }
 
-async function translateEnToJa(text: string): Promise<string | null> {
-  try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/k-translate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, direction: 'en-to-ja' }),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { translation?: string };
-    return data.translation ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function translateJaToEn(text: string): Promise<string | null> {
+// SSE をストリームで読み、delta が来るたびに onDelta を呼ぶ。最終的な全文を返す。
+// 形式は OpenAI Chat Completions の SSE そのまま (k-translate がそのまま転送している)。
+async function translateStream(
+  text: string,
+  direction: 'en-to-ja' | 'ja-to-en',
+  onDelta: (delta: string) => void
+): Promise<string> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/k-translate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, direction: 'ja-to-en' }),
+    body: JSON.stringify({ text, direction }),
   });
-  if (!res.ok) return null;
-  const data = (await res.json()) as { translation?: string };
-  return data.translation ?? null;
+  if (!res.ok || !res.body) return '';
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let full = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buf.indexOf('\n')) !== -1) {
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 1);
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (payload === '[DONE]') return full;
+      try {
+        const obj = JSON.parse(payload);
+        const delta: string = obj.choices?.[0]?.delta?.content ?? '';
+        if (delta) {
+          full += delta;
+          onDelta(delta);
+        }
+      } catch {
+        /* skip malformed line */
+      }
+    }
+  }
+  return full;
 }

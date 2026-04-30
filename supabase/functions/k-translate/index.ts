@@ -43,6 +43,7 @@ Deno.serve(async (req) => {
 
   const systemPrompt = direction === 'en-to-ja' ? EN_TO_JA : JA_TO_EN;
 
+  // SSE で常時ストリーミング。クライアントは delta が来た瞬間に画面更新する。
   const oaRes = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -51,6 +52,7 @@ Deno.serve(async (req) => {
     },
     body: JSON.stringify({
       model: 'gpt-5-nano',
+      stream: true,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: text },
@@ -58,16 +60,20 @@ Deno.serve(async (req) => {
     }),
   });
 
-  if (!oaRes.ok) {
-    const detail = await oaRes.text();
+  if (!oaRes.ok || !oaRes.body) {
+    const detail = oaRes.body ? await oaRes.text() : '';
     return json({ error: 'openai_failed', status: oaRes.status, detail }, 502);
   }
 
-  const data = await oaRes.json();
-  const translation = (data.choices?.[0]?.message?.content ?? '').trim();
-  if (!translation) return json({ error: 'empty_translation' }, 502);
-
-  return json({ translation }, 200);
+  return new Response(oaRes.body, {
+    status: 200,
+    headers: {
+      ...CORS_HEADERS,
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 });
 
 function json(body: unknown, status: number) {
