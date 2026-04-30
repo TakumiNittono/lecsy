@@ -371,7 +371,15 @@ export default function KPage() {
         </header>
 
         <div className="flex gap-2">
-          {!isLive ? (
+          {status === 'requesting' || status === 'reconnecting' ? (
+            <button
+              disabled
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500/30 px-4 py-3.5 text-base font-semibold text-emerald-200"
+            >
+              <Spinner className="h-5 w-5" />
+              {status === 'requesting' ? '起動中…' : '再接続中…'}
+            </button>
+          ) : !isLive ? (
             <button
               onClick={startListening}
               className="flex-1 rounded-xl bg-emerald-500 px-4 py-3.5 text-base font-semibold text-emerald-950 active:bg-emerald-400"
@@ -477,6 +485,15 @@ export default function KPage() {
       </section>
 
     </main>
+  );
+}
+
+function Spinner({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={`animate-spin ${className ?? ''}`} aria-hidden>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M22 12a10 10 0 00-10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
   );
 }
 
