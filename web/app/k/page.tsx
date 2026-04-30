@@ -11,6 +11,7 @@ type AppStatus =
   | 'idle'
   | 'requesting'
   | 'listening'
+  | 'paused'
   | 'speaking'
   | 'reconnecting'
   | 'error';
@@ -27,6 +28,7 @@ const STATUS_LABEL: Record<AppStatus, string> = {
   idle: '停止中',
   requesting: 'マイク準備中…',
   listening: '聞き取り中',
+  paused: '一時停止中',
   speaking: '英語を読み上げ中・マイク一時停止',
   reconnecting: '接続を復帰中…',
   error: 'エラー',
@@ -260,6 +262,17 @@ export default function KPage() {
     }, 800);
   }, [openSocket]);
 
+  const pauseListening = useCallback(() => {
+    // mic を mute するだけ。WS と stream は維持。セッションも維持。
+    mutedRef.current = true;
+    setStatus('paused');
+  }, []);
+
+  const resumeListening = useCallback(() => {
+    mutedRef.current = false;
+    setStatus('listening');
+  }, []);
+
   const stopListening = useCallback(() => {
     stoppedManuallyRef.current = true;
     cleanup();
@@ -342,49 +355,74 @@ export default function KPage() {
     }
   }, [questionEn]);
 
+  const isLive = status === 'listening' || status === 'paused' || status === 'speaking' || status === 'reconnecting' || status === 'requesting';
+
   return (
-    <main className="mx-auto flex min-h-[100dvh] max-w-2xl flex-col px-4 pt-6">
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">Hospital Live Interpreter</h1>
-          <p className="text-xs text-slate-400 mt-1">
-            英語→日本語リアルタイム通訳 / 日本語質問の英訳
-          </p>
-        </div>
-        <Link
-          href="/k/library"
-          className="shrink-0 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 active:bg-slate-800"
-        >
-          履歴
-        </Link>
-      </header>
-
-      <StatusBar status={status} />
-      {errorMsg && (
-        <div className="mt-3 rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">
-          {errorMsg}
-        </div>
-      )}
-
-      <div className="mt-4 flex gap-2">
-        {status === 'idle' || status === 'error' ? (
-          <button
-            onClick={startListening}
-            className="flex-1 rounded-xl bg-emerald-500 px-4 py-4 text-lg font-semibold text-emerald-950 active:bg-emerald-400"
+    <main className="mx-auto flex min-h-[100dvh] max-w-2xl flex-col px-4">
+      {/* sticky top: ヘッダー + ボタン群が常に画面上に固定。スクロールしても消えない。 */}
+      <div className="sticky top-0 z-20 -mx-4 border-b border-slate-800 bg-slate-950/95 px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] backdrop-blur">
+        <header className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold">Hospital Live Interpreter</h1>
+            <p className="text-xs text-slate-400 mt-0.5">
+              英語→日本語リアルタイム通訳 / 日本語質問の英訳
+            </p>
+          </div>
+          <Link
+            href="/k/library"
+            className="shrink-0 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 active:bg-slate-800"
           >
-            Start Listening
-          </button>
-        ) : (
-          <button
-            onClick={stopListening}
-            className="flex-1 rounded-xl bg-rose-500 px-4 py-4 text-lg font-semibold text-rose-950 active:bg-rose-400"
-          >
-            Stop
-          </button>
+            履歴
+          </Link>
+        </header>
+
+        <StatusBar status={status} />
+
+        {/* ボタン: idle 時は Start のみ。live 時は Pause/Resume + Stop の 2 つ常駐。 */}
+        <div className="mt-3 flex gap-2">
+          {!isLive ? (
+            <button
+              onClick={startListening}
+              className="flex-1 rounded-xl bg-emerald-500 px-4 py-3.5 text-base font-semibold text-emerald-950 active:bg-emerald-400"
+            >
+              Start Listening
+            </button>
+          ) : (
+            <>
+              {status === 'paused' ? (
+                <button
+                  onClick={resumeListening}
+                  className="flex-1 rounded-xl bg-emerald-500 px-4 py-3.5 text-base font-semibold text-emerald-950 active:bg-emerald-400"
+                >
+                  Resume
+                </button>
+              ) : (
+                <button
+                  onClick={pauseListening}
+                  disabled={status !== 'listening'}
+                  className="flex-1 rounded-xl bg-amber-400 px-4 py-3.5 text-base font-semibold text-amber-950 active:bg-amber-300 disabled:opacity-40"
+                >
+                  Pause
+                </button>
+              )}
+              <button
+                onClick={stopListening}
+                className="flex-1 rounded-xl bg-rose-500 px-4 py-3.5 text-base font-semibold text-rose-950 active:bg-rose-400"
+              >
+                Stop
+              </button>
+            </>
+          )}
+        </div>
+
+        {errorMsg && (
+          <div className="mt-3 rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+            {errorMsg}
+          </div>
         )}
       </div>
 
-      <section className="mt-6 flex-1">
+      <section className="mt-4 flex-1">
         <h2 className="mb-2 text-xs uppercase tracking-wider text-slate-400">
           Doctor / Nurse said
         </h2>
@@ -481,12 +519,20 @@ function TranscriptFeed({
   items: TranscriptItem[];
   interim: string;
 }) {
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-  // 新しい item が来たら最下部に自動スクロール (interim 更新では走らない、
-  // 確定単位だけ動かすことで読みやすさを優先)。
+  const itemRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const lastScrolledRef = useRef<string | null>(null);
+
+  // 新しい item が確定するたび、その item を viewport の中央に持ってくる。
+  // sticky top + sticky bottom で挟まれていてもセンター揃えは正しく機能する。
+  // 同じ item に対しては 1 回だけ。interim 更新中は走らない。
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [items.length]);
+    const last = items[items.length - 1];
+    if (!last) return;
+    if (lastScrolledRef.current === last.id) return;
+    lastScrolledRef.current = last.id;
+    const el = itemRefs.current.get(last.id);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [items]);
 
   if (items.length === 0 && !interim) {
     return (
@@ -497,10 +543,16 @@ function TranscriptFeed({
   }
   return (
     <div className="space-y-3">
-      {/* 確定 item は古→新で上から下へ。新着が下に積まれていき、古いものが押し上がる。 */}
+      {/* 確定 item は古→新で上から下へ。新しいものが入った瞬間に画面センターへスクロール。
+          英語と日本語のペアは順序を厳守 (各 item の id で固定)。後から来た翻訳が
+          先のものを追い越して並ぶことはない。 */}
       {items.map((it) => (
         <div
           key={it.id}
+          ref={(node) => {
+            if (node) itemRefs.current.set(it.id, node);
+            else itemRefs.current.delete(it.id);
+          }}
           className="rounded-lg border border-slate-800 bg-slate-900 p-3"
         >
           {it.japanese ? (
@@ -513,13 +565,11 @@ function TranscriptFeed({
           <div className="mt-1.5 text-xs text-slate-400">{it.english}</div>
         </div>
       ))}
-      {/* interim は feed の末尾。今喋っている言葉がいつも一番下、入力欄のすぐ上に出る。 */}
       {interim && (
         <div className="rounded-lg border border-dashed border-emerald-500/40 bg-emerald-950/20 p-3">
           <div className="text-sm text-emerald-300/80">{interim}</div>
         </div>
       )}
-      <div ref={bottomRef} />
     </div>
   );
 }
