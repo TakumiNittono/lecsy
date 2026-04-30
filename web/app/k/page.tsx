@@ -358,7 +358,7 @@ export default function KPage() {
           </div>
           <Link
             href="/k/library"
-            className="shrink-0 text-xs text-slate-400 active:text-slate-200"
+            className="shrink-0 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 active:bg-slate-800"
           >
             履歴
           </Link>
