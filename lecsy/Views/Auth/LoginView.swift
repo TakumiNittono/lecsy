@@ -28,8 +28,13 @@ struct LoginView: View {
 
     // Invite code (classroom pilot path — see AuthService.signInWithInviteCode
     // for why email can't be the primary flow at FMCC / Santa Fe).
+    // 2026-05-05 redesign: B2C 圧倒的多数 + pilot 少数の構図なので default は
+    // 隠して「Have an invite code?」リンクで展開するパターンに変更。pilot で
+    // 配る紙 / QR 経由のユーザーは 1 tap 余分に必要だが、B2C user の認知負荷を
+    // 下げる方が ROI が大きい。
     @State private var inviteCodeInput: String = ""
     @FocusState private var inviteCodeFieldFocused: Bool
+    @State private var showInviteCode: Bool = false
 
     private enum MagicLinkStage {
         case email     // Show email field + Send Code button
@@ -65,25 +70,15 @@ struct LoginView: View {
                 // Apple Sign-In ボタンは HIG で内部的に 375 上限がかかっているため、
                 // Google / Join class / Continue without login 等を同じ上限に揃えないと
                 // iPhone で Apple だけ狭く見える違和感が出る (iPad sheet 内でも同様)。
+                //
+                // 2026-05-05 redesign:
+                //   旧: invite code (最上段) → "OR SIGN IN" → Apple → Google →
+                //       Continue without login → "OR" → Email
+                //   新: Apple → Google → "OR" → Email → Continue without account
+                //       (text link) → "Have an invite code?" 折り畳み (最下段)
+                //   理由: B2C launch では 80%+ が個人 user。invite code は pilot 用
+                //   minority path なので折り畳み、Apple/Google を主視線に。divider 1 段に統一。
                 VStack(spacing: 12) {
-                    // ── Invite code (classroom pilot primary path) ──
-                    // メールが届かない / 学校 Microsoft 365 が Junk に飛ばす
-                    // 問題を回避するため、教員が紙 or QR で配る 6-digit コードで
-                    // anonymous サインイン + org 参加を一発で済ませる。
-                    inviteCodeSection
-
-                    HStack {
-                        Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
-                        Text("OR SIGN IN")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundColor(.secondary)
-                            .kerning(1.0)
-                            .padding(.horizontal, 8)
-                        Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
-                    }
-                    .frame(maxWidth: 375)
-                .frame(maxWidth: .infinity, alignment: .center)
-
                     // Microsoft ボタンは一時非表示。
                     // US 大学 / コミカレ (Santa Fe, FMCC 等) の Entra ID テナントは
                     // 「未検証 multitenant アプリへの end-user consent をブロック」が
@@ -177,36 +172,44 @@ struct LoginView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .disabled(authService.isLoading)
 
-                // Continue without login — 同じ 375 centered パターンに統一
-                Button(action: {
-                    authService.skipLogin()
-                }) {
-                    Text("Continue without login")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 40)
-                        .background(Color.secondary.opacity(0.08))
-                        .cornerRadius(10)
-                }
-                .frame(maxWidth: 375)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .disabled(authService.isLoading)
-
-                // ── Divider ──
+                // ── Divider (Apple/Google ↔ Email を分ける唯一の OR) ──
                 HStack {
                     Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
                     Text("OR")
-                        .font(.caption)
+                        .font(.caption2.weight(.semibold))
                         .foregroundColor(.secondary)
-                        .padding(.horizontal, 8)
+                        .kerning(1.0)
+                        .padding(.horizontal, 10)
                     Rectangle().fill(Color.gray.opacity(0.2)).frame(height: 1)
                 }
                 .frame(maxWidth: 375)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 4)
 
-                // ── Email magic link ──
+                // ── Email magic link (third option) ──
                 magicLinkSection
+
+                // Continue without account — text link で控えめに。
+                // 旧版の灰色 button は Apple/Google と並んで「3 つ目の選択肢」
+                // に見えてしまい、優先順位が伝わらなかった。text link 化で
+                // 「アカウント作らない escape hatch」として機能を明確化。
+                Button(action: {
+                    authService.skipLogin()
+                }) {
+                    Text("Continue without an account")
+                        .font(.footnote.weight(.medium))
+                        .foregroundColor(.secondary)
+                        .underline()
+                }
+                .padding(.top, 4)
+                .disabled(authService.isLoading)
+
+                // ── Invite code (折り畳み — pilot minority path) ──
+                // メールが届かない / 学校 Microsoft 365 が Junk に飛ばす
+                // 問題を回避するため、教員が紙 or QR で配る 6-digit コードで
+                // anonymous サインイン + org 参加を一発で済ませる。default は
+                // 隠して 1 tap で展開する設計にした (B2C user の認知負荷を下げる)。
+                inviteCodeFoldable
             }
             .padding(.horizontal, horizontalSizeClass == .regular ? 40 : 20)
             
@@ -232,6 +235,40 @@ struct LoginView: View {
         }
     }
     
+    /// 折り畳み版 invite code: default は薄い text link、tap で展開。
+    /// pilot 学生 (FMCC / Santa Fe) が紙 or QR コードからアプリを開いた時
+    /// 「Have an invite code?」が分かりやすく見えていれば良いので、テキスト
+    /// リンク + 展開時の入力 box の 2 段構成で十分。
+    @ViewBuilder
+    private var inviteCodeFoldable: some View {
+        VStack(spacing: 10) {
+            if showInviteCode {
+                inviteCodeSection
+                Button("I don't have a code") {
+                    withAnimation { showInviteCode = false }
+                    inviteCodeInput = ""
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+            } else {
+                Button {
+                    withAnimation { showInviteCode = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        inviteCodeFieldFocused = true
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "ticket.fill").font(.system(size: 12))
+                        Text("Have an invite code?")
+                            .font(.footnote.weight(.medium))
+                    }
+                    .foregroundColor(.blue.opacity(0.85))
+                }
+                .padding(.top, 8)
+            }
+        }
+    }
+
     @ViewBuilder
     private var inviteCodeSection: some View {
         VStack(spacing: 8) {
@@ -240,10 +277,10 @@ struct LoginView: View {
                 Image(systemName: "ticket.fill")
                     .font(.system(size: 13))
                     .foregroundColor(.blue)
-                Text("Have an invite code?")
+                Text("Enter your invite code")
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(.primary)
-                Text("· 6 digits on your card")
+                Text("· 6 digits")
                     .font(.caption)
                     .foregroundColor(.secondary)
                 Spacer()
