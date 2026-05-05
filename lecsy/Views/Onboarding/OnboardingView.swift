@@ -207,7 +207,7 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     iconRow(icon: "iphone",
                             text: "Transcription runs on your iPhone. Your audio stays on your device.")
-                    iconRow(icon: "cloud.slash",
+                    iconRow(icon: "xmark.icloud.fill",
                             text: "We never upload your recordings. Only transcript text can be saved to your account, and only if you choose to.")
                     iconRow(icon: "building.2",
                             text: "Organizations can opt in to cloud transcription. In that case audio is processed transiently and never stored by Lecsy.")

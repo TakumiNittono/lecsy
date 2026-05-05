@@ -29,7 +29,7 @@ struct AIConsentView: View {
                         text: "Your recordings stay on your device. Transcription runs on your iPhone."
                     )
                     privacyPoint(
-                        icon: "cloud.slash",
+                        icon: "xmark.icloud.fill",
                         text: "Lecsy never uploads your audio. Only transcript text can be saved to your account — and only if you choose to."
                     )
                     privacyPoint(
