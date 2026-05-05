@@ -326,7 +326,9 @@ final class TranscriptionCoordinator: ObservableObject {
         guard isOnline else { return }
         guard AuthService.shared.isAuthenticated else { return }
         guard PlanService.shared.isPaid else {
-            AppLogger.info("Live caption skipped: free plan (using WhisperKit)", category: .transcription)
+            // Free plan か Pro でも on-device を選択した時にここに来る。
+            // どちらも live caption は出ず、WhisperKit に集約。
+            AppLogger.info("Live caption skipped: on-device mode (WhisperKit)", category: .transcription)
             return
         }
         // 二重起動ガード：すでに capture 中 / prepare 中 / 別の startLive が connect 中なら何もしない
@@ -624,34 +626,39 @@ final class TranscriptionCoordinator: ObservableObject {
 
     /// 録音継続中に stream が落ちた場合の再接続。
     /// - 条件: capture 生存中（= 録音中）、オンライン、Pro plan
-    /// - 指数バックオフで最大 reconnectMaxAttempts 回試行し、ダメなら諦めて batch fallback に委ねる
+    /// - 指数バックオフ（capped 30s）で **録音中はずっと** 試行し続ける。Wi-Fi が
+    ///   繋がったまま TCP だけ切れる（VPN / NAT timeout / キャリア切替）パターンは
+    ///   NWPathMonitor が変化を捉えないため、回数で諦めると一生復活しない。
     /// - 途中で stopLive されたらキャンセル
     private func triggerReconnectIfNeeded(reason: String) {
-        guard capture != nil else { return }
-        guard reconnectTask == nil else { return }
-        guard AuthService.shared.isAuthenticated, PlanService.shared.isPaid else { return }
-        // 既に上限に達している場合、NWPath 復帰 or 前景復帰まで待つ（そこで counter reset される）
-        guard reconnectConsecutiveFailures < reconnectMaxAttempts else {
-            AppLogger.info("Deepgram reconnect suppressed: max attempts reached, awaiting network/foreground event", category: .transcription)
+        guard capture != nil else {
+            AppLogger.info("Deepgram reconnect skipped (\(reason)): no active capture", category: .transcription)
+            return
+        }
+        guard reconnectTask == nil else {
+            AppLogger.info("Deepgram reconnect skipped (\(reason)): already in progress", category: .transcription)
+            return
+        }
+        guard AuthService.shared.isAuthenticated, PlanService.shared.isPaid else {
+            AppLogger.info("Deepgram reconnect skipped (\(reason)): not authenticated/paid", category: .transcription)
             return
         }
 
-        AppLogger.info("Deepgram: scheduling reconnect (\(reason), from attempt \(reconnectConsecutiveFailures + 1)/\(reconnectMaxAttempts))", category: .transcription)
+        AppLogger.info("Deepgram: scheduling reconnect (\(reason), from attempt \(reconnectConsecutiveFailures + 1))", category: .transcription)
         isReconnectingLive = true
 
         reconnectTask = Task { @MainActor [weak self] in
             defer { self?.reconnectTask = nil }
             guard let self else { return }
 
-            // 同一 Task 内で最大 reconnectMaxAttempts 回まで再試行。
-            // 再帰させない（reconnectTask != nil のガードで skip されるため）。
-            while self.reconnectConsecutiveFailures < self.reconnectMaxAttempts {
+            // 録音中はずっと再試行。回数上限ではなく、録音停止 / 認証失効 / 解放で抜ける。
+            while self.capture != nil {
                 if Task.isCancelled { return }
 
-                // 指数バックオフ: attempt=0 は即時、1→1s、2→3s
+                // 指数バックオフ: attempt=0 は即時、1→1s、2→3s、…、cap 30s
                 let attempt = self.reconnectConsecutiveFailures
                 if attempt > 0 {
-                    let backoffSec = min(pow(2.0, Double(attempt)) - 1.0, 10.0)
+                    let backoffSec = min(pow(2.0, Double(attempt)) - 1.0, 30.0)
                     try? await Task.sleep(nanoseconds: UInt64(backoffSec * 1_000_000_000))
                     if Task.isCancelled { return }
                 }
@@ -665,20 +672,23 @@ final class TranscriptionCoordinator: ObservableObject {
                     self.isReconnectingLive = false
                     return
                 }
+                guard AuthService.shared.isAuthenticated, PlanService.shared.isPaid else {
+                    self.isReconnectingLive = false
+                    return
+                }
 
                 let language = TranscriptionService.shared.transcriptionLanguage.deepgramCode
                 let newSession = self.makeSession(language: language)
                 do {
                     try await newSession.connect()
                 } catch {
-                    AppLogger.warning("Deepgram reconnect attempt \(attempt + 1) failed: \(error.localizedDescription)", category: .transcription)
                     self.reconnectConsecutiveFailures += 1
+                    AppLogger.warning("Deepgram reconnect attempt \(attempt + 1) failed: \(error.localizedDescription) — will retry", category: .transcription)
+                    // 数回連続で外したら "再接続中..." バナーに加えて user-visible なエラー文も出す
                     if self.reconnectConsecutiveFailures >= self.reconnectMaxAttempts {
                         self.liveError = self.liveConnectFailureMessage(for: error)
-                        self.isReconnectingLive = false
-                        return
                     }
-                    continue // 次の試行へ
+                    continue // 次の試行へ（loop は録音中に限り無限）
                 }
 
                 // connect 中に stop されていたら破棄
@@ -700,6 +710,7 @@ final class TranscriptionCoordinator: ObservableObject {
                 AppLogger.info("Deepgram reconnected (lang: \(language))", category: .transcription)
                 return
             }
+            self.isReconnectingLive = false
         }
     }
 }

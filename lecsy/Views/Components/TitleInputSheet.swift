@@ -16,12 +16,14 @@ struct TitleInputSheet: View {
     @State private var selectedClassId: UUID?
     let existingCourses: [String]
     let onSave: (_ title: String, _ courseName: String?, _ classId: UUID?) -> Void
+    private let originalDefaultTitle: String
 
     init(
         defaultTitle: String,
         onSave: @escaping (_ title: String, _ courseName: String?, _ classId: UUID?) -> Void
     ) {
         _title = State(initialValue: defaultTitle)
+        self.originalDefaultTitle = defaultTitle
         self.existingCourses = LectureStore.shared.allCourseNames()
         self.onSave = onSave
     }
@@ -125,6 +127,31 @@ struct TitleInputSheet: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
+                // Free path では stop 直後に裏で transcription が走り始める。
+                // ユーザーが title 入力中も model load + decode が進むので、
+                // ここで「app を開いたままにしてね」を一行で伝える。
+                // iOS は app を background に回すと GPU 投入が止まる
+                // (BackgroundExecutionNotPermitted) ので、ここでの教育が
+                // post-stop wait の体感に直結する。Pro は live で字幕が
+                // 出ているので不要 → Free のみ表示。
+                if !PlanService.shared.isPaid {
+                    HStack(spacing: 8) {
+                        Image(systemName: "iphone.radiowaves.left.and.right")
+                            .font(.system(size: 12))
+                            .foregroundColor(.blue)
+                        Text("Transcribing on-device — keep the app open for fastest results")
+                            .font(.system(.caption2, design: .rounded))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color.blue.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, 24)
+                    .padding(.top, 4)
+                }
+
                 Spacer()
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -170,16 +197,10 @@ struct TitleInputSheet: View {
         let finalTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalCourse = courseName.trimmingCharacters(in: .whitespacesAndNewlines)
         onSave(
-            finalTitle.isEmpty ? defaultTitle() : finalTitle,
+            finalTitle.isEmpty ? originalDefaultTitle : finalTitle,
             finalCourse.isEmpty ? nil : finalCourse,
             selectedClassId
         )
         dismiss()
-    }
-
-    private func defaultTitle() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, yyyy HH:mm"
-        return "Lecture \(formatter.string(from: Date()))"
     }
 }

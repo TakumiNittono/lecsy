@@ -63,6 +63,7 @@ final class DeepgramBatchService {
     ///   - language: Deepgram の `language` クエリ。`nil` で従来通り `"multi"` 自動判定。
     ///               ユーザーが言語を明示選択している場合はその ISO-639-1 コード（"ja", "es" など）を渡すと精度が安定する。
     func transcribe(audioURL: URL, language: String? = nil) async throws -> TranscriptionResult {
+        AppLogger.setSentryTag("subsystem", value: "deepgram_batch")
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
             throw DeepgramBatchError.fileMissing
         }
@@ -97,15 +98,14 @@ final class DeepgramBatchService {
         req.setValue(mimeType(for: audioURL), forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 600
 
-        // URLSession.upload(for:from:) は upload task を作るため、req.httpBody を
-        // セットすると CFNetwork -994 "should not contain a body" で即失敗する。
-        // body は from: 引数だけで渡す。
-        let bodyData = try Data(contentsOf: audioURL)
-
+        // URLSession.upload(for:fromFile:) を使うと URLSession が disk から
+        // streaming で送るので、ファイル全体を Data として RAM に load せずに
+        // 済む。100MB 上限まで来た音声で `Data(contentsOf:)` が iPad の
+        // memory budget を圧迫する旧 path を排除 (2026-05-05、低スペ機対策)。
         let started = Date()
         let (data, response) = try await session.upload(
             for: req,
-            from: bodyData
+            fromFile: audioURL
         )
 
         guard let http = response as? HTTPURLResponse else {
@@ -113,7 +113,13 @@ final class DeepgramBatchService {
         }
         guard (200...299).contains(http.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? ""
-            AppLogger.warning("Deepgram batch HTTP \(http.statusCode): \(body.prefix(200))", category: .transcription)
+            AppLogger.captureMessageFingerprinted(
+                "Deepgram batch HTTP \(http.statusCode): \(body.prefix(200))",
+                fingerprint: ["deepgram_batch", "http_\(http.statusCode / 100)xx"],
+                tags: ["http_status": String(http.statusCode)],
+                level: "warning",
+                category: .transcription
+            )
             throw DeepgramBatchError.network(http.statusCode)
         }
 

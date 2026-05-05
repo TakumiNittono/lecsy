@@ -18,6 +18,9 @@ struct RecordView: View {
     // PlanService を @StateObject で観測する。LiveCaptionView の表示 gate に
     // `planService.isPaid` を使うため、refresh 直後に Pro になっても即 UI 反映される。
     @StateObject private var planService = PlanService.shared
+    // Free 用 on-device 認識の feedback 表示に使う。Pro 経路では
+    // start() が即 return するので published 値は静止する (副作用なし)。
+    @StateObject private var whisperDecoder = WhisperLiveDecoder.shared
     @StateObject private var ferpaConsent = FERPAConsentService.shared
     @State private var showLoginSheet = false
     @State private var currentLanguageDisplay: String = TranscriptionService.shared.transcriptionLanguage.displayName
@@ -33,11 +36,14 @@ struct RecordView: View {
     @State private var pendingAudioURL: URL?
     @State private var pendingDuration: TimeInterval = 0
     @State private var pendingStartedAt: Date?
+    /// Free 高速化: stop した瞬間に Lecture を仮作成 + transcription を起動して
+    /// TitleSheet 入力時間を transcribe 時間に重ねる。set されている時は
+    /// saveLecture を rename のみに切替える。Pro 経路は既存通り (Deepgram の
+    /// consumeFinalizedTranscript を待ってから addLecture したいので nil)。
+    @State private var pendingLectureId: UUID?
     @State private var lowAudioSeconds: Int = 0
     @State private var showLowAudioWarning = false
     @State private var recordingDotOpacity: Double = 1.0
-    @State private var pendingBookmarks: [LectureBookmark] = []
-    @State private var showBookmarkToast = false
     @State private var lastFailedLectureId: UUID?
     @State private var showLanguagePicker = false
     @State private var showRecoverySheet = false
@@ -87,11 +93,21 @@ struct RecordView: View {
                     LiveCaptionView(coordinator: liveCoordinator)
                         .padding(.horizontal, 16)
                         .transition(.opacity.combined(with: .move(edge: .top)))
+                } else if recordingService.isRecording && !planService.isPaid {
+                    // Free 経路: WhisperKit が裏で 15s ごとに decode しているが
+                    // 字幕は Pro と差別化するため出さない。代わりに「on-device で
+                    // 認識が動いている実感」を出すことで、90 分録ったあと「何も
+                    // 入ってない」不安を消す。`last heard:` は最後に決着した
+                    // chunk のテキストで、real-time ではなく 15-22s 遅延で更新される。
+                    FreeCaptureFeedback(decoder: whisperDecoder)
+                        .padding(.horizontal, 16)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                // オフラインバナー (常時)。録音中でも待機中でも、cloud 機能がデグレしてる
-                // ことを控えめに伝える。録音自体はローカルで続行可能、復旧後に transcript upload。
-                if !liveCoordinator.isOnline {
+                // オフラインバナー (Pro のみ)。Free は WhisperKit on-device だから
+                // 完全にオフラインで動く → このバナーを出すと「文字起こしされない?」
+                // と誤解する。Pro は Deepgram cloud に依存するので意味がある。
+                if !liveCoordinator.isOnline && planService.isPaid {
                     HStack(spacing: 6) {
                         Circle()
                             .fill(Color.orange)
@@ -137,20 +153,34 @@ struct RecordView: View {
                 lowAudioWarning
                     .padding(.bottom, 4)
 
-                // Bookmark toast
-                bookmarkToast
-                    .padding(.bottom, 16)
-
                 // Main control buttons
                 controlButtons
                     .padding(.bottom, 12)
 
-                // Bookmark count
-                bookmarkCount
-                    .padding(.bottom, 8)
-
                 // Idle hint
                 idleHint
+
+                // Transcription in-progress hint (RecordView から save した直後、
+                // ユーザーが録音画面に居続ける場合のカバー。LibraryView の banner
+                // と同じ意図 — 別 app 切替で pause することを 1 行で伝える)。
+                if !recordingService.isRecording &&
+                   LectureStore.shared.lectures.contains(where: { $0.transcriptStatus == .processing }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "iphone.radiowaves.left.and.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.blue)
+                        Text("Transcribing — keep Lecsy open. Switching apps pauses progress.")
+                            .font(.system(.caption2, design: .rounded, weight: .medium))
+                            .foregroundColor(.primary.opacity(0.85))
+                            .multilineTextAlignment(.leading)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.blue.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+                }
 
                 Spacer()
                 Spacer()
@@ -486,6 +516,35 @@ struct RecordView: View {
                         .fill(Color.blue.opacity(0.08))
                 )
                 .transition(.opacity)
+            } else if !planService.isPaid && transcriptionService.downloadElapsedSeconds > 0 && !transcriptionService.downloadStatusText.isEmpty {
+                // Free 用: WhisperKit cold-load (CoreML JIT compile で 80-130s)
+                // 中の状態が録音前の idle 画面で完全に静止していた。Pro の
+                // `liveCoordinator.isPreparing` 経路には乗らないので、Free user は
+                // 「アプリ動いてる?」状態のまま録音ボタンを連打してしまう。
+                // downloadStatusText / downloadElapsedSeconds は TranscriptionService
+                // が既に published しているのでそのまま流す。
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(transcriptionService.downloadStatusText)
+                            .font(.system(.caption2, design: .rounded, weight: .semibold))
+                            .foregroundColor(.blue)
+                            .lineLimit(1)
+                        if !UserDefaults.standard.bool(forKey: "lecsy.hasCompletedFirstModelLoad") {
+                            Text("First-time setup • \(transcriptionService.downloadElapsedSeconds)s")
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(Color.blue.opacity(0.08))
+                )
+                .transition(.opacity)
             }
         }
     }
@@ -538,24 +597,6 @@ struct RecordView: View {
         }
     }
 
-    @ViewBuilder
-    private var bookmarkToast: some View {
-        if showBookmarkToast {
-            HStack(spacing: 6) {
-                Image(systemName: "bookmark.fill")
-                    .font(.caption2)
-                Text("Bookmarked!")
-                    .font(.system(.caption, design: .rounded, weight: .medium))
-            }
-            .foregroundColor(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color.accentColor)
-            .clipShape(Capsule())
-            .shadow(color: .accentColor.opacity(0.3), radius: 8, y: 4)
-            .transition(.opacity.combined(with: .scale(scale: 0.8)))
-        }
-    }
 
     private var controlButtons: some View {
         HStack(spacing: isIPad ? 36 : 28) {
@@ -635,38 +676,8 @@ struct RecordView: View {
                 .shadow(color: recordingService.isRecording ? .red.opacity(0.25) : .blue.opacity(0.25), radius: 12, y: 6)
             }
             .accessibilityLabel(recordingService.isRecording ? "Stop recording" : "Start recording")
-
-            if recordingService.isRecording {
-                // Bookmark
-                Button(action: addBookmark) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.accentColor)
-                            .frame(width: isIPad ? 64 : 52, height: isIPad ? 64 : 52)
-                        Image(systemName: "bookmark.fill")
-                            .font(.system(size: isIPad ? 22 : 18, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-                    .shadow(color: .accentColor.opacity(0.3), radius: 8, y: 4)
-                }
-                .accessibilityLabel("Add bookmark")
-                .transition(.scale.combined(with: .opacity))
-            }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: recordingService.isRecording)
-    }
-
-    @ViewBuilder
-    private var bookmarkCount: some View {
-        if recordingService.isRecording && !pendingBookmarks.isEmpty {
-            HStack(spacing: 4) {
-                Image(systemName: "bookmark.fill")
-                    .font(.system(size: 9))
-                Text("\(pendingBookmarks.count)")
-                    .font(.system(.caption2, design: .rounded, weight: .medium))
-            }
-            .foregroundColor(.accentColor.opacity(0.7))
-        }
     }
 
     @ViewBuilder
@@ -704,16 +715,6 @@ struct RecordView: View {
 
     // MARK: - Recording Actions
 
-    private func addBookmark() {
-        let bookmark = LectureBookmark(timestamp: recordingService.recordingDuration)
-        pendingBookmarks.append(bookmark)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { showBookmarkToast = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            withAnimation { showBookmarkToast = false }
-        }
-    }
-
     private func retryTranscription() {
         guard let lectureId = lastFailedLectureId else { return }
         guard let lecture = LectureStore.shared.lectures.first(where: { $0.id == lectureId }) else { return }
@@ -726,6 +727,9 @@ struct RecordView: View {
 
     private func startRecording() {
         Task { @MainActor in
+            // Sentry filter 用 flow tag。録音→停止→post-recording transcribe path 中の
+            // error を Issue 一覧で `flow:live-recording` で絞れる。
+            AppLogger.setSentryTag("flow", value: "live-recording")
             if !hasAcceptedAIConsent {
                 showAIConsentSheet = true
                 return
@@ -763,7 +767,6 @@ struct RecordView: View {
             do {
                 try await recordingService.startRecording()
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                pendingBookmarks = []
             } catch {
                 recordingError = ErrorMessages.forRecording(error)
                 showRecordingErrorAlert = true
@@ -786,10 +789,74 @@ struct RecordView: View {
         }
         pendingAudioURL = audioURL
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+        // Free fast path: stop した瞬間に Lecture を仮作成 + startTranscription を
+        // 起動する。TitleSheet 入力時間 (5-15s) が transcribe 時間に重なって
+        // 体感の「stop → progress 表示」が ~5s に縮まる。
+        //
+        // - Lecture.id は録音開始時に RecordingService が発行した UUID を使う
+        //   (WhisperLiveDecoder の chunkCache がこの ID で育っているため)。
+        // - default title (e.g. "Lecture Apr 30, 2026 14:32") で先に addLecture。
+        //   TitleSheet 確定時は saveLecture が pendingLectureId を見て rename
+        //   のみ実行する (二重 add を防ぐ)。
+        // - drain も別途 detached で走らせる (既存挙動)。
+        //
+        // Pro 経路はこの fast path に乗らない: Deepgram live の最終 flush を
+        // consumeFinalizedTranscript で吸い上げてから Lecture を作る必要があり、
+        // 仮 Lecture に後から live 結果を merge する複雑性を避けたい。
+        if !PlanService.shared.isPaid {
+            Task.detached {
+                await WhisperLiveDecoder.shared.awaitDrain(timeout: 30)
+            }
+
+            let consumedId = recordingService.consumeRecordingId() ?? UUID()
+            // .processing で初期化: Library row が一瞬「Not transcribed」と
+            // 表示されるフリッカーを避ける (startTranscription が flip する前に
+            // 描画されるパスがある)。
+            let placeholder = Lecture(
+                id: consumedId,
+                title: defaultRecordingTitle(for: pendingStartedAt),
+                createdAt: pendingStartedAt ?? Date(),
+                duration: pendingDuration,
+                audioPath: audioURL,
+                transcriptStatus: .processing,
+                language: transcriptionService.transcriptionLanguage,
+                bookmarks: [],
+                courseName: nil,
+                lowAudioSeconds: recordingService.cumulativeLowAudioSeconds
+            )
+            pendingLectureId = consumedId
+            LectureStore.shared.addLecture(placeholder)
+            NotificationCenter.default.post(name: .lectureRecordingCompleted, object: nil)
+
+            Task {
+                await startTranscription(for: placeholder)
+            }
+        }
+
         showTitleSheet = true
     }
 
     private func saveLecture(title: String, courseName: String?, classId: UUID?) async {
+        // FREE FAST-PATH: stop 時点で Lecture 作成 + transcription 起動済。
+        // ここでは title/courseName/classId の rename と OrgContext 更新だけ。
+        if let lectureId = pendingLectureId {
+            if OrganizationContext.shared.activeOrgId != nil {
+                OrganizationContext.shared.classId = classId?.uuidString
+                OrganizationContext.shared.visibility = classId != nil ? .class : .private_
+            }
+            if var existing = LectureStore.shared.getLecture(by: lectureId) {
+                existing.title = title
+                existing.courseName = courseName
+                LectureStore.shared.updateLecture(existing)
+            }
+            pendingLectureId = nil
+            pendingAudioURL = nil
+            pendingDuration = 0
+            pendingStartedAt = nil
+            return
+        }
+
         guard let audioURL = pendingAudioURL else { return }
 
         // Live字幕で文字起こし済みなら、Deepgramの結果をそのまま採用してWhisperKit処理を省略
@@ -807,15 +874,23 @@ struct RecordView: View {
             OrganizationContext.shared.visibility = classId != nil ? .class : .private_
         }
 
+        // 録音開始時に RecordingService が生成した UUID を Lecture.id に流用する。
+        // Free プランの WhisperLiveDecoder が同じ ID で chunkCache を育てているので、
+        // post-stop の startTranscription が cache を引き上げられる。
+        // Pro / Deepgram live 経路では cache は空なので素通り。
+        let consumedId = recordingService.consumeRecordingId() ?? UUID()
+
         var lecture = Lecture(
+            id: consumedId,
             title: title,
             createdAt: pendingStartedAt ?? Date(),
             duration: pendingDuration,
             audioPath: audioURL,
             transcriptStatus: liveResult != nil ? .completed : .notStarted,
             language: transcriptionService.transcriptionLanguage,
-            bookmarks: pendingBookmarks,
-            courseName: courseName
+            bookmarks: [],
+            courseName: courseName,
+            lowAudioSeconds: recordingService.cumulativeLowAudioSeconds
         )
 
         if let live = liveResult {
@@ -828,7 +903,6 @@ struct RecordView: View {
 
         pendingAudioURL = nil
         pendingDuration = 0
-        pendingBookmarks = []
         pendingStartedAt = nil
 
         NotificationCenter.default.post(name: .lectureRecordingCompleted, object: nil)
@@ -914,40 +988,153 @@ struct RecordView: View {
         updatedLecture.transcriptStatus = .processing
         store.updateLecture(updatedLecture)
 
-        // Pre-normalize audio before transcription (both Deepgram Batch and
-        // WhisperKit fallback benefit). Peak-scan first (~5-10s for 1hr) and
-        // run the full ~30-60s offline render unless the recording is clearly
-        // near-field (peak ≥ -10dBFS ≈ half of full scale).
-        //
-        // 講義アプリなので base ケースは「机の上の iPhone が 3〜5m 先の話者を
-        // 拾う」= peak は典型的に -12 〜 -18dBFS。近接 mic (自分で喋る / 口元
-        // 10cm) だけが peak ≥ -10dBFS に乗るので、それ以外は全部 enhance する。
-        // gain は maxGainDB=15 でクランプされ、既に十分大きい音は 1.0 に
-        // falls back するので、閾値ギリギリの録音を enhance しても悪化しない。
         let progress = TranscriptionProgressService.shared
         progress.set(.preparing, for: lectureId)
+        // placeholder bar を即時表示。LectureDetailView は index=0 の時
+        // indeterminate な linear ProgressView を出すので、cold-load 80s 中も
+        // 「動いてる」アニメが続く。chunked loop の最初の実 progress (index=1)
+        // が来た瞬間に startedAt が reset され、ETA が正しく計算される。
+        // 推定 chunk 数は 30s 窓で割った天井 (実際は VAD で前後するが、UI 用途
+        // の placeholder としては十分)。
+        let estimatedChunks = max(1, Int((lecture.duration / 30.0).rounded(.up)))
+        progress.setChunkProgress(0, of: estimatedChunks, for: lectureId)
+        defer {
+            progress.clear(for: lectureId)
+            // Free 経路で transcribing phase に切り替えた Live Activity を done →
+            // 短時間表示 → end する。Pro 経路は stopRecording 時に既に end 済み
+            // で、この呼び出しは no-op になる。
+            RecordingService.shared.finishLiveActivityWithDone()
+        }
+
+        // Free 用 live decoder の最速化:
+        //
+        // OPTIMISTIC COMPLETION: 既 decode 済 chunks (95%+ coverage) を見つけた
+        // 瞬間に .completed mark + 即時 return。残りの tail decode は detached
+        // Task で背景処理し、完了時に transcript を silently 上書きする。
+        //
+        // ユーザー体感: post-stop wait = ~0s (Save 直後に completed 表示)。
+        // 残り 2-5% の tail は 5-15s 後に背景で追記される (status は .completed
+        // のまま、transcript text/segments だけ extend される)。
+        //
+        // Pro 経路は通らない (二重 !isPaid gate)。
+        if !PlanService.shared.isPaid {
+            let earlyChunks = transcriptionService.loadLiveDecodedChunks(lectureId: lectureId)
+            let earlyMaxEnd = earlyChunks.map(\.end).max() ?? 0
+
+            // 既 decode 分を即時 lecture に貼る (status はまだ .processing)
+            if !earlyChunks.isEmpty {
+                let earlyStitched = transcriptionService.stitchLiveCachedChunks(earlyChunks)
+                if var latest = store.getLecture(by: lectureId) {
+                    latest.transcriptText = earlyStitched.text
+                    latest.transcriptSegments = earlyStitched.segments
+                    store.updateLecture(latest)
+                }
+                AppLogger.info("Early partial display: \(earlyChunks.count) chunks (\(Int(earlyMaxEnd))/\(Int(lecture.duration))s) — drain runs in background", category: .transcription)
+            }
+
+            // OPTIMISTIC GATE: 既 decode 分が録音時間の 70% 以上を覆ってて、
+            // gap も無いなら即時 .completed。残りは detached で追記。
+            // 70% は控えめ閾値 (45s/15s chunk 構成で「直前 1-2 chunks 残ってる」
+            // 状況をカバーする)。
+            let earlyCompletion = transcriptionService.liveCacheCompletion(
+                lectureId: lectureId,
+                totalDuration: lecture.duration
+            )
+            let optimisticReady = !earlyChunks.isEmpty
+                && earlyCompletion.gapCount == 0
+                && earlyMaxEnd >= max(lecture.duration - 60, lecture.duration * 0.70)
+
+            if optimisticReady {
+                // 1) Optimistic complete: 今ある分で .completed mark
+                if var latest = store.getLecture(by: lectureId) {
+                    latest.transcriptStatus = .completed
+                    latest.language = transcriptionService.transcriptionLanguage
+                    store.updateLecture(latest)
+                }
+                AppLogger.info("Optimistic complete: marked .completed at coverage \(Int(earlyMaxEnd))/\(Int(lecture.duration))s — tail will be appended in background", category: .transcription)
+
+                // 2) 残り tail を detached で drain → 完了したら silently 上書き
+                Task.detached {
+                    await WhisperLiveDecoder.shared.awaitDrain(timeout: 30)
+                    await MainActor.run {
+                        let svc = TranscriptionService.shared
+                        let finalChunks = svc.loadLiveDecodedChunks(lectureId: lectureId)
+                        guard !finalChunks.isEmpty else { return }
+                        let finalStitched = svc.stitchLiveCachedChunks(finalChunks)
+                        if var latest = LectureStore.shared.getLecture(by: lectureId) {
+                            // 既に optimistic mark で .completed なので status はそのまま。
+                            // text / segments だけ最終版で上書き。
+                            latest.transcriptText = finalStitched.text
+                            latest.transcriptSegments = finalStitched.segments
+                            LectureStore.shared.updateLecture(latest)
+                        }
+                        svc.clearChunkCache(lectureId: lectureId)
+                        AppLogger.info("Background tail update: extended transcript to \(finalChunks.count) chunks", category: .transcription)
+                    }
+                }
+                return
+            }
+
+            // OPTIMISTIC NOT READY (cache 不完全 / gap あり) → drain 待って判定
+            if WhisperLiveDecoder.shared.pendingChunks > 0 || WhisperLiveDecoder.shared.isActive {
+                progress.set(.finalizingLive, for: lectureId)
+            }
+            await WhisperLiveDecoder.shared.awaitDrain(timeout: 30)
+            progress.set(.transcribing, for: lectureId)
+
+            let completion = transcriptionService.liveCacheCompletion(
+                lectureId: lectureId,
+                totalDuration: lecture.duration
+            )
+            if completion.isComplete {
+                let stitched = transcriptionService.stitchLiveCachedChunks(completion.chunks)
+                guard var latest = store.getLecture(by: lectureId) else { return }
+                latest.transcriptText = stitched.text
+                latest.transcriptSegments = stitched.segments
+                latest.transcriptStatus = .completed
+                latest.language = transcriptionService.transcriptionLanguage
+                store.updateLecture(latest)
+                transcriptionService.clearChunkCache(lectureId: lectureId)
+                AppLogger.info("Transcription completed via live cache (\(completion.chunks.count) chunks, coverage \(Int(completion.coverage))/\(Int(lecture.duration))s)", category: .transcription)
+                return
+            } else if !completion.chunks.isEmpty {
+                AppLogger.info("Live cache incomplete (coverage \(Int(completion.coverage))/\(Int(lecture.duration))s, gaps=\(completion.gapCount)) — falling back to chunked path", category: .transcription)
+            }
+        }
+
+        // 以降は cache 不完全 / Pro / その他全部の post-stop fallback。
+        // enhance の判断:
+        //  - Free は per-chunk preprocessing を live decoder が担うのが原則だが、
+        //    cold start で model load 中に録音 stop した時は live decoder が走らず
+        //    raw audio が chunked path に流れる。それでも post-stop で 65s ファイル
+        //    全体に enhance をかけると 3-5s 待たされて UX が悪い。Whisper は
+        //    -28dBFS 程度なら decode できるので、ここは speed を取って skip。
+        //    accuracy が必要な場合は LectureDetailView の retranscribe で再走可能。
+        //  - Pro はそのまま enhance (Deepgram 失敗 → WhisperKit fallback の
+        //    最終手段なので品質を最優先)。
         var transcribeURL = audioURL
         var enhancedURL: URL?
-        if let peakDB = try? await AudioEnhancementService.shared.peakDBFS(audioURL: audioURL),
-           peakDB.isFinite, peakDB < -10 {
+        let isFree = !PlanService.shared.isPaid
+        if isFree {
+            AppLogger.info("Skipping enhance: free path — chunked decoder handles low volume", category: .transcription)
+        } else if let peakDB = try? await AudioEnhancementService.shared.peakDBFS(audioURL: audioURL),
+                  peakDB.isFinite, peakDB < -10 {
             AppLogger.info("Initial transcription: peak \(String(format: "%.1f", peakDB))dBFS < -10, enhancing", category: .transcription)
             progress.set(.normalizing, for: lectureId)
             if let e = try? await AudioEnhancementService.shared.enhance(audioURL: audioURL) {
                 enhancedURL = e
                 transcribeURL = e
             }
+            progress.set(.transcribing, for: lectureId)
         }
-        progress.set(.transcribing, for: lectureId)
 
         defer {
             if let e = enhancedURL {
                 try? FileManager.default.removeItem(at: e)
             }
-            progress.clear(for: lectureId)
         }
 
-        // Primary: Deepgram Prerecorded（有料プラン + オンライン + 認証済の時のみ）
-        // Free プランは WhisperKit にフォールバック（= 旧フロー完全復元）
+        // Primary: Deepgram Prerecorded (Pro + オンライン + 認証済の時のみ)
         if AuthService.shared.isAuthenticated && PlanService.shared.isPaid {
             do {
                 let dgResult = try await DeepgramBatchService.shared.transcribe(
@@ -959,7 +1146,6 @@ struct RecordView: View {
                 latest.transcriptSegments = dgResult.segments
                 latest.transcriptStatus = .completed
                 if let lang = dgResult.language {
-                    // Deepgramが検出した言語が既存設定と違っても、設定は触らない（UIから手動変更可）
                     AppLogger.info("Deepgram detected language: \(lang)", category: .transcription)
                 }
                 store.updateLecture(latest)
@@ -977,45 +1163,48 @@ struct RecordView: View {
                 return
             } catch {
                 AppLogger.warning("Deepgram batch failed (\(error.localizedDescription)) — falling back to WhisperKit", category: .transcription)
-                // continue to WhisperKit fallback below
             }
         }
 
-        // Fallback: WhisperKit (offline or Deepgram失敗時)
-        transcriptionService.onChunkCompleted = { partialText, partialSegments in
-            guard var latest = store.getLecture(by: lectureId) else { return }
-            latest.transcriptText = partialText
-            latest.transcriptSegments = partialSegments
-            store.updateLecture(latest)
-        }
-
-        do {
-            let result = try await transcriptionService.transcribe(audioURL: transcribeURL, lectureId: lectureId)
-
-            transcriptionService.onChunkCompleted = nil
+        // WhisperKit chunked path with **auto-retry** (transient failure 耐性)。
+        // 失敗の典型: GPU 競合 / thermal throttle / メモリ瞬間圧迫。再試行で
+        // ほぼ確実に通る。chunked path 内で cachedSegments を resume として
+        // 拾うので、前回の試行で decode 済み chunk は重複処理しない。
+        let outcome = await runChunkedWithRetry(
+            audioURL: transcribeURL,
+            lectureId: lectureId,
+            maxAttempts: 3
+        )
+        switch outcome {
+        case .success(let result):
             guard var latest = store.getLecture(by: lectureId) else { return }
             latest.transcriptText = result.text
             latest.transcriptSegments = result.segments
             latest.transcriptStatus = .completed
             latest.language = transcriptionService.transcriptionLanguage
             store.updateLecture(latest)
-
-            // WhisperKit 経路はオンデバイス transcription が商品価値の核心なので
-            // transcript を cloud に送らずローカルに留める。Free ユーザーのプライバシー
-            // 担保と Pro が Deepgram 不達で fallback した場合の一貫性を両立。
-            // B2B dashboard に流すべきは Deepgram 経路の transcript のみ。
-        } catch {
-            transcriptionService.onChunkCompleted = nil
-            if var latest = store.getLecture(by: lectureId) {
+        case .failure(let error):
+            // 全 attempt 失敗 → cache に拾えるだけ拾って partial で残す。
+            // 完全 stitch じゃなくても、覆われた範囲は読めるのでユーザーに 0 を返さない。
+            let partial = transcriptionService.loadLiveDecodedChunks(lectureId: lectureId)
+            if !partial.isEmpty {
+                let stitched = transcriptionService.stitchLiveCachedChunks(partial)
+                if var latest = store.getLecture(by: lectureId) {
+                    latest.transcriptText = stitched.text
+                    latest.transcriptSegments = stitched.segments
+                    latest.transcriptStatus = .failed // partial 状態で .failed → user が retry できる
+                    store.updateLecture(latest)
+                }
+                AppLogger.warning("Transcription failed after retries — saved partial cache (\(partial.count) chunks)", category: .transcription)
+            } else if var latest = store.getLecture(by: lectureId) {
                 latest.transcriptStatus = .failed
                 store.updateLecture(latest)
             }
-            // ユーザーの誤タップ等で起きる "audio too short" は Sentry に出さない (debug のみ)。
-            // 真の失敗だけ Sentry に上げて、issue 一覧をノイズフリーに保つ。
+
             if let tx = error as? TranscriptionError, case .audioFileTooShort = tx {
                 AppLogger.debug("Transcription skipped (audio too short)", category: .recording)
             } else {
-                AppLogger.error("Transcription failed: \(error)", category: .recording)
+                AppLogger.error("Transcription failed after retries: \(error)", category: .recording)
             }
 
             await MainActor.run {
@@ -1024,6 +1213,97 @@ struct RecordView: View {
                 showTranscriptionErrorAlert = true
             }
         }
+    }
+
+    private enum ChunkedOutcome {
+        case success(TranscriptionResult)
+        case failure(Error)
+    }
+
+    /// chunked transcribe を最大 maxAttempts 回までリトライ。`audioFileTooShort`
+    /// 等の永続エラーは即 abort。timeout / GPU 競合 / メモリ圧迫等の transient
+    /// は backoff してリトライ。chunked path 自体に cachedSegments の resume が
+    /// あるので、リトライ時は決着済 chunk を再 decode しない。
+    private func runChunkedWithRetry(
+        audioURL: URL,
+        lectureId: UUID,
+        maxAttempts: Int
+    ) async -> ChunkedOutcome {
+        var workingURL = audioURL
+        var repairedURL: URL?
+        var didAttemptRepair = false
+        defer {
+            if let r = repairedURL {
+                try? FileManager.default.removeItem(at: r)
+            }
+        }
+
+        var lastError: Error?
+        for attempt in 1...maxAttempts {
+            transcriptionService.onChunkCompleted = { partialText, partialSegments in
+                guard var latest = LectureStore.shared.getLecture(by: lectureId) else { return }
+                latest.transcriptText = partialText
+                latest.transcriptSegments = partialSegments
+                LectureStore.shared.updateLecture(latest)
+            }
+            do {
+                let result = try await transcriptionService.transcribe(audioURL: workingURL, lectureId: lectureId)
+                transcriptionService.onChunkCompleted = nil
+                if attempt > 1 {
+                    AppLogger.info("Transcription succeeded on attempt \(attempt)/\(maxAttempts)", category: .transcription)
+                }
+                return .success(result)
+            } catch {
+                transcriptionService.onChunkCompleted = nil
+                lastError = error
+
+                // audioLoadFailed: moov atom 破損などで AVAudioFile が開けないケース。
+                // AVAssetExportSession で再 mux すると ~80% は読めるようになる
+                // (memory `feedback_audio_must_survive.md`)。1 度だけ試す。
+                if !didAttemptRepair, let tx = error as? TranscriptionError, case .audioLoadFailed = tx {
+                    didAttemptRepair = true
+                    AppLogger.warning("Transcription got audioLoadFailed — attempting m4a re-mux repair", category: .transcription)
+                    if let repaired = try? await AudioEnhancementService.shared.repair(audioURL: workingURL) {
+                        repairedURL = repaired
+                        workingURL = repaired
+                        AppLogger.info("Audio repaired — retrying transcription on re-muxed file", category: .transcription)
+                        // attempt counter を消費せず即時 retry
+                        continue
+                    } else {
+                        AppLogger.warning("Audio repair failed — abandoning", category: .transcription)
+                        return .failure(error)
+                    }
+                }
+
+                // 永続エラーは retry しない
+                if isPermanentTranscriptionError(error) {
+                    return .failure(error)
+                }
+                if attempt < maxAttempts {
+                    let backoffSeconds = Double(attempt) * 2.0
+                    AppLogger.warning("Transcription attempt \(attempt)/\(maxAttempts) failed (\(error.localizedDescription)) — retrying in \(Int(backoffSeconds))s", category: .transcription)
+                    try? await Task.sleep(nanoseconds: UInt64(backoffSeconds * 1_000_000_000))
+                }
+            }
+        }
+        return .failure(lastError ?? TranscriptionError.transcriptionFailed)
+    }
+
+    /// retry しても直らないエラーを判定。これらは即 abort。
+    /// audioLoadFailed は permanent から外した: m4a の moov atom 破損で 1 度だけ
+    /// 開けないケースは AVAssetExportSession の re-mux で復活する事が多い。
+    /// runChunkedWithRetry が `repair → 再試行` を 1 回だけ行うようにした。
+    /// memory `feedback_audio_must_survive.md`「m4a 再生不能は障害扱い」と整合。
+    private func isPermanentTranscriptionError(_ error: Error) -> Bool {
+        if let tx = error as? TranscriptionError {
+            switch tx {
+            case .audioFileNotFound, .audioFileTooShort, .modelNotLoaded:
+                return true
+            default:
+                return false
+            }
+        }
+        return false
     }
 
     // MARK: - Helpers
@@ -1049,6 +1329,7 @@ struct RecordView: View {
             return String(format: "%02d:%02d", minutes, seconds)
         }
     }
+
 }
 
 // MARK: - Recovery Sheet

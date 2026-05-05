@@ -293,6 +293,7 @@ class LectureStore: ObservableObject {
             do {
                 let data = try Data(contentsOf: storageURL)
                 allLectures = try decoder.decode([Lecture].self, from: data)
+                cleanupZombieTranscriptionStatus()
                 republishForCurrentUser()
                 return
             } catch {
@@ -305,6 +306,7 @@ class LectureStore: ObservableObject {
             do {
                 let data = try Data(contentsOf: backupStorageURL)
                 allLectures = try decoder.decode([Lecture].self, from: data)
+                cleanupZombieTranscriptionStatus()
                 republishForCurrentUser()
                 AppLogger.warning("Loaded lectures from backup location", category: .storage)
                 // Restore primary from backup
@@ -317,6 +319,35 @@ class LectureStore: ObservableObject {
 
         allLectures = []
         republishForCurrentUser()
+    }
+
+    /// 起動時の zombie cleanup。
+    ///
+    /// `.processing` / `.downloading` のまま残った lecture は、前回起動時に文字起こしの
+    /// 途中でアプリが落ちた / 強制終了された証左。再起動後は対応する Task はもう動いて
+    /// いないので、UI 側は永遠に「Transcribing...」を出し続け、AI Summary も
+    /// `transcriptInProgress` gate で塞がれる事故が起きていた (お父様フィードバック
+    /// 2026-04-26、1h6m 講演で踏まれた)。
+    ///
+    /// 起動時に必ず .failed に降ろすことで、ユーザーは「Retry Transcription」も
+    /// 「Regenerate AI Summary (cached がある場合)」も両方押せる状態に戻る。
+    /// transcript text が中途半端に残っていても消さない (途中まで認識できていれば
+    /// それを見せる方がマシ)。
+    private func cleanupZombieTranscriptionStatus() {
+        var rescued = 0
+        for index in allLectures.indices {
+            let status = allLectures[index].transcriptStatus
+            if status == .processing || status == .downloading {
+                allLectures[index].transcriptStatus = .failed
+                rescued += 1
+            }
+        }
+        if rescued > 0 {
+            AppLogger.warning("Zombie transcription cleanup: \(rescued) lecture(s) reset to .failed on launch", category: .storage)
+            // Persist immediately so the recovery is durable across the next launch
+            // even if the user never edits anything.
+            saveLectures()
+        }
     }
     
     /// Search (scoped to the currently signed-in user's visible lectures)

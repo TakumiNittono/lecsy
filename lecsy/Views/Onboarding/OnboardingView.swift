@@ -278,12 +278,9 @@ struct OnboardingView: View {
                     featureCard(icon: "airplane", color: .orange,
                                 title: "Works Offline",
                                 desc: "Record and transcribe without internet. Perfect for lecture halls with bad Wi-Fi.")
-                    featureCard(icon: "bookmark.fill", color: .purple,
-                                title: "Bookmarks",
-                                desc: "Mark important moments during recording. Jump back to key points instantly.")
                     featureCard(icon: "globe", color: .blue,
-                                title: "12 Languages",
-                                desc: "English, Japanese, Korean, Chinese, Spanish, French, and more.")
+                                title: "9 Languages",
+                                desc: "English, Japanese, Spanish, French, German, Portuguese, Italian, Russian, Hindi.")
                     featureCard(icon: "square.and.arrow.up", color: .green,
                                 title: "Export Anywhere",
                                 desc: "Share your transcriptions as text, Markdown, or PDF.")

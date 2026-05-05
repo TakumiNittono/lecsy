@@ -22,9 +22,6 @@ struct LectureDetailView: View {
     // playing a lecture visibly laggy. We now compute it once on appear
     // and whenever the transcript actually changes.
     @State private var cleanedTranscript: String = ""
-    // Two-stage render gate. Header paints first, heavy transcript/summary
-    // section shows a spinner until the navigation push settles.
-    @State private var heavyContentReady: Bool = false
     @State private var showErrorAlert = false
     @State private var errorMessage = ""
     @State private var isRetrying = false
@@ -32,8 +29,6 @@ struct LectureDetailView: View {
     @State private var audioLoadError: String?
     @State private var showShareSheet = false
     @State private var shareItems: [Any] = []
-    @State private var editingBookmark: LectureBookmark?
-    @State private var editingBookmarkLabel: String = ""
     // AI summary state is owned by SummaryGenerationStore so that navigating
     // away does not cancel generation. The view only holds the displayed
     // result; loading/streaming/error state is read from the store.
@@ -51,6 +46,7 @@ struct LectureDetailView: View {
         ("de", "Deutsch"),
     ]
     @ObservedObject private var authService = AuthService.shared
+    @ObservedObject private var planService = PlanService.shared
 
     init(lecture: Lecture) {
         _lecture = State(initialValue: lecture)
@@ -131,22 +127,7 @@ struct LectureDetailView: View {
                     audioPlayerSection
                 }
 
-                // Bookmark pills
-                if !lecture.bookmarks.isEmpty {
-                    bookmarkPillsSection
-                }
-
                 Divider()
-
-                if !heavyContentReady {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                            .scaleEffect(0.9)
-                        Spacer()
-                    }
-                    .padding(.vertical, 40)
-                } else {
 
                 // Copy & Share buttons
                 if let transcript = lecture.transcriptText, !transcript.isEmpty {
@@ -214,6 +195,41 @@ struct LectureDetailView: View {
 
                 // Cancel + Retry button (visible when stuck in processing)
                 if lecture.transcriptStatus == .processing && !isRetrying {
+                    // Peter Ullsperger 2026-05-05: 「Library を開くと過去の録音が
+                    // ずっと Transcribing のまま」事象。kill / crash で死んだ
+                    // lecture が永遠に processing 表示で残るため、ユーザーは
+                    // 「処理中」と思って何時間も待つ。TranscriptionProgressService
+                    // に active な stage が無い = TranscriptionService が現在
+                    // 触ってない、という単純な fact で stuck を判定できる。
+                    // detail を開いた瞬間に banner で告知して cancelAndRetryButton
+                    // への動線を視覚的に強化する。
+                    if progress.stages[lecture.id] == nil
+                        && progress.chunkProgress[lecture.id] == nil {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("This transcription looks stuck.")
+                                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                Text("Tap Cancel & Retry below to start over.")
+                                    .font(.system(.caption, design: .rounded))
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.orange.opacity(0.10))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+                        )
+                    }
                     cancelAndRetryButton
                 }
 
@@ -226,10 +242,19 @@ struct LectureDetailView: View {
                 // Covers the case where live captions captured only a small portion of
                 // the lecture (low SNR / far-field mic) and the user wants to reprocess
                 // the full audio with the batch engine offline.
+                //
+                // 自動サジェストが立っている場合（録音中 MOVE CLOSER が長く出ていた Pro
+                // ユーザー）はバナー側に CTA を集約して、剥き出しのボタンは隠す。
+                // それ以外（普通に綺麗に録れた・Free ユーザー・legacy データ）は従来通り
+                // 控えめなボタンを出して、いつでも boost retry できる入口を残す。
                 if lecture.transcriptStatus == .completed
                     && lecture.audioPath != nil
                     && !isRetrying {
-                    reTranscribeButton
+                    if shouldSuggestAudioBoost {
+                        audioBoostSuggestionBanner
+                    } else {
+                        reTranscribeButton
+                    }
                 }
 
                 // Transcript text
@@ -255,16 +280,69 @@ struct LectureDetailView: View {
                                     .font(.caption2)
                                     .foregroundColor(.secondary.opacity(0.6))
                                     .multilineTextAlignment(.center)
+                                // Cold start (CoreML JIT compile) は実機初回で 80-130s
+                                // かかる。「これは初回だけ」とユーザーに伝えないと
+                                // 「Free だから遅いの?」「アプリ固まってる?」と
+                                // 誤解されて評価が落ちる。`hasCompletedFirstModelLoad`
+                                // が立っていない (=まだ一度も model load 完了してない)
+                                // 時のみ表示することで、2 回目以降は出さない。
+                                if !UserDefaults.standard.bool(forKey: "lecsy.hasCompletedFirstModelLoad") {
+                                    Text("First-time setup. Future launches will be instant.")
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundColor(.blue.opacity(0.8))
+                                        .multilineTextAlignment(.center)
+                                }
                             }
                         } else {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                Text(progress.text(
-                                    for: lecture.id,
-                                    fallback: isRetrying ? "Retrying..." : "Transcribing..."
-                                ))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                            VStack(spacing: 12) {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                    Text(progress.text(
+                                        for: lecture.id,
+                                        fallback: isRetrying ? "Retrying..." : "Transcribing..."
+                                    ))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .multilineTextAlignment(.leading)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                // Chunk progress bar — gives the user an actual "how far am I"
+                                // signal during long recordings (a 90 min lecture chunks into
+                                // ≈119 pieces and can take 2-6 min on iPhone 13).
+                                // index == 0 は RecordView が transcription 起動直後に貼る
+                                // placeholder。model load (cold start で 80-130s) と VAD
+                                // 完了を待つ間、indeterminate 線形 bar をアニメ表示して
+                                // 「処理が動いている」を返す。最初の実 chunk が来たら
+                                // determinate bar に切り替え、% で進捗を見せる。
+                                if let cp = progress.chunkProgress[lecture.id] {
+                                    if cp.index == 0 {
+                                        ProgressView()
+                                            .progressViewStyle(.linear)
+                                            .tint(.blue.opacity(0.7))
+                                            .frame(maxWidth: 280)
+                                    } else {
+                                        ProgressView(value: cp.fraction)
+                                            .progressViewStyle(.linear)
+                                            .tint(.blue.opacity(0.7))
+                                            .frame(maxWidth: 280)
+                                    }
+                                }
+                                // iOS pauses GPU work when the app is backgrounded, which
+                                // stalls the chunk loop at the next safe boundary. Tell the
+                                // user up-front so they don't switch apps mid-transcription
+                                // and come back to a stuck "transcribing…" state.
+                                HStack(spacing: 6) {
+                                    Image(systemName: "iphone.radiowaves.left.and.right")
+                                        .font(.caption2)
+                                    Text("Keep Lecsy open — switching apps pauses transcription.")
+                                        .font(.caption2)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .foregroundColor(.blue.opacity(0.8))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.blue.opacity(0.06))
+                                .clipShape(Capsule())
                             }
                         }
 
@@ -274,7 +352,7 @@ struct LectureDetailView: View {
                                 segments: segments,
                                 currentTime: audioPlayer.currentTime,
                                 isPlaying: audioPlayer.isPlaying,
-                                bookmarks: lecture.bookmarks,
+                                bookmarks: [],
                                 onSegmentTap: { time in
                                     audioPlayer.seek(to: time)
                                     if !audioPlayer.isPlaying {
@@ -296,7 +374,7 @@ struct LectureDetailView: View {
                         segments: segments,
                         currentTime: audioPlayer.currentTime,
                         isPlaying: audioPlayer.isPlaying,
-                        bookmarks: lecture.bookmarks,
+                        bookmarks: [],
                         onSegmentTap: { time in
                             audioPlayer.seek(to: time)
                             if !audioPlayer.isPlaying {
@@ -306,19 +384,52 @@ struct LectureDetailView: View {
                     )
                     .frame(minHeight: 200)
                 } else if let transcript = lecture.transcriptText, !transcript.isEmpty {
-                    Text(transcript)
+                    // Prefer the cached clean text; if the regex hasn't run yet
+                    // (first appear, before .task fires) fall back to raw so
+                    // the user never sees an empty body for a completed lecture.
+                    Text(cleanedTranscript.isEmpty ? transcript : cleanedTranscript)
                         .font(.body)
                 } else if lecture.transcriptStatus == .failed {
-                    Text("Transcription failed")
+                    // RecordView:1157-1166 で chunked path 失敗時に partial cache を
+                    // 救済保存しているが、UI 側で「途中まで読める」を露出していない
+                    // ため、ユーザーは赤字「failed」だけ見て諦めてしまっていた。
+                    // partial text があれば「途中までは取れている、retry で続きを補完
+                    // できる」事を明示する。0 を返してない事を見せる。
+                    if let partial = lecture.transcriptText, !partial.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.orange)
+                                Text("Partial transcript saved — tap Retry to complete the rest.")
+                                    .font(.system(.caption, design: .rounded, weight: .medium))
+                                    .foregroundColor(.orange)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Color.orange.opacity(0.10))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                            Text(cleanedTranscript.isEmpty ? partial : cleanedTranscript)
+                                .font(.body)
+                        }
+                    } else {
+                        Text("Transcription failed")
+                            .font(.body)
+                            .foregroundColor(.red)
+                    }
+                } else if lecture.transcriptStatus == .completed {
+                    // 完了したのに transcript が空 = 録音は成功したが発話が無かった
+                    // (silent recording)。"No transcript data" は誤解を招くので明示。
+                    Text("No speech detected — the recording was silent.")
                         .font(.body)
-                        .foregroundColor(.red)
+                        .foregroundColor(.secondary)
                 } else if lecture.transcriptStatus != .notStarted {
                     Text("No transcript data")
                         .font(.body)
                         .foregroundColor(.secondary)
                 }
-
-                } // end two-stage gate
 
             }
             .padding()
@@ -356,10 +467,6 @@ struct LectureDetailView: View {
                 if !Task.isCancelled {
                     cleanedTranscript = cleaned
                 }
-            }
-            try? await Task.sleep(nanoseconds: 120_000_000)
-            if !Task.isCancelled {
-                heavyContentReady = true
             }
         }
         .onAppear {
@@ -424,7 +531,19 @@ struct LectureDetailView: View {
 
     private var audioPlayerSection: some View {
         VStack(spacing: 10) {
-            if let error = audioLoadError {
+            if audioPlayer.isRepairing {
+                // 「音声は何があっても死守する」(memory: feedback_audio_must_survive.md):
+                // AVAudioPlayer init が失敗した m4a を AVAssetExportSession で再 mux
+                // 修復している最中。29分の録音で数秒〜十数秒かかるので、ユーザーに
+                // 何が起きているか見せる (黙って失敗 → 「壊れた」と誤認 を避ける)。
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Repairing audio…")
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 8)
+            } else if let error = audioLoadError {
                 VStack(spacing: 8) {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -546,6 +665,80 @@ struct LectureDetailView: View {
         .disabled(isRetrying)
     }
 
+    // MARK: - Audio Boost Suggestion (auto-prompt for low-SNR recordings)
+    //
+    // 録音中に MOVE CLOSER ピル (audioLevel < 0.08) が長く立っていた Pro ユーザーには、
+    // 録音停止後に自動でバナーを出して boost retry を促す。お父様 (2026-04-24) の指摘
+    // 「あとでオフラインで再認識したい」「録音状況が悪いことを後で気づいた」シナリオの解。
+    //
+    // 閾値: 録音時間の 30% 以上、または累積 120s 以上 (短い授業メモでも誤発火しないように
+    // 比率と絶対秒の OR)。Free ユーザーは live が WhisperKit なので boost retry の差分が
+    // 小さい → サジェストしない (Pro entitled のみ)。
+    private var shouldSuggestAudioBoost: Bool {
+        guard PlanService.shared.isProEntitled else { return false }
+        guard let lowSeconds = lecture.lowAudioSeconds, lowSeconds > 0 else { return false }
+        guard lecture.duration > 0 else { return false }
+        let ratio = lowSeconds / lecture.duration
+        return ratio >= 0.3 || lowSeconds >= 120
+    }
+
+    private var audioBoostSuggestionBanner: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "waveform.badge.exclamationmark")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.orange)
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Audio quality was low during parts of this lecture.")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Try re-transcribing with audio boost for a clearer transcript.")
+                        .font(.system(.footnote, design: .rounded))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            Button(action: {
+                // バナーを引っ込めるために lowAudioSeconds をクリアしてから retry を起動。
+                // retry が失敗してももう一度同じバナーが出続けるのは煩わしいので、
+                // 一度提案を受け入れた = サジェスト責務終了、と扱う。手動の boost retry は
+                // 通常の reTranscribeButton から引き続きいつでも可能。
+                var updated = lecture
+                updated.lowAudioSeconds = nil
+                store.updateLecture(updated)
+                lecture = updated
+                Task { await retryTranscription() }
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Re-transcribe with audio boost")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .frame(maxWidth: .infinity)
+                .background(Color.orange)
+                .clipShape(Capsule())
+            }
+            .disabled(isRetrying)
+            .accessibilityHint("Reprocesses the saved audio with enhancement to recover speech the live captions missed")
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.orange.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+        )
+    }
+
     // MARK: - Re-transcribe Button (for completed recordings)
     //
     // For lectures recorded in difficult acoustics (large halls, far-field mic)
@@ -598,70 +791,6 @@ struct LectureDetailView: View {
         }
     }
 
-    // MARK: - Bookmark Pills
-
-    private var bookmarkPillsSection: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(lecture.bookmarks.sorted(by: { $0.timestamp < $1.timestamp })) { bookmark in
-                    Button {
-                        audioPlayer.seek(to: bookmark.timestamp)
-                        if !audioPlayer.isPlaying {
-                            audioPlayer.play()
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "bookmark.fill")
-                                .font(.caption2)
-                            Text(formatTime(bookmark.timestamp))
-                                .font(.caption2)
-                                .monospacedDigit()
-                            if bookmark.label != "Bookmark" {
-                                Text(bookmark.label)
-                                    .font(.caption2)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.orange.opacity(0.15))
-                        .foregroundColor(.orange)
-                        .cornerRadius(12)
-                    }
-                    .contextMenu {
-                        Button {
-                            editingBookmark = bookmark
-                            editingBookmarkLabel = bookmark.label
-                        } label: {
-                            Label("Edit Label", systemImage: "pencil")
-                        }
-                        Button(role: .destructive) {
-                            deleteBookmark(bookmark)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
-            }
-            .padding(.vertical, 4)
-        }
-        .alert("Edit Bookmark", isPresented: Binding(
-            get: { editingBookmark != nil },
-            set: { if !$0 { editingBookmark = nil } }
-        )) {
-            TextField("Label", text: $editingBookmarkLabel)
-            Button("Save") {
-                if let bookmark = editingBookmark {
-                    updateBookmarkLabel(bookmark, newLabel: editingBookmarkLabel)
-                }
-                editingBookmark = nil
-            }
-            Button("Cancel", role: .cancel) {
-                editingBookmark = nil
-            }
-        }
-    }
-
     // MARK: - AI Summary
 
     @ViewBuilder
@@ -670,6 +799,20 @@ struct LectureDetailView: View {
             HStack {
                 Label("AI Summary", systemImage: "sparkles")
                     .font(.system(.subheadline, design: .rounded, weight: .semibold))
+
+                // Free + sign-in でも AI 要約は使えるが、その事実が UI に出ていな
+                // かった (2026-04-29 Free 監査 P0)。Pro 限定機能と誤解する Free
+                // ユーザーが「自分には押せないだろう」とそもそも触らない事故を防ぐ。
+                if !planService.isPaid && authService.isAuthenticated {
+                    Text("Free")
+                        .font(.system(.caption2, design: .rounded, weight: .bold))
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.green.opacity(0.12))
+                        .clipShape(Capsule())
+                        .accessibilityLabel("Available on the Free plan")
+                }
 
                 Menu {
                     ForEach(summaryLanguages, id: \.code) { lang in
@@ -698,9 +841,23 @@ struct LectureDetailView: View {
                 .disabled(summaryLoading)
 
                 Spacer()
+                // Generate / Regenerate の gate ロジック。
+                // 旧実装: `transcriptInProgress = (status != .completed)` で一括判定。
+                //   → status が .failed でも (transcript text は揃ってるのに) Regenerate が
+                //     ずっと disabled になる事故があった (お父様フィードバック 2026-04-26、
+                //     1h6m 講演で transcribing がゾンビ化 → 再起動 → status が .failed/.processing
+                //     のまま → Regenerate 不可)。
+                // 新実装: Generate と Regenerate を別々の前提で gate する。
+                //   - Generate: 完了した transcript が無いと文章を作れない → status == .completed 必須
+                //   - Regenerate: 既に summary が cache されてる = 過去に transcript があった証左。
+                //     言語切替などの再生成は transcript text さえあれば可能。
+                //     transcribing が物理的に進行中の時 (.processing で text 更新が走る)
+                //     のみ block する。
                 let tooShort = lecture.duration < 60
-                let transcriptInProgress = lecture.transcriptStatus != .completed
-                let disabledReason = tooShort || transcriptInProgress
+                let hasTranscriptText = !(lecture.transcriptText?.isEmpty ?? true)
+                let isActivelyTranscribing = lecture.transcriptStatus == .processing
+                let disabledForGenerate = tooShort || lecture.transcriptStatus != .completed
+                let disabledForRegenerate = tooShort || !hasTranscriptText || isActivelyTranscribing
                 if summaryLoading {
                     ProgressView().scaleEffect(0.8)
                 } else if displayedSummary == nil {
@@ -712,19 +869,19 @@ struct LectureDetailView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 6)
-                            .background(disabledReason ? Color.gray : Color.blue)
+                            .background(disabledForGenerate ? Color.gray : Color.blue)
                             .clipShape(Capsule())
                     }
-                    .disabled(disabledReason)
+                    .disabled(disabledForGenerate)
                 } else {
                     Button {
                         startSummary(content: transcript)
                     } label: {
                         Text("Regenerate")
                             .font(.system(.caption, design: .rounded, weight: .medium))
-                            .foregroundColor(disabledReason ? .gray : .blue)
+                            .foregroundColor(disabledForRegenerate ? .gray : .blue)
                     }
-                    .disabled(disabledReason)
+                    .disabled(disabledForRegenerate)
                 }
             }
 
@@ -734,10 +891,22 @@ struct LectureDetailView: View {
                     .foregroundColor(.secondary)
             }
 
-            if lecture.transcriptStatus != .completed && displayedSummary == nil {
-                Text("Wait until transcription finishes before generating a summary.")
-                    .font(.system(.caption, design: .rounded))
-                    .foregroundColor(.secondary)
+            // 「Generate」を押せない理由を、状態別に説明 (Regenerate は cached summary が
+            // ある時しか出ないので説明不要)。
+            if displayedSummary == nil {
+                if lecture.transcriptStatus == .processing {
+                    Text("Wait until transcription finishes before generating a summary.")
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundColor(.secondary)
+                } else if lecture.transcriptStatus == .failed {
+                    Text("Transcription failed — retry above before generating a summary.")
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundColor(.secondary)
+                } else if lecture.transcriptStatus == .notStarted {
+                    Text("Transcribe this recording before generating a summary.")
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundColor(.secondary)
+                }
             }
 
             if let error = summaryError {
@@ -780,6 +949,26 @@ struct LectureDetailView: View {
     @ViewBuilder
     private func summaryBlock(result: SummaryService.SummaryResult, languageLabel: String?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Copy / Share — お父様フィードバック 2026-04-26: Transcript 直上の
+            // Copy/Share が AI Summary をコピーしたように誤解された。AI Summary 専用
+            // の動線をカード内に持つ。
+            HStack(spacing: 12) {
+                Spacer()
+                CopyButton(text: summaryAsPlainText(result))
+                Button {
+                    shareSummary(result)
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 13))
+                        Text("Share")
+                            .font(.system(.subheadline, design: .rounded, weight: .medium))
+                    }
+                    .foregroundColor(.blue)
+                }
+                .accessibilityLabel("Share AI summary")
+            }
+
             if let label = languageLabel {
                 Text(label)
                     .font(.system(.caption2, design: .rounded, weight: .bold))
@@ -824,21 +1013,38 @@ struct LectureDetailView: View {
         }
     }
 
-    private func deleteBookmark(_ bookmark: LectureBookmark) {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        var updatedLecture = lecture
-        updatedLecture.bookmarks.removeAll { $0.id == bookmark.id }
-        store.updateLecture(updatedLecture)
-        lecture = updatedLecture
+    /// AI Summary を Copy / Share 用のプレーンテキストへ。
+    /// セクション順は UI 表示と揃える: summary → key points → sections。
+    private func summaryAsPlainText(_ result: SummaryService.SummaryResult) -> String {
+        var lines: [String] = []
+        if let overall = result.summary, !overall.isEmpty {
+            lines.append(overall)
+        }
+        if let points = result.key_points, !points.isEmpty {
+            if !lines.isEmpty { lines.append("") }
+            lines.append("Key Points")
+            for p in points { lines.append("• \(p)") }
+        }
+        if let sections = result.sections, !sections.isEmpty {
+            for section in sections {
+                if !lines.isEmpty { lines.append("") }
+                lines.append(section.heading)
+                lines.append(section.content)
+            }
+        }
+        return lines.joined(separator: "\n")
     }
 
-    private func updateBookmarkLabel(_ bookmark: LectureBookmark, newLabel: String) {
-        var updatedLecture = lecture
-        if let index = updatedLecture.bookmarks.firstIndex(where: { $0.id == bookmark.id }) {
-            updatedLecture.bookmarks[index].label = newLabel
-            store.updateLecture(updatedLecture)
-            lecture = updatedLecture
-        }
+    /// AI Summary を Activity Sheet で共有。テキストのみ (markdown 化はしない —
+    /// メール / メッセージで貼って読みやすい体裁を優先)。
+    private func shareSummary(_ result: SummaryService.SummaryResult) {
+        let plain = summaryAsPlainText(result)
+        guard !plain.isEmpty else { return }
+        var text = "\(lecture.displayTitle) — AI Summary\n\n"
+        text += plain
+        text += "\n\nGenerated with Lecsy — lecsy.app"
+        shareItems = [text]
+        showShareSheet = true
     }
 
     // MARK: - Helpers
@@ -880,12 +1086,55 @@ struct LectureDetailView: View {
         isRetrying = true
         let lectureId = lecture.id
 
+        // Sentry filter 用 flow tag。再文字起こし path 中の error を
+        // Issue 一覧で `flow:re-transcribe` で絞れる。
+        AppLogger.setSentryTag("flow", value: "re-transcribe")
+        let durationBucket: String
+        switch lecture.duration {
+        case ..<300:        durationBucket = "<5min"
+        case 300..<1800:    durationBucket = "5-30min"
+        case 1800..<3600:   durationBucket = "30-60min"
+        default:            durationBucket = ">60min"
+        }
+        AppLogger.setSentryTag("lecsy.audio_duration_bucket", value: durationBucket)
+
         var updatedLecture = lecture
         updatedLecture.transcriptStatus = .processing
         store.updateLecture(updatedLecture)
         lecture = updatedLecture
 
         let transcriptionService = TranscriptionService.shared
+
+        let progress = TranscriptionProgressService.shared
+        progress.set(.preparing, for: lectureId)
+        defer { progress.clear(for: lectureId) }
+
+        // Free 経路: live decoder の cache が残っていれば即 stitch で完結。
+        // 録音停止後に retry を押した場合や、起動時 recovery で .failed に
+        // 落ちた場合に効く。Pro は cache を読まない (二重 gate)。
+        if !PlanService.shared.isPaid {
+            let completion = transcriptionService.liveCacheCompletion(
+                lectureId: lectureId,
+                totalDuration: lecture.duration
+            )
+            if completion.isComplete {
+                let stitched = transcriptionService.stitchLiveCachedChunks(completion.chunks)
+                if var latest = store.getLecture(by: lectureId) {
+                    latest.transcriptText = stitched.text
+                    latest.transcriptSegments = stitched.segments
+                    latest.transcriptStatus = .completed
+                    latest.language = transcriptionService.transcriptionLanguage
+                    store.updateLecture(latest)
+                    lecture = latest
+                }
+                transcriptionService.clearChunkCache(lectureId: lectureId)
+                AppLogger.info("Re-transcribe completed via live cache (\(completion.chunks.count) chunks, coverage \(Int(completion.coverage))/\(Int(lecture.duration))s)", category: .transcription)
+                isRetrying = false
+                return
+            } else if !completion.chunks.isEmpty {
+                AppLogger.info("Re-transcribe: live cache incomplete (coverage \(Int(completion.coverage))/\(Int(lecture.duration))s, gaps=\(completion.gapCount)) — running chunked path", category: .transcription)
+            }
+        }
 
         // Pre-normalize the audio so faint far-field speech (large halls,
         // distant speaker) is lifted toward peak before transcription. Both
@@ -894,7 +1143,6 @@ struct LectureDetailView: View {
         // recognized) is the motivating scenario, and Free/WhisperKit-only
         // users hit it just as hard as Pro users. Best-effort: if enhancement
         // fails we fall through to raw audio.
-        let progress = TranscriptionProgressService.shared
         progress.set(.normalizing, for: lectureId)
         var transcribeURL = audioURL
         var enhancedURL: URL?
@@ -912,7 +1160,6 @@ struct LectureDetailView: View {
             if let e = enhancedURL {
                 try? FileManager.default.removeItem(at: e)
             }
-            progress.clear(for: lectureId)
         }
 
         // Primary path: Deepgram Prerecorded for Pro+auth users. Batch uses a
@@ -957,44 +1204,126 @@ struct LectureDetailView: View {
             }
         }
 
-        // Fallback: on-device WhisperKit on the same enhanced file (or the raw
-        // file if enhancement failed above). Progressive update avoids
-        // overwriting concurrent title edits by re-reading from the store
-        // per chunk.
-        transcriptionService.onChunkCompleted = { partialText, partialSegments in
-            guard var latest = store.getLecture(by: lectureId) else { return }
-            latest.transcriptText = partialText
-            latest.transcriptSegments = partialSegments
-            store.updateLecture(latest)
-            lecture = latest
+        // Fallback: on-device WhisperKit with auto-retry (3 attempts, exponential
+        // backoff). chunked path 内で cachedSegments の resume が効くので
+        // 重複 decode は起きない。永続エラー (audio not found / too short) は
+        // 即 abort。retry 中も partial text は逐次更新する。
+        // audioLoadFailed (m4a moov atom 破損) は AVAssetExportSession で
+        // 1 度だけ re-mux 修復を試みる (memory `feedback_audio_must_survive.md`)。
+        let maxAttempts = 3
+        var lastError: Error?
+        var repairedURL: URL?
+        var didAttemptRepair = false
+        defer {
+            if let r = repairedURL { try? FileManager.default.removeItem(at: r) }
         }
-
-        do {
-            let result = try await transcriptionService.transcribe(audioURL: transcribeURL, lectureId: lectureId)
-
-            transcriptionService.onChunkCompleted = nil
-            guard var latest = store.getLecture(by: lectureId) else {
+        for attempt in 1...maxAttempts {
+            transcriptionService.onChunkCompleted = { partialText, partialSegments in
+                guard var latest = store.getLecture(by: lectureId) else { return }
+                latest.transcriptText = partialText
+                latest.transcriptSegments = partialSegments
+                store.updateLecture(latest)
+                lecture = latest
+            }
+            do {
+                // enhance が成功している (transcribeURL == enhancedURL) ときは
+                // 既に正規化済なので、TranscriptionService 内の preprocessAudio
+                // (フル PCM buffer alloc) を skip する。長尺で iPad memory budget を
+                // 超えた sudden-death を回避する (Peter Ullsperger 2026-05-05 incident)。
+                let alreadyEnhanced = (enhancedURL != nil) && (transcribeURL == enhancedURL)
+                let result = try await transcriptionService.transcribe(
+                    audioURL: transcribeURL,
+                    lectureId: lectureId,
+                    skipPreprocess: alreadyEnhanced
+                )
+                transcriptionService.onChunkCompleted = nil
+                if var latest = store.getLecture(by: lectureId) {
+                    latest.transcriptText = result.text
+                    latest.transcriptSegments = result.segments
+                    latest.transcriptStatus = .completed
+                    latest.language = transcriptionService.transcriptionLanguage
+                    store.updateLecture(latest)
+                    lecture = latest
+                }
+                if attempt > 1 {
+                    AppLogger.info("Re-transcribe succeeded on attempt \(attempt)/\(maxAttempts)", category: .transcription)
+                }
                 isRetrying = false
                 return
+            } catch {
+                transcriptionService.onChunkCompleted = nil
+                lastError = error
+                // audioLoadFailed: 1 度だけ AVAssetExportSession で再 mux を試す。
+                // 修復が成功したら transcribeURL を差し替えて attempt を消費せず continue。
+                if !didAttemptRepair, let tx = error as? TranscriptionError, case .audioLoadFailed = tx {
+                    didAttemptRepair = true
+                    AppLogger.warning("Re-transcribe got audioLoadFailed — attempting m4a re-mux repair", category: .transcription)
+                    if let repaired = try? await AudioEnhancementService.shared.repair(audioURL: transcribeURL) {
+                        repairedURL = repaired
+                        transcribeURL = repaired
+                        AppLogger.info("Re-transcribe: audio repaired — retrying on re-muxed file", category: .transcription)
+                        continue
+                    } else {
+                        AppLogger.warning("Re-transcribe: audio repair failed — abandoning", category: .transcription)
+                        break
+                    }
+                }
+                // 永続エラーは retry しない
+                if let tx = error as? TranscriptionError {
+                    switch tx {
+                    case .audioFileNotFound, .audioFileTooShort, .modelNotLoaded:
+                        break // 即 abort
+                    case .audioLoadFailed:
+                        // repair 失敗 / 2 回目で出ている = 救えない。abort。
+                        break
+                    default:
+                        if attempt < maxAttempts {
+                            let backoffSeconds = Double(attempt) * 2.0
+                            AppLogger.warning("Re-transcribe attempt \(attempt)/\(maxAttempts) failed (\(error.localizedDescription)) — retrying in \(Int(backoffSeconds))s", category: .transcription)
+                            try? await Task.sleep(nanoseconds: UInt64(backoffSeconds * 1_000_000_000))
+                            continue
+                        }
+                    }
+                } else if attempt < maxAttempts {
+                    let backoffSeconds = Double(attempt) * 2.0
+                    AppLogger.warning("Re-transcribe attempt \(attempt)/\(maxAttempts) failed (\(error.localizedDescription)) — retrying in \(Int(backoffSeconds))s", category: .transcription)
+                    try? await Task.sleep(nanoseconds: UInt64(backoffSeconds * 1_000_000_000))
+                    continue
+                }
+                break
             }
-            latest.transcriptText = result.text
-            latest.transcriptSegments = result.segments
-            latest.transcriptStatus = .completed
-            latest.language = transcriptionService.transcriptionLanguage
-            store.updateLecture(latest)
-            lecture = latest
-        } catch {
-            transcriptionService.onChunkCompleted = nil
+        }
+
+        // 全 attempt 失敗 → 拾える partial cache だけでも反映しておく
+        if let lastError = lastError {
+            AppLogger.captureFingerprinted(
+                lastError,
+                fingerprint: ["re-transcribe", "all_attempts_failed"],
+                tags: [
+                    "audio_duration_bucket": (lecture.duration < 300 ? "<5min" : (lecture.duration < 1800 ? "5-30min" : (lecture.duration < 3600 ? "30-60min" : ">60min")))
+                ],
+                category: .transcription
+            )
+        }
+        let partial = transcriptionService.loadLiveDecodedChunks(lectureId: lectureId)
+        if !partial.isEmpty {
+            let stitched = transcriptionService.stitchLiveCachedChunks(partial)
             if var latest = store.getLecture(by: lectureId) {
+                latest.transcriptText = stitched.text
+                latest.transcriptSegments = stitched.segments
                 latest.transcriptStatus = .failed
                 store.updateLecture(latest)
                 lecture = latest
             }
-
-            errorMessage = ErrorMessages.friendly(error)
-            showErrorAlert = true
+            AppLogger.warning("Re-transcribe failed after retries — saved partial cache (\(partial.count) chunks)", category: .transcription)
+        } else if var latest = store.getLecture(by: lectureId) {
+            latest.transcriptStatus = .failed
+            store.updateLecture(latest)
+            lecture = latest
         }
 
+        errorMessage = ErrorMessages.friendly(lastError ?? TranscriptionError.transcriptionFailed)
+        showErrorAlert = true
         isRetrying = false
     }
 

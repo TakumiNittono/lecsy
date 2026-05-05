@@ -38,18 +38,15 @@ struct LiveCaptionView: View {
     @State private var heartbeatTick: Int = 0
 
     /// 直近の認識アクティビティから何秒経ったかを判断するためのクールダウン秒数。
-    /// これを超えると "recognizing" から "waiting" に落ちる。Deepgram は interim を
+    /// これを超えると "recognizing" から "listening" に落ちる。Deepgram は interim を
     /// 100-200ms 間隔で投げるので 5s は充分な余裕。
     private let recognitionStaleSeconds: TimeInterval = 5
-
-    /// 「音声は届いているが、そもそも誰も喋っていない (=無音)」と判断するまでの秒数。
-    /// 初回録音開始直後から 10 秒は初期状態扱いで amber に落とさない。
-    private let waitingForSpeechSeconds: TimeInterval = 10
 
     /// 低音量と見なす audioLevel 閾値。既存の RecordView.lowAudioWarning と揃える。
     private let lowAudioThreshold: Float = 0.08
 
-    /// 低音量が継続したと見なすまでの秒数。RecordView の従来警告とも整合。
+    /// 低音量が継続したと見なすまでの秒数。録音開始直後 5s 無音 → "Audio is too quiet"。
+    /// 音量が戻れば即解除し、再び落ちたら 5s 後にまた表示される（出っぱなしにしない）。
     private let lowAudioSustainedSeconds: TimeInterval = 5
 
     private let lightHaptic: UIImpactFeedbackGenerator = {
@@ -61,11 +58,15 @@ struct LiveCaptionView: View {
     /// 録音中のユーザーに向けて "いまどう受信されているか" を単一ピルで直接伝える。
     ///
     /// - connecting: ストリーム接続中（Deepgram WebSocket ハンドシェイク）
-    /// - listening: 接続済だが初期 10s 以内で認識出力が無い通常状態（中性）
+    /// - listening: 接続済・音量も足りている通常状態（中性）。認識まだ来てなくてもこのまま。
     /// - recognizing: 直近 5s 以内に interim / final セグメントを受け取っている = 正常
-    /// - waitingForSpeech: 接続済・音量は足りているが一定秒数認識が来ていない
-    /// - lowAudio: マイクに届く音量が閾値を下回る状態が 5s 以上続いている
-    private enum Phase { case connecting, listening, recognizing, waitingForSpeech, lowAudio }
+    /// - lowAudio: マイクに届く音量が閾値を下回る状態が 5s 以上続いている。
+    ///   音量が戻れば自動で解除し、再び落ちたら再表示する。
+    ///
+    /// 旧 `waitingForSpeech` は削除した（音声は届いているのに「WAITING FOR SPEECH」と
+    /// 出ると、ユーザーから見ると「アプリが認識を諦めた」ように見えて誤解を招く。
+    /// 本当に問題なのは音量低下のときだけなので lowAudio に集約する）。
+    private enum Phase { case connecting, listening, recognizing, lowAudio }
     private var phase: Phase {
         // isStartingLive は prepared session が無い状態での自前 connect 中に立つ。
         // これを connecting に含めないと "Listening…" → "Connecting" 表示切替が
@@ -77,41 +78,45 @@ struct LiveCaptionView: View {
         let now = Date()
 
         // 低音量判定を最優先。大講堂 / マイク遠距離の状況では Deepgram は無言になり、
-        // "Waiting for speech" と出ても本当の原因は低音量なので、より具体的な
-        // ガイダンスを優先する。
+        // 本当の原因は音量不足なので具体ガイダンス (Move closer / 外部マイク) を出す。
         if let since = lowAudioSince, now.timeIntervalSince(since) >= lowAudioSustainedSeconds {
             return .lowAudio
         }
 
+        // 音量 OK の間は recognizing / listening の 2択。喋ってないだけかもしれないので
+        // amber の警告には escalate しない。
         let elapsedSinceActivity = now.timeIntervalSince(lastActivityAt)
         let hasAnyContent = !coordinator.liveSegments.isEmpty || !coordinator.interimText.isEmpty
-
-        if hasAnyContent {
-            // 過去に認識実績あり: 直近 5s で "live" かどうかを切り替え。
-            return elapsedSinceActivity < recognitionStaleSeconds ? .recognizing : .waitingForSpeech
+        if hasAnyContent && elapsedSinceActivity < recognitionStaleSeconds {
+            return .recognizing
         }
-        // まだ何も受け取っていない: 初回10秒は中性グレーで "Listening…"。
-        // 過ぎたら amber の "Waiting for speech" に escalate して何か問題が
-        // 起きているかもと分かるようにする。
-        return elapsedSinceActivity < waitingForSpeechSeconds ? .listening : .waitingForSpeech
+        return .listening
+    }
+
+    /// `.listening` (沈黙中) だけはピルを出さない。沈黙で LIVE → LISTENING に
+    /// 落ちるのが「アプリ壊れた」誤解の元だったので。`.recognizing` の時の小さな
+    /// LIVE バッジはユーザーが「ちゃんと聞き取れている」確認に使うため残す。
+    private var shouldShowPill: Bool {
+        switch phase {
+        case .connecting, .lowAudio, .recognizing: return true
+        case .listening: return false
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                statusPill
-                Spacer()
-                if phase == .recognizing {
-                    HStack(spacing: 4) {
-                        Image(systemName: "globe").font(.caption2)
-                        Text("Auto").font(.caption2.weight(.semibold))
-                    }
-                    .foregroundStyle(.tertiary)
+            if shouldShowPill {
+                HStack {
+                    statusPill
+                    Spacer()
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
+            } else {
+                // ピルが消えても上に微小な余白を残してレイアウトの飛びを防ぐ。
+                Color.clear.frame(height: 14)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 8)
 
             content
         }
@@ -195,7 +200,6 @@ struct LiveCaptionView: View {
         case .connecting:        return "CONNECTING"
         case .listening:         return "LISTENING"
         case .recognizing:       return "LIVE"
-        case .waitingForSpeech:  return "WAITING FOR SPEECH"
         case .lowAudio:          return "MOVE CLOSER"
         }
     }
@@ -204,7 +208,6 @@ struct LiveCaptionView: View {
         case .connecting:        return .blue
         case .listening:         return .secondary
         case .recognizing:       return .green
-        case .waitingForSpeech:  return .orange
         case .lowAudio:          return Color(red: 1.0, green: 0.42, blue: 0.21)  // saturated orange-red
         }
     }
@@ -215,21 +218,18 @@ struct LiveCaptionView: View {
     private var content: some View {
         switch phase {
         case .connecting:        connectingState
-        case .listening:         listeningState
-        case .recognizing:       lyricsScroll
-        case .waitingForSpeech:
-            // 過去に認識実績がある場合は lyrics を出したまま、empty 時のみ
-            // 専用のガイダンスへ差し替え。履歴が突然消えるのを避ける。
+        case .listening:
+            // まだ認識結果が来ていない or 5s 以上 stale。履歴があれば履歴を、
+            // 無ければ "Listening…" のニュートラル表示。amber 警告には escalate しない。
             if coordinator.liveSegments.isEmpty && coordinator.interimText.isEmpty {
-                waitingForSpeechState
+                listeningState
             } else {
                 lyricsScroll
             }
+        case .recognizing:       lyricsScroll
         case .lowAudio:
-            // 低音量時も履歴は維持しつつ、追加ガイダンスを trailing 位置に出す
-            // のが理想だが、初回録音 (履歴なし) の学会シナリオでは empty 下で
-            // 明確なガイダンスを出す方が価値が高い。lyrics 維持ケースでは
-            // 後続ガイダンスは pill 側の色で済ませる。
+            // 低音量時も履歴があれば lyrics を維持しつつ、empty 時は明確なガイダンスを
+            // 出す。pill の色 (orange-red) でどちらの場合も状態は伝わる。
             if coordinator.liveSegments.isEmpty && coordinator.interimText.isEmpty {
                 lowAudioState
             } else {
@@ -303,29 +303,6 @@ struct LiveCaptionView: View {
     private func barHeight(for index: Int) -> CGFloat {
         let heights: [CGFloat] = [12, 24, 36, 24, 12]
         return pulse ? heights[index] : 8
-    }
-
-    /// waitingForSpeech: 接続 OK、音量 OK、でも 10s 以上認識出力が来ていない。
-    /// 「沈黙なのか・話者がマイクから遠いのか」を次に判定するための中間状態。
-    private var waitingForSpeechState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "ear")
-                .font(.system(size: 36, weight: .regular))
-                .foregroundStyle(.orange.opacity(0.9))
-
-            VStack(spacing: 4) {
-                Text("Waiting for speech…")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.primary)
-                Text("Connected, but no speech has been recognized yet.")
-                    .font(.system(size: 12, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 160)
-        .padding(.vertical, 20)
-        .padding(.horizontal, 24)
     }
 
     /// lowAudio: マイクに入る音量が 5s 以上 0.08 を下回っている。

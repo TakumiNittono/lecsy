@@ -13,8 +13,6 @@ struct SettingsView: View {
     @StateObject private var transcriptionService = TranscriptionService.shared
     @StateObject private var planService = PlanService.shared
     @ObservedObject private var recordingService = RecordingService.shared
-    @State private var translationTarget: TranslationTargetLanguage = .current
-    @AppStorage(PlanService.forceLocalKey) private var forceLocalTranscription: Bool = false
 
     @State private var showSignInSheet = false
     @State private var showSignOutDialog = false
@@ -116,61 +114,14 @@ struct SettingsView: View {
                     Text("Transcription Language")
                 }
 
-                // Transcription Method — Pro (org member) のみ override トグルを表示。
+                // Transcription Method — Pro (org member) のみ表示。
                 // Free プランは常にオンデバイス (WhisperKit) 固定なので何も出さない。
-                // 資格ベース(isProEntitled)で gate する。isPaid で gate すると、トグル ON で
-                // isPaid=false になり、セクション自体が消えて OFF に戻せなくなる。
+                // 2026-04-26 (お父様フィードバック対応): "On-Device Only" toggle と
+                // サブテキスト "Using cloud transcription" が並んで矛盾に読める事故を解消、
+                // 2 行の選択肢 (Cloud / On-device) UI に変更。詳細は TranscriptionMethodSection。
                 if planService.isProEntitled {
-                    Section {
-                        HStack {
-                            Image(systemName: "cpu")
-                                .foregroundColor(.gray)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("On-Device Only")
-                                    .foregroundColor(.primary)
-                                Text(forceLocalTranscription
-                                     ? "Using on-device transcription"
-                                     : "Using cloud transcription")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Toggle("", isOn: $forceLocalTranscription)
-                                .labelsHidden()
-                                .onChange(of: forceLocalTranscription) { _, _ in
-                                    // objectWillChange.send を view update 中に呼ぶと
-                                    // "Publishing changes from within view updates" 警告が出る
-                                    DispatchQueue.main.async {
-                                        planService.objectWillChange.send()
-                                    }
-                                }
-                        }
-                    } header: {
-                        Text("Transcription Method")
-                    } footer: {
-                        Text("Force on-device processing. Turning this on disables real-time captions.")
-                    }
+                    TranscriptionMethodSection()
                 }
-
-                // Bilingual Translation Target — Pro (org member) のみ表示
-                if planService.isPaid {
-                    Section {
-                        Picker("Translate captions to", selection: $translationTarget) {
-                            ForEach(TranslationTargetLanguage.allCases) { lang in
-                                Text(lang.displayName).tag(lang)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .onChange(of: translationTarget) { _, newValue in
-                            TranslationTargetLanguage.set(newValue)
-                        }
-                    } header: {
-                        Text("Bilingual Captions")
-                    } footer: {
-                        Text("Live captions show the original on the left and a translation in your chosen language on the right.")
-                    }
-                }
-
 
                 // Account section
                 Section("Account") {
@@ -268,83 +219,10 @@ struct SettingsView: View {
                     }
                 }
 
-                // Privacy section
-                Section("Privacy") {
-                    Toggle("Cloud Sync", isOn: $cloudSyncEnabled)
-                        .onChange(of: cloudSyncEnabled) { _, newValue in
-                            CloudSyncService.shared.setEnabled(newValue)
-                        }
-                    Text("Your transcript text is saved to Lecsy servers so you don't lose notes if your phone breaks. Audio files are NEVER uploaded — only the text. We do not use your data to train AI models.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    // Audio retention — on-device .m4a files の自動削除。transcript は残す
-                    // ので「読み返せるが音声は聞けない」状態にすることでストレージ節約 +
-                    // 端末紛失時の露出縮小。デフォルト .forever = 変化なし。
-                    Picker("Delete audio after", selection: Binding(
-                        get: { RecordingRetention.current },
-                        set: { RecordingRetention.set($0) }
-                    )) {
-                        ForEach(RecordingRetention.allCases) { option in
-                            Text(option.displayName).tag(option)
-                        }
-                    }
-                    Text("Older audio files are removed from this device. Transcripts and summaries stay so you can still read them.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    if authService.isAuthenticated && cloudSyncEnabled {
-                        Button {
-                            Task {
-                                await CloudSyncService.shared.backfillAllLocalLectures(store: LectureStore.shared)
-                            }
-                        } label: {
-                            HStack {
-                                if cloudSync.isBackfilling {
-                                    ProgressView().scaleEffect(0.8)
-                                    Text("Backing up…")
-                                } else {
-                                    Image(systemName: "icloud.and.arrow.up")
-                                    Text("Back up local recordings now")
-                                }
-                                Spacer()
-                            }
-                        }
-                        .disabled(cloudSync.isBackfilling)
-
-                        if let summary = cloudSync.lastBackfillSummary {
-                            Text(summary)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-
-                    if let url = URL(string: "https://lecsy.app/privacy") {
-                        Link(destination: url) {
-                            HStack {
-                                Text("Privacy Policy")
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                Image(systemName: "arrow.up.right.square")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-
-                    if let url = URL(string: "https://lecsy.app/terms") {
-                        Link(destination: url) {
-                            HStack {
-                                Text("Terms of Service")
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                Image(systemName: "arrow.up.right.square")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                }
+                PrivacySection(
+                    cloudSyncEnabled: $cloudSyncEnabled,
+                    isAuthenticated: authService.isAuthenticated
+                )
 
                 // About section
                 Section("About") {
@@ -468,6 +346,11 @@ private struct PlanSection: View {
             } header: {
                 Text("Plan")
             }
+        case .apple:
+            // Week 2 (5/4 〜) で PaywallView / Manage Subscription / Restore を実装する。
+            // 現状は IAP 導線が iOS 側に存在しないので、ここに到達するルートも無い。
+            // 将来、AppStore.showManageSubscriptions(in:) を起こす Subscription セクションを差し込む。
+            EmptyView()
         case .stripe:
             if planService.b2cCheckoutEnabled {
                 Section {
@@ -539,7 +422,7 @@ private struct PlanSection: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("View Plans")
                         .foregroundColor(.primary)
-                    Text("Unlock bilingual captions & AI study guide.")
+                    Text("Unlock cloud transcription & AI study guide.")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
@@ -547,6 +430,153 @@ private struct PlanSection: View {
                 Image(systemName: "arrow.up.right.square")
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+        }
+    }
+
+}
+
+/// Transcription Method セクション (Pro 専用)。
+///
+/// 旧 UI: "On-Device Only" toggle + サブテキスト "Using cloud transcription"。
+/// → 並んで読まれた時に意味が逆転して見える事故 (お父様フィードバック 2026-04-26)。
+/// 新 UI: 2 行の checkmark 選択肢 (Cloud / On-device)、各行に挙動の note を併記。
+private struct TranscriptionMethodSection: View {
+    @AppStorage(PlanService.forceLocalKey) private var forceLocalTranscription: Bool = false
+    @ObservedObject private var planService: PlanService = PlanService.shared
+
+    var body: some View {
+        Section {
+            row(
+                isOnDevice: false,
+                title: "Cloud",
+                subtitle: "Faster · more accurate · live captions",
+                note: "Requires internet"
+            )
+            row(
+                isOnDevice: true,
+                title: "On-device",
+                subtitle: "Audio never leaves this iPhone",
+                note: "Live captions disabled"
+            )
+        } header: {
+            Text("Transcription Method")
+        }
+    }
+
+    @ViewBuilder
+    private func row(isOnDevice: Bool, title: String, subtitle: String, note: String) -> some View {
+        let selected = (forceLocalTranscription == isOnDevice)
+        Button {
+            guard forceLocalTranscription != isOnDevice else { return }
+            forceLocalTranscription = isOnDevice
+            DispatchQueue.main.async {
+                planService.objectWillChange.send()
+            }
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundColor(selected ? .accentColor : .secondary)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.body)
+                        .foregroundColor(.primary)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(note)
+                        .font(.caption2)
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Privacy セクション。SettingsView.body inline だと SwiftUI の type-checker が
+/// time out するため別 struct に切り出し。Cloud Sync トグル + audio retention +
+/// バックアップボタン + 法務リンク で構成、footer に「音声は端末から出ない / AI 学習に
+/// 使わない」の 1 行コミット (FERPA / Apple App Privacy 上、最低限明示しておく)。
+private struct PrivacySection: View {
+    @Binding var cloudSyncEnabled: Bool
+    let isAuthenticated: Bool
+    @ObservedObject private var cloudSync = CloudSyncService.shared
+
+    var body: some View {
+        Section {
+            Toggle("Cloud Sync", isOn: $cloudSyncEnabled)
+                .onChange(of: cloudSyncEnabled) { _, newValue in
+                    CloudSyncService.shared.setEnabled(newValue)
+                }
+
+            Picker("Delete audio after", selection: Binding(
+                get: { RecordingRetention.current },
+                set: { RecordingRetention.set($0) }
+            )) {
+                ForEach(RecordingRetention.allCases) { option in
+                    Text(option.displayName).tag(option)
+                }
+            }
+
+            if isAuthenticated && cloudSyncEnabled {
+                backfillButton
+                if let summary = cloudSync.lastBackfillSummary {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            policyLink(label: "Privacy Policy", urlString: "https://lecsy.app/privacy")
+            policyLink(label: "Terms of Service", urlString: "https://lecsy.app/terms")
+        } header: {
+            Text("Privacy")
+        } footer: {
+            // PrivacyInfo.xcprivacy と Info.plist (NSMicrophoneUsageDescription) の事実に
+            // 揃える: 音声ファイル (.m4a) はどのプランでも端末のみ。Free=WhisperKit on-device、
+            // Pro=Deepgram に短時間 stream して 30 日以内自動削除 (Lecsy 側で永続保存はしない)。
+            // "Audio stays on your device" は Pro で嘘になるので、Lecsy server に保存しない、
+            // という正確な表現に統一する。
+            Text("Lecsy doesn't store your audio on its servers. On the Free plan, transcription runs on this iPhone. On paid plans, audio is sent to Deepgram for live transcription and auto-deleted within 30 days. Only transcript text is synced to your account. Your data is never used to train AI.")
+        }
+    }
+
+    @ViewBuilder
+    private var backfillButton: some View {
+        Button {
+            Task {
+                await CloudSyncService.shared.backfillAllLocalLectures(store: LectureStore.shared)
+            }
+        } label: {
+            HStack {
+                if cloudSync.isBackfilling {
+                    ProgressView().scaleEffect(0.8)
+                    Text("Backing up…")
+                } else {
+                    Image(systemName: "icloud.and.arrow.up")
+                    Text("Back up local recordings now")
+                }
+                Spacer()
+            }
+        }
+        .disabled(cloudSync.isBackfilling)
+    }
+
+    @ViewBuilder
+    private func policyLink(label: String, urlString: String) -> some View {
+        if let url = URL(string: urlString) {
+            Link(destination: url) {
+                HStack {
+                    Text(label).foregroundColor(.primary)
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.caption).foregroundColor(.secondary)
+                }
             }
         }
     }

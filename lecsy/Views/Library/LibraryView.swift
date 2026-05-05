@@ -116,7 +116,7 @@ struct LibraryView: View {
         let grouped = computeGrouped(from: filtered)
         let filteredCount = filtered.count
         let filteredIsEmpty = filtered.isEmpty
-        return NavigationView {
+        return NavigationStack {
             VStack(spacing: 0) {
                 // Cloud backup nudge for users who skipped login.
                 // Shown only when: not signed in, has at least one local
@@ -154,6 +154,34 @@ struct LibraryView: View {
                     .padding(.vertical, 10)
                     .background(Color.red.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                }
+
+                // Transcription-in-progress hint banner.
+                // .processing 状態の lecture が一つでもあれば、Library 画面でも
+                // 「app を開いたままに」と明示的に指示する。理由: iOS は
+                // background の GPU 投入を block するので、別アプリに切替えた
+                // 瞬間に chunked decode が一時停止する。Live Activity は最後の
+                // 進捗を保持してしまい「動いてる風」に見えるが、実際は止まる。
+                // Library 画面は transcription 実行中のユーザーが頻繁に居る場所
+                // なので、ここで警告するのが効果的。
+                if store.lectures.contains(where: { $0.transcriptStatus == .processing }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "iphone.radiowaves.left.and.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.blue)
+                        Text("Transcribing — keep Lecsy open. Switching apps pauses progress.")
+                            .font(.system(.caption2, design: .rounded, weight: .medium))
+                            .foregroundColor(.primary.opacity(0.85))
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.blue.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(.horizontal)
                     .padding(.top, 8)
                 }

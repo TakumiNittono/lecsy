@@ -68,8 +68,8 @@ enum ErrorMessages {
                 )
             case .audioLoadFailed:
                 return UserFacingError(
-                    title: "Audio Error",
-                    message: "Could not read the recording file. The file may be corrupted."
+                    title: "Audio File Needs Repair",
+                    message: "We're trying to repair the recording file automatically. Tap Retry — if it keeps failing, restart your device and try once more."
                 )
             case .audioFileNotFound:
                 return UserFacingError(
@@ -82,19 +82,24 @@ enum ErrorMessages {
                     message: "The recording is too short to transcribe. Please record for at least a few seconds."
                 )
             case .emptyTranscriptionResult:
+                // 大講堂・遠距離マイク・低音量で WhisperKit が一切認識しなかった時に着地する。
+                // お父様 2026-04-24 / Peter 2026-05-05 系のシナリオの本命メッセージなので、
+                // 「次に試すべき 3 手」を必ず並べる。Pro お試しに繋げる文言は launch 後に追加。
                 return UserFacingError(
                     title: "No Speech Detected",
-                    message: "No speech was detected in the recording. Please make sure you are speaking clearly and the microphone is not blocked, then try again."
+                    message: "We couldn't pick up speech from the recording. Things to try:\n• Move the phone closer to the speaker (within 2-3 m)\n• Tap Retry — we'll re-process with audio boost\n• Record a shorter test (10-30 s) to confirm the mic is working"
                 )
             case .transcriptionFailed:
                 return UserFacingError(
                     title: "Transcription Failed",
-                    message: "Something went wrong during transcription. Please try again."
+                    message: "Something went wrong. Tap Retry. If it fails again, keep Lecsy in the foreground (don't switch apps) during the next attempt."
                 )
             case .transcriptionTimedOut:
+                // 旧文言「30 分以下に分割して」は誤誘導。実際の原因はほぼ全て
+                // background kill / GPU thermal / cache miss であり、長さは関係ない。
                 return UserFacingError(
-                    title: "Transcription Too Slow",
-                    message: "The recording may be too long for this device. Try recording shorter segments (under 30 minutes)."
+                    title: "Transcription Took Too Long",
+                    message: "Keep Lecsy open in the foreground and tap Retry. If it keeps timing out, restart your device — that clears any thermal throttling."
                 )
             case .alreadyProcessing:
                 return UserFacingError(

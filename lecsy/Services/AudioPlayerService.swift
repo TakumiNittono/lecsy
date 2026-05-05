@@ -18,6 +18,11 @@ class AudioPlayerService: NSObject, ObservableObject {
     @Published var currentTime: TimeInterval = 0
     @Published var duration: TimeInterval = 0
     @Published var playbackRate: Float = 1.0
+    /// `loadAsync` が AVAudioPlayer 失敗 → AVAssetExportSession で m4a を再 mux 修復
+    /// しているフラグ。LectureDetailView 等が「Repairing audio…」を出すのに使う。
+    /// 「音声は何があっても死守する」(memory: feedback_audio_must_survive.md) の
+    /// 観点で、UI 上で何が起きているか黙らせず可視化する。
+    @Published var isRepairing = false
 
     static let availableRates: [Float] = [0.75, 1.0, 1.25, 1.5, 2.0]
 
@@ -61,6 +66,12 @@ class AudioPlayerService: NSObject, ObservableObject {
     /// Async load — runs AVFoundation init off the main thread so the
     /// navigation push animation into LectureDetailView stays smooth even for
     /// 100-minute M4A files. The `@Published` updates happen back on main.
+    ///
+    /// 「音声は何があっても死守する」(memory: feedback_audio_must_survive.md):
+    /// AVAudioPlayer init が落ちた場合 ── 多くは録音中の force-kill で moov atom が
+    /// 書かれずに終わった m4a ── は AVAssetExportSession で再 mux 修復をかけて、
+    /// 元ファイルを差し替えてから再試行する。失敗時の actual error は AppLogger に
+    /// 残し、`.loadFailed(detail)` で呼び出し側に詳細を渡す。
     func loadAsync(url: URL) async throws {
         stop()
 
@@ -68,10 +79,49 @@ class AudioPlayerService: NSObject, ObservableObject {
             throw AudioPlayerError.fileNotFound
         }
 
-        // Capture primitives needed off-actor.
+        do {
+            try await openPlayer(url: url)
+            return
+        } catch {
+            // 1段目失敗: 実 error をログに残してから修復を試みる。
+            AppLogger.warning(
+                "AVAudioPlayer init failed for \(url.lastPathComponent): \(error.localizedDescription) — attempting repair",
+                category: .audio
+            )
+
+            isRepairing = true
+            defer { isRepairing = false }
+
+            do {
+                let repairedURL = try await AudioFileRepairService.shared.repair(at: url)
+                _ = try AudioFileRepairService.shared.replace(original: url, with: repairedURL)
+                AppLogger.info("Audio repair succeeded for \(url.lastPathComponent)", category: .audio)
+            } catch let repairError {
+                AppLogger.error(
+                    "Audio repair failed for \(url.lastPathComponent): \(repairError.localizedDescription)",
+                    category: .audio
+                )
+                throw AudioPlayerError.loadFailedDetailed(repairError.localizedDescription)
+            }
+
+            // 修復後に再試行。ここで失敗したら諦める。
+            do {
+                try await openPlayer(url: url)
+            } catch {
+                AppLogger.error(
+                    "AVAudioPlayer init failed even after repair: \(error.localizedDescription)",
+                    category: .audio
+                )
+                throw AudioPlayerError.loadFailedDetailed(error.localizedDescription)
+            }
+        }
+    }
+
+    /// 実際に AVAudioPlayer を作って `audioPlayer` / `duration` を埋める部分。
+    /// 修復前後で同じロジックを使うため private に切り出している。
+    private func openPlayer(url: URL) async throws {
         let rate = playbackRate
 
-        // Do the expensive work on a background queue.
         let prepared: (AVAudioPlayer, TimeInterval) = try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
@@ -85,12 +135,11 @@ class AudioPlayerService: NSObject, ObservableObject {
                     player.prepareToPlay()
                     continuation.resume(returning: (player, player.duration))
                 } catch {
-                    continuation.resume(throwing: AudioPlayerError.loadFailed)
+                    continuation.resume(throwing: error)
                 }
             }
         }
 
-        // Back on the main actor: assign and publish.
         audioPlayer = prepared.0
         audioPlayer?.delegate = self
         duration = prepared.1
@@ -170,6 +219,9 @@ class AudioPlayerService: NSObject, ObservableObject {
     enum AudioPlayerError: LocalizedError {
         case fileNotFound
         case loadFailed
+        /// 修復まで含めて失敗した時に actual error 文言を保持する。
+        /// `.loadFailed` で詳細を握りつぶしていた旧挙動を置き換えるためのもの。
+        case loadFailedDetailed(String)
 
         var errorDescription: String? {
             switch self {
@@ -177,6 +229,8 @@ class AudioPlayerService: NSObject, ObservableObject {
                 return "Audio file not found"
             case .loadFailed:
                 return "Failed to load audio file"
+            case .loadFailedDetailed(let detail):
+                return "Failed to load audio file: \(detail)"
             }
         }
     }

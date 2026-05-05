@@ -35,18 +35,23 @@ class AuthService: NSObject, ObservableObject {
         didSet {
             // Sentry: ログイン/ログアウトで user scope を切替え、どの学生のエラーか可視化。
             // Sentry SDK 未リンク環境でも #if canImport で no-op。
+            // SENTRY_DSN が Info.plist に未設定な dev ビルドでは SDK が起動しないので
+            // `isEnabled` で判定して setUser をスキップする。これをやらないと毎回
+            // [Sentry] [fatal] "The SDK is disabled, so setUser doesn't work" が log を埋める。
             #if canImport(Sentry)
-            if let u = currentUser {
-                let su = User()
-                su.userId = u.id.uuidString
-                if let email = u.email, !email.isEmpty {
-                    // PII 最小化: ドメインのみ残してハッシュ化までは今はやらない。
-                    // sendDefaultPii=false なので IP 等は送られない。
-                    su.email = email
+            if SentrySDK.isEnabled {
+                if let u = currentUser {
+                    let su = User()
+                    su.userId = u.id.uuidString
+                    if let email = u.email, !email.isEmpty {
+                        // PII 最小化: ドメインのみ残してハッシュ化までは今はやらない。
+                        // sendDefaultPii=false なので IP 等は送られない。
+                        su.email = email
+                    }
+                    SentrySDK.setUser(su)
+                } else {
+                    SentrySDK.setUser(nil)
                 }
-                SentrySDK.setUser(su)
-            } else {
-                SentrySDK.setUser(nil)
             }
             #endif
 

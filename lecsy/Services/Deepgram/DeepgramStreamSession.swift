@@ -49,7 +49,10 @@ final class DeepgramStreamSession: ObservableObject {
     }
 
     // MARK: - Config
-    struct Config {
+    /// `@MainActor` クラスにネストすると Config も MainActor 隔離とみなされ、
+    /// `init(config: Config = .init())` のデフォルト式が "synchronous nonisolated context"
+    /// エラーになるため nonisolated 扱いにしておく。Plain value 型なので問題なし。
+    nonisolated struct Config {
         var model: String = "nova-3"
         var language: String = "multi"        // 多言語自動切替
         var sampleRate: Int = 16_000
@@ -254,6 +257,12 @@ final class DeepgramStreamSession: ObservableObject {
 
     /// keep-alive / ping が失敗した時に、既に .failed でない connection state を
     /// failed に落として上位の reconnect ロジックを即発火させる。
+    /// state を **同期で即セット** することで dedup が成立し、上位の sink も即発火する。
+    /// 旧コードは "Publishing changes from within view updates" 警告を避けるため
+    /// `Task.yield()` を挟んでいたが、それが原因で:
+    ///   - 連続失敗時に dedup が外れて log が二重に出る
+    ///   - `stopLive()` レース で state が `.closed` に上書きされ reconnect が走らない
+    /// 副作用 (warning) は呼び元 `Task { @MainActor }` の async hop で十分回避できる。
     private func markFailedIfActive() {
         if case .failed = connectionState { return }
         if case .closed = connectionState { return }

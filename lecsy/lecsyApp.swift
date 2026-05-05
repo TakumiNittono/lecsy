@@ -13,32 +13,15 @@ import AuthenticationServices
 
 @main
 struct lecsyApp: App {
-    init() {
-        // Sentry DSN は Info.plist の SENTRY_DSN (xcconfig 経由で注入) から読む。
-        // ソース直書きは git 履歴に残ると git clone しただけの外部が error capture
-        // を打ち込めてしまうので避ける。DSN が未設定なら SDK を起動しないだけ。
-        if let dsn = Bundle.main.object(forInfoDictionaryKey: "SENTRY_DSN") as? String,
-           !dsn.isEmpty,
-           dsn != "$(SENTRY_DSN)" {
-            SentrySDK.start { options in
-                options.dsn = dsn
+    // Sentry を **他の stored property より先に** 起動するためのブート。
+    // Swift の stored property は宣言順に init されるため、これを最上段に置くと
+    // AuthService.shared / TranscriptionService.shared など「.shared 経由で
+    // SentrySDK.setUser を呼ぶ系」が走る前に必ず SentrySDK.start が完了する。
+    // 旧コードは init() 本体で start していたが、stored property の初期化は
+    // init() 本体より先に走るため、launch 直後の session 復元で
+    // "The SDK is disabled, so setUser doesn't work" が出ていた。
+    private let _sentryBoot: Void = lecsyApp.bootSentry()
 
-                // FERPA 配慮: 学生の IP / user-agent など PII 送出を明示的に切る。
-                // ユーザーID紐付けは AuthService から SentrySDK.setUser で個別に渡す方針。
-                // 参考: https://docs.sentry.io/platforms/apple/data-management/data-collected/
-                options.sendDefaultPii = false
-
-                options.tracesSampleRate = 1.0
-
-                options.configureProfiling = {
-                    $0.sessionSampleRate = 1.0
-                    $0.lifecycle = .trace
-                }
-
-                options.experimental.enableLogs = true
-            }
-        }
-    }
     @StateObject private var authService = AuthService.shared
     @AppStorage("lecsy.hasSeenOnboarding") private var hasSeenOnboarding = false
     @Environment(\.requestReview) private var requestReview
@@ -52,6 +35,88 @@ struct lecsyApp: App {
     // 購読開始させる。これで「ログイン完了 → Pro 判定 → Deepgram 事前接続」が
     // RecordView を開く前に走り、録音開始時のラグを体感ゼロにできる。
     @MainActor private let transcriptionCoordinator = TranscriptionCoordinator.shared
+
+    /// 一度だけ走る Sentry init。Bundle / Info.plist の SENTRY_DSN を読む。
+    /// ソース直書きは git 履歴に残るので回避（外部からの error capture spam を防ぐ）。
+    private static func bootSentry() {
+        guard let dsn = Bundle.main.object(forInfoDictionaryKey: "SENTRY_DSN") as? String,
+              !dsn.isEmpty,
+              dsn != "$(SENTRY_DSN)" else {
+            return
+        }
+        // release tag: Sentry の Issue 一覧で「どの build で死んだか」を即判別
+        // できるようにする。default の自動 release 名は bundle id ベースで人間に
+        // 読みづらいので、`lecsy@<short>+<build>` 形式に固定。
+        let shortVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.0.0"
+        let buildVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "0"
+        let releaseTag = "lecsy@\(shortVersion)+\(buildVersion)"
+
+        SentrySDK.start { options in
+            options.dsn = dsn
+            options.releaseName = releaseTag
+            // FERPA 配慮: 学生の IP / user-agent など PII 送出を明示的に切る。
+            // ユーザーID紐付けは AuthService から SentrySDK.setUser で個別に渡す方針。
+            options.sendDefaultPii = false
+            options.tracesSampleRate = 1.0
+            options.configureProfiling = {
+                $0.sessionSampleRate = 1.0
+                $0.lifecycle = .trace
+            }
+            options.experimental.enableLogs = true
+            // MetricKit ingestion: jetsam / OOM / hang / cpuException を OS の
+            // MXMetricManager 経由で受け取って Sentry に送る。通常 crash と違い
+            // jetsam は signal handler を経由しないので、これが唯一の捕捉経路。
+            // Peter Ullsperger 2026-05-05 incident (silent kill 仮説) で導入。
+            options.enableMetricKit = true
+        }
+        // device profile を Sentry scope に詰める。jetsam で死んだ user の
+        // device 分布が見えないと「低スペがどれだけ死んでいるか」が判らない。
+        // model identifier は uname machine ("iPad14,1" 等)、UIDevice.model だと
+        // 全部 "iPad"/"iPhone" になって役に立たない。
+        SentrySDK.configureScope { scope in
+            var sysinfo = utsname()
+            uname(&sysinfo)
+            let machineMirror = Mirror(reflecting: sysinfo.machine)
+            let modelIdentifier = machineMirror.children.reduce("") { partial, element in
+                guard let value = element.value as? Int8, value != 0 else { return partial }
+                return partial + String(UnicodeScalar(UInt8(value)))
+            }
+            let physRAMGB = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824.0
+            let osVersion = UIDevice.current.systemVersion
+            let idiom: String = {
+                switch UIDevice.current.userInterfaceIdiom {
+                case .phone: return "iPhone"
+                case .pad: return "iPad"
+                case .mac: return "Mac"
+                case .tv: return "tv"
+                case .carPlay: return "carPlay"
+                case .vision: return "vision"
+                default: return "unknown"
+                }
+            }()
+            scope.setTag(value: modelIdentifier, key: "device.model_id")
+            scope.setTag(value: String(format: "%.1fGB", physRAMGB), key: "device.ram")
+            scope.setTag(value: osVersion, key: "device.os_version")
+            scope.setTag(value: idiom, key: "device.idiom")
+            // dual-instance threshold (8GB) を満たすかも tag で出す。
+            // jetsam 発生時に "dual=true で死んでいる" が一目で見える。
+            scope.setTag(
+                value: ProcessInfo.processInfo.physicalMemory >= 8_000_000_000 ? "true" : "false",
+                key: "lecsy.whisper_dual_eligible"
+            )
+            // build_channel: TestFlight (sandbox) / App Store / DEBUG を識別。
+            // Sentry の Issue 検索で "本番のみ出ている bug" を絞れる。
+            #if DEBUG
+            let channel = "debug"
+            #else
+            let isTestFlight = (Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt")
+            let channel = isTestFlight ? "testflight" : "appstore"
+            #endif
+            scope.setTag(value: channel, key: "build_channel")
+            scope.setTag(value: shortVersion, key: "app.version")
+            scope.setTag(value: buildVersion, key: "app.build")
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -133,17 +198,44 @@ struct lecsyApp: App {
         }
     }
 
-    /// Recover lectures stuck in .processing from a previous crash
+    /// Recover lectures stuck in .processing from a previous crash.
+    /// 起動時に WhisperLiveDecoder の chunkCache が残っていれば、復元前に
+    /// stitch を試行する。cache が完結していれば .completed に直して、
+    /// 完結していなければ .failed にして user の retry を待つ。
     @MainActor
     private func recoverStuckTranscriptions() {
         let store = LectureStore.shared
+        let transcriptionService = TranscriptionService.shared
         for lecture in store.lectures where lecture.transcriptStatus == .processing {
+            // live decode cache が残っていれば復元を試行
+            let completion = transcriptionService.liveCacheCompletion(
+                lectureId: lecture.id,
+                totalDuration: lecture.duration
+            )
+            if completion.isComplete {
+                let stitched = transcriptionService.stitchLiveCachedChunks(completion.chunks)
+                var updated = lecture
+                updated.transcriptText = stitched.text
+                updated.transcriptSegments = stitched.segments
+                updated.transcriptStatus = .completed
+                store.updateLecture(updated)
+                transcriptionService.clearChunkCache(lectureId: lecture.id)
+                AppLogger.info("Recovered stuck lecture \(lecture.displayTitle) via live cache (\(completion.chunks.count) chunks)", category: .transcription)
+                continue
+            }
+
+            // cache 不完全 → partial を残して .failed に
             var updated = lecture
-            // If partial transcript exists, mark as failed so user can retry
-            // (partial text is preserved for viewing)
+            if !completion.chunks.isEmpty {
+                let stitched = transcriptionService.stitchLiveCachedChunks(completion.chunks)
+                updated.transcriptText = stitched.text
+                updated.transcriptSegments = stitched.segments
+                AppLogger.warning("Recovered stuck lecture \(lecture.displayTitle) with partial cache (\(completion.chunks.count) chunks, coverage \(Int(completion.coverage))s) — marking failed", category: .transcription)
+            } else {
+                AppLogger.warning("Recovered stuck transcription for lecture: \(lecture.displayTitle) (no cache)", category: .transcription)
+            }
             updated.transcriptStatus = .failed
             store.updateLecture(updated)
-            AppLogger.warning("Recovered stuck transcription for lecture: \(lecture.displayTitle)", category: .transcription)
         }
     }
 

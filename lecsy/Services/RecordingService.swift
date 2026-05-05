@@ -10,6 +10,7 @@ import AVFoundation
 import Combine
 import ActivityKit
 import UIKit
+@preconcurrency import UserNotifications
 
 /// Recording service
 @MainActor
@@ -22,12 +23,25 @@ class RecordingService: NSObject, ObservableObject {
     @Published var recordingStartTime: Date?
     @Published var pausedDuration: TimeInterval = 0
     @Published var audioLevel: Float = 0
+    /// startRecording で生成し、saveLecture で同じ UUID を Lecture.id に再利用する。
+    /// WhisperLiveDecoder は録音中にこの ID を使って chunkCache に書き込み、
+    /// post-stop の transcription path が cache 経由で結果を引き上げる。
+    /// stopRecording / autoSave / cancel で nil に戻す。
+    @Published private(set) var currentRecordingId: UUID?
     @Published var audioLevelHistory: [Float] = Array(repeating: 0, count: 30)
     @Published var showLowAudioWarning = false
     @Published var unexpectedlySavedRecording: SavedRecording?
     @Published var stoppedAtMaxDuration = false
     @Published var showMaxDurationWarning = false
     @Published var remainingSecondsBeforeAutoStop: Int = 0
+
+    /// 録音中に audioLevel が low-audio 閾値を下回った累積秒数 (1Hz サンプリング、pause 時は加算しない)。
+    /// startRecording で 0 にリセット、stopRecording 後も次の startRecording まで保持され、
+    /// RecordView.saveLecture が Lecture.lowAudioSeconds に転写する。LectureDetailView の
+    /// "Re-transcribe with audio boost" 自動サジェスト判定に使う。LiveCaptionView の
+    /// MOVE CLOSER ピル閾値と同じ値 (0.08) を使うので、ピルが立っていた時間と概ね一致する。
+    @Published var cumulativeLowAudioSeconds: Double = 0
+    private let lowAudioLevelThreshold: Float = 0.08
 
     /// Current duration computed from wall clock (for use outside UI)
     var currentDuration: TimeInterval {
@@ -42,6 +56,7 @@ class RecordingService: NSObject, ObservableObject {
         let url: URL
         let duration: TimeInterval
         let title: String
+        let startedAt: Date?
     }
 
     private var audioRecorder: AVAudioRecorder?
@@ -74,15 +89,65 @@ class RecordingService: NSObject, ObservableObject {
     private let activeRecordingPausedKey = "lecsy.activeRecordingPaused"
     private let activeRecordingTitleKey = "lecsy.activeRecordingTitle"
 
+    /// Combine subscriptions held for the lifetime of the singleton.
+    /// Used today for the transcription-progress → Live Activity bridge.
+    private var cancellables: Set<AnyCancellable> = []
+
     private override init() {
         super.init()
         setupNotifications()
         // Clean up zombie Live Activities from previous launches on startup
         cleanUpStaleLiveActivities()
+        // Bridge transcription progress into the Live Activity so the user
+        // can watch the post-stop WhisperKit batch from the lock screen /
+        // Dynamic Island. The observer is a no-op until a Live Activity
+        // exists and is in `.transcribing` phase.
+        setupTranscriptionProgressObserver()
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+    }
+
+    /// Observe TranscriptionProgressService.chunkProgress and forward each
+    /// update to the active Live Activity. Singleton transcription means
+    /// the dictionary holds at most one entry at a time, so taking
+    /// `values.first` is safe.
+    private func setupTranscriptionProgressObserver() {
+        TranscriptionProgressService.shared.$chunkProgress
+            .receive(on: RunLoop.main)
+            .sink { [weak self] progressMap in
+                guard let self = self else { return }
+                guard self.liveActivity != nil else { return }
+                guard let cp = progressMap.values.first else { return }
+                // ETA は非表示 (chunk 単位の所要時間が振れて当てにならないため、
+                // ユーザーから「remaining が伸びる」苦情が出た)。
+                self.updateLiveActivityTranscribeProgress(
+                    index: cp.index,
+                    total: cp.total,
+                    etaSeconds: nil
+                )
+            }
+            .store(in: &cancellables)
+
+        // Observe app active state during transcription. Background → GPU
+        // command submission blocked → chunked decode pauses at next chunk
+        // boundary. Live Activity needs to reflect this so user understands
+        // why "Transcribing 5/8" looks frozen on the lock screen.
+        TranscriptionService.shared.$isAppActive
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isActive in
+                guard let self = self, self.liveActivity != nil else { return }
+                // Only relevant during transcription (chunkProgress exists).
+                let progressMap = TranscriptionProgressService.shared.chunkProgress
+                guard let cp = progressMap.values.first else { return }
+                self.updateLiveActivityTranscribePauseState(
+                    isPaused: !isActive,
+                    index: cp.index,
+                    total: cp.total
+                )
+            }
+            .store(in: &cancellables)
     }
 
     /// Listen for app lifecycle and audio interruption notifications
@@ -300,7 +365,7 @@ class RecordingService: NSObject, ObservableObject {
     }
 
     /// Check for orphaned recording files from a previous crash and recover them
-    func recoverOrphanedRecording() async -> (url: URL, duration: TimeInterval, title: String)? {
+    func recoverOrphanedRecording() async -> (url: URL, duration: TimeInterval, title: String, startedAt: Date?)? {
         let defaults = UserDefaults.standard
         guard let path = defaults.string(forKey: activeRecordingURLKey) else { return nil }
 
@@ -321,9 +386,11 @@ class RecordingService: NSObject, ObservableObject {
 
         // Calculate approximate duration from persisted start time
         var duration: TimeInterval = 0
+        var startedAt: Date?
         if let startTimestamp = defaults.object(forKey: activeRecordingStartKey) as? TimeInterval {
             let pausedDur = defaults.double(forKey: activeRecordingPausedKey)
             let startDate = Date(timeIntervalSince1970: startTimestamp)
+            startedAt = startDate
             duration = Date().timeIntervalSince(startDate) - pausedDur
         }
 
@@ -342,10 +409,35 @@ class RecordingService: NSObject, ObservableObject {
         let title = defaults.string(forKey: activeRecordingTitleKey) ?? "Recovered Recording"
         AppLogger.info("Recovered orphaned recording: \(size) bytes, ~\(Int(duration))s", category: .recording)
 
+        // 「音声は何があっても死守する」(memory: feedback_audio_must_survive.md):
+        // crash で AVAudioRecorder.stop() が呼ばれずに終わった m4a は moov atom が
+        // 末尾に書かれずに終わっていることがある。AVAudioPlayer はそれを開けないので、
+        // Lecture に昇格させる前に AVAssetExportSession で再 mux 修復をかけ、
+        // 再生可能な状態に揃えてから返す。失敗しても元ファイルはそのまま残すので
+        // 後段の playback 側 (AudioPlayerService.loadAsync) でもう一度修復が走る。
+        await ensureFinalizedM4A(at: url)
+
         // Clear persisted state only after successful recovery
         clearPersistedRecordingState()
 
-        return (url: url, duration: duration, title: title)
+        return (url: url, duration: duration, title: title, startedAt: startedAt)
+    }
+
+    /// `AudioFileRepairService` を使って m4a を再 mux し、原本を差し替える best-effort。
+    /// 既に正しく moov atom が書かれているファイルでも export は通り抜けるので、
+    /// 「壊れているか分からないが念のため」の cost として許容する。失敗時はログだけ
+    /// 残して原本を維持し、playback 側でもう一度トライする。
+    private func ensureFinalizedM4A(at url: URL) async {
+        do {
+            let repaired = try await AudioFileRepairService.shared.repair(at: url)
+            _ = try AudioFileRepairService.shared.replace(original: url, with: repaired)
+            AppLogger.info("Orphaned m4a finalized via re-mux: \(url.lastPathComponent)", category: .recording)
+        } catch {
+            AppLogger.warning(
+                "Could not finalize orphaned m4a (\(url.lastPathComponent)): \(error.localizedDescription) — leaving raw file in place; playback will retry repair",
+                category: .recording
+            )
+        }
     }
 
     // MARK: - Auto-save (unexpected termination fallback)
@@ -354,6 +446,8 @@ class RecordingService: NSObject, ObservableObject {
     /// This creates a Lecture entry directly and notifies the UI via `unexpectedlySavedRecording`.
     private func autoSaveAndNotify() {
         guard isRecording, let url = recordingURL else { return }
+
+        WhisperLiveDecoder.shared.stop()
 
         // Stop cleanly
         isStoppingIntentionally = true
@@ -364,11 +458,15 @@ class RecordingService: NSObject, ObservableObject {
         meteringTimer = nil
         backgroundTaskTimer?.invalidate()
         backgroundTaskTimer = nil
+        // startRecording で begin した auto-lock 抑制を解除。
+        // 切り忘れ "reached" 通知は cancel しない (届けたい)。
+        ScreenAwakeLock.shared.end()
 
         isRecording = false
         isPaused = false
 
         let finalDuration = max(0, currentDuration)
+        let capturedStart = recordingStartTime
 
         pauseStartTime = nil
         clearPersistedRecordingState()
@@ -392,13 +490,17 @@ class RecordingService: NSObject, ObservableObject {
         showMaxDurationWarning = false
         remainingSecondsBeforeAutoStop = 0
 
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        isAudioSessionPrepared = false
+        // AVAudioRecorder.stop() は同期 return するが m4a の moov atom 書き込みは
+        // audio thread の internal queue で非同期 → ここで即 setActive(false) すると
+        // finalize が中断されて moov 無しの壊れた m4a が残る (VPN ON 環境で再現報告)。
+        // delegate (audioRecorderDidFinishRecording) で finalize 完了を待ってから
+        // 解除する。fail-safe として 1.5s timeout も仕込む。
+        scheduleAudioSessionDeactivation()
 
         AppLogger.info("Auto-saved recording after unexpected stop: \(size) bytes, \(Int(finalDuration))s", category: .recording)
 
         // Notify UI so it can present the save sheet
-        unexpectedlySavedRecording = SavedRecording(url: url, duration: finalDuration, title: title)
+        unexpectedlySavedRecording = SavedRecording(url: url, duration: finalDuration, title: title, startedAt: capturedStart)
     }
 
     // MARK: - Recorder Health
@@ -467,6 +569,16 @@ class RecordingService: NSObject, ObservableObject {
         } catch {
             AppLogger.warning("Failed to re-activate audio session: \(error)", category: .recording)
         }
+    }
+
+    /// saveLecture が currentRecordingId を読み出して Lecture.id にする際に呼ぶ。
+    /// 同じ ID で WhisperLiveDecoder の chunkCache が育っているので、Lecture.id と
+    /// 一致させることで post-stop の transcription path が cache を引き上げられる。
+    /// 取り出した時点で nil にして次の録音に備える。
+    func consumeRecordingId() -> UUID? {
+        let id = currentRecordingId
+        currentRecordingId = nil
+        return id
     }
 
     /// Pre-configure audio session so recording starts instantly
@@ -619,10 +731,21 @@ class RecordingService: NSObject, ObservableObject {
         currentLectureTitle = lectureTitle
         lowAudioSeconds = 0
         showLowAudioWarning = false
+        cumulativeLowAudioSeconds = 0
+        currentRecordingId = UUID()
 
         persistRecordingState()
         startLiveActivity()
         recorderRestartCount = 0
+
+        // 録音中は AVAudioRecorder 単独で走らせる。AVAudioEngine.installTap
+        // との並行マイク占有 (旧: WhisperLiveDecoder の live decode) は Apple
+        // 推奨外で、VPN / thermal serious / 高負荷下で AAC encoder fault →
+        // m4a finalize 失敗 (moov atom 未書込) の再現報告がある (2026-04-29、
+        // Free / VPN 環境で複数ユーザー)。「音声死守」を構造的に守るため、
+        // 録音中は Apple サポート構成 (AVAudioRecorder 単独) に統一する。
+        // 文字起こしは録音停止後の batch chunked decode (startTranscription)
+        // に集約。memory: feedback_audio_must_survive.md。
 
         // Duration timer (1Hz)
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] t in
@@ -632,6 +755,11 @@ class RecordingService: NSObject, ObservableObject {
             }
             if !self.isPaused {
                 self.recordingDuration = Date().timeIntervalSince(startTime) - self.pausedDuration
+                // 1Hz で audioLevel をサンプリングして累積 low-audio 秒数を伸ばす。pause 中は
+                // metering timer も止まっているので audioLevel は古い値のまま → ここで加算しない。
+                if self.audioLevel < self.lowAudioLevelThreshold {
+                    self.cumulativeLowAudioSeconds += 1
+                }
             }
             // Persist state every 10 seconds
             if Int(self.recordingDuration) % 10 == 0 {
@@ -676,9 +804,12 @@ class RecordingService: NSObject, ObservableObject {
                 guard let self = self, self.isRecording, !self.isPaused else { return }
                 self.audioRecorder?.updateMeters()
                 let db = self.audioRecorder?.averagePower(forChannel: 0) ?? -160
-                // Wider normalization range: -60dB...-5dB → 0...1
-                // This captures quiet lecture rooms (-50dB) through loud speech (-10dB)
-                let normalized = max(0, min(1, (db + 60) / 55))
+                // 拡張正規化レンジ: -75dB ~ 0dB → 0...1
+                // 旧 (-60...-5dB) は遠距離 lecture (-46dB 等) で bar が
+                // ほぼ static = 「マイク死んでるように見える」苦情。
+                // 75dB のダイナミックレンジで -46dB → 0.39 まで上げる。
+                // 上限を 0dB に変えても clip 警告 (>0.85) は残るので OK。
+                let normalized = max(0, min(1, (db + 75) / 75))
                 self.audioLevel = normalized
                 if self.audioLevelHistory.count >= 60 {
                     self.audioLevelHistory.removeFirst(self.audioLevelHistory.count - 30)
@@ -691,9 +822,78 @@ class RecordingService: NSObject, ObservableObject {
         }
 
         setupBackgroundTaskRenewal()
+        scheduleMaxDurationNotifications()
+        // 録音中の screen auto-lock を無効化 (画面ロックで Live Activity だけに
+        // なるとユーザーの監視性が落ちる)。stopRecording / autoSaveAndNotify で
+        // 必ず end する。
+        ScreenAwakeLock.shared.begin()
         AppLogger.debug("Recording started", category: .recording)
     }
-    
+
+    // MARK: - 切り忘れ通知 (local notifications)
+    //
+    // 現実の使用シナリオ: 学生が録音開始 → ポケットに iPhone → 授業中で画面見ない
+    // → 3 時間経過 → 180min cap で silent auto-stop → ユーザー知らず、次の授業も
+    // 録れてると思い込む。foreground 5 分前バナーは見えない。
+    // 対策: max 直前/到達時に local notification を投げて、画面ロック中・別アプリ中
+    // でもユーザーに気付かせる。stopRecording で全 cancel するので残らない。
+    private static let maxNotificationIds = [
+        "lecsy.maxDuration.warning30min",
+        "lecsy.maxDuration.warning5min",
+        "lecsy.maxDuration.reached",
+    ]
+
+    private func scheduleMaxDurationNotifications() {
+        let center = UNUserNotificationCenter.current()
+        // 静かに authorization request (初録音時)。denied でも害はない (UNAuthorization
+        // status を別途見る方法もあるが、毎回 request しても denied は no-op)。
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            Task { @MainActor [weak self] in
+                self?.installMaxDurationNotifications()
+            }
+        }
+    }
+
+    private func installMaxDurationNotifications() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(
+            withIdentifiers: Self.maxNotificationIds
+        )
+
+        let warning30: TimeInterval = max(60, maxRecordingDuration - 1800) // 30 min before
+        let warning5:  TimeInterval = max(60, maxRecordingDuration - 300)  // 5 min before
+        let reached:   TimeInterval = maxRecordingDuration
+
+        let entries: [(id: String, after: TimeInterval, title: String, body: String)] = [
+            (Self.maxNotificationIds[0], warning30,
+             "Recording — 30 min left",
+             "Lecsy will auto-stop at 3 hours. Tap to stop now if you're done."),
+            (Self.maxNotificationIds[1], warning5,
+             "Recording — 5 min left",
+             "Lecsy will auto-stop in 5 minutes. Tap to keep your audio safe."),
+            (Self.maxNotificationIds[2], reached,
+             "Recording stopped automatically",
+             "Reached the 3-hour limit. Your audio is saved — start a new recording to continue."),
+        ]
+
+        for entry in entries {
+            let content = UNMutableNotificationContent()
+            content.title = entry.title
+            content.body = entry.body
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: entry.after, repeats: false)
+            let request = UNNotificationRequest(identifier: entry.id, content: content, trigger: trigger)
+            center.add(request, withCompletionHandler: nil)
+        }
+    }
+
+    private func cancelMaxDurationNotifications() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: Self.maxNotificationIds
+        )
+    }
+
     /// Pause recording
     func pauseRecording() {
         guard isRecording, !isPaused else { return }
@@ -702,6 +902,7 @@ class RecordingService: NSObject, ObservableObject {
         audioRecorder?.pause()
         isPaused = true
         pauseStartTime = Date()
+        WhisperLiveDecoder.shared.pause()
 
         // Persist state immediately (safety net if app is killed while paused)
         persistRecordingState()
@@ -726,6 +927,7 @@ class RecordingService: NSObject, ObservableObject {
         let remaining = max(1, maxRecordingDuration - recordingDuration)
         audioRecorder?.record(forDuration: remaining)
         isPaused = false
+        WhisperLiveDecoder.shared.resume()
 
         // Persist state immediately
         persistRecordingState()
@@ -739,6 +941,16 @@ class RecordingService: NSObject, ObservableObject {
 
         // Eagerly preload WhisperKit so it's hot by the time the AAC file finalizes.
         Task { await TranscriptionService.shared.warmupModel() }
+
+        // Free 用 live decoder を停止。tap を外して engine を止め、queue は
+        // 背景で drain。currentRecordingId は saveLecture が消費するまで残す。
+        WhisperLiveDecoder.shared.stop()
+        // 手動 stop なので予約してた切り忘れ通知は全 cancel。
+        // autoSaveAndNotify (180min 到達) 経路は cancel しない —
+        // "reached" 通知をユーザーに届けたいので。
+        cancelMaxDurationNotifications()
+        // startRecording で begin した auto-lock 抑制を解除。
+        ScreenAwakeLock.shared.end()
 
         isStoppingIntentionally = true
         audioRecorder?.stop()
@@ -760,8 +972,19 @@ class RecordingService: NSObject, ObservableObject {
         // Clear crash-recovery state (recording completed normally)
         clearPersistedRecordingState()
 
-        // End Live Activity
-        endLiveActivity()
+        // Live Activity transition:
+        //   - Pro: Deepgram captioning is already done in real time, so the
+        //     activity ends right here (legacy behavior).
+        //   - Free: WhisperKit batch is about to start, so we keep the
+        //     activity alive and flip it into `.transcribing`. The
+        //     TranscriptionProgressService observer in init() will drive
+        //     chunk index / ETA from there, and RecordView calls
+        //     `finishLiveActivityWithDone()` when the transcript settles.
+        if PlanService.shared.isPaid {
+            endLiveActivity()
+        } else {
+            transitionLiveActivityToTranscribing()
+        }
 
         // End background task
         endBackgroundTask()
@@ -772,9 +995,15 @@ class RecordingService: NSObject, ObservableObject {
         pausedDuration = 0
         audioRecorder = nil // Release old recorder so stale delegates are ignored
 
-        // Deactivate audio session
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        isAudioSessionPrepared = false
+        // Deactivate audio session — but wait for the m4a moov atom to be written.
+        // AVAudioRecorder.stop() returns synchronously yet finalization happens on
+        // the audio thread's internal queue. Calling setActive(false) immediately
+        // can interrupt that finalization and leave a moov-less, unplayable m4a
+        // (reproduced by users on VPN where iOS network/audio threads are loaded).
+        // The delegate (audioRecorderDidFinishRecording) deactivates as soon as
+        // finalization completes; this is the fail-safe in case the delegate
+        // never fires.
+        scheduleAudioSessionDeactivation()
 
         // Validate recording file — but be lenient: return the URL even if
         // we can't verify, since partial data is better than losing everything
@@ -932,6 +1161,91 @@ class RecordingService: NSObject, ObservableObject {
 
         self.liveActivity = nil
     }
+
+    /// Switch the Live Activity into the `.transcribing` phase. Called from
+    /// stopRecording on the Free path so the activity stays alive while
+    /// the post-stop WhisperKit batch grinds through chunks.
+    /// chunk index/total/eta are filled in later by the
+    /// TranscriptionProgressService observer.
+    private func transitionLiveActivityToTranscribing() {
+        guard let liveActivity = liveActivity else { return }
+        let contentState = LecsyWidgetAttributes.ContentState(
+            recordingDuration: currentDuration,
+            isRecording: false,
+            recordingStartDate: nil,
+            isPaused: false,
+            phase: .transcribing,
+            transcribeChunkIndex: nil,
+            transcribeChunkTotal: nil,
+            transcribeETASeconds: nil
+        )
+        Task { @MainActor in
+            await liveActivity.update(using: contentState, alertConfiguration: nil)
+        }
+    }
+
+    /// Update the in-flight transcribing Live Activity with the current
+    /// chunk index / total / ETA. Driven by the
+    /// TranscriptionProgressService observer set up in init.
+    private func updateLiveActivityTranscribeProgress(index: Int, total: Int, etaSeconds: Int?) {
+        guard let liveActivity = liveActivity else { return }
+        let contentState = LecsyWidgetAttributes.ContentState(
+            recordingDuration: currentDuration,
+            isRecording: false,
+            recordingStartDate: nil,
+            isPaused: false,
+            phase: .transcribing,
+            transcribeChunkIndex: index,
+            transcribeChunkTotal: total,
+            transcribeETASeconds: etaSeconds
+        )
+        Task { @MainActor in
+            await liveActivity.update(using: contentState, alertConfiguration: nil)
+        }
+    }
+
+    /// Background 中で chunked decode が一時停止した時に LA を `.paused` 相当に
+    /// 切替える。`isPaused = true` を立てることで widget 側の表示分岐を可能
+    /// にする (widget は isPaused を見て "Paused — open Lecsy" を出す)。
+    /// chunk index/total は最終既知値を保持。再アクティブ時は通常 progress
+    /// 更新で上書きされる。
+    private func updateLiveActivityTranscribePauseState(isPaused: Bool, index: Int, total: Int) {
+        guard let liveActivity = liveActivity else { return }
+        let contentState = LecsyWidgetAttributes.ContentState(
+            recordingDuration: currentDuration,
+            isRecording: false,
+            recordingStartDate: nil,
+            isPaused: isPaused,
+            phase: .transcribing,
+            transcribeChunkIndex: index,
+            transcribeChunkTotal: total,
+            transcribeETASeconds: nil
+        )
+        Task { @MainActor in
+            await liveActivity.update(using: contentState, alertConfiguration: nil)
+        }
+    }
+
+    /// Public entry point used by RecordView when transcription resolves
+    /// (success or failure). Flips the activity to `.done` for ~3 seconds
+    /// so the user sees a checkmark, then dismisses it. No-op if there is
+    /// no active activity (Pro path which already ended at stopRecording).
+    func finishLiveActivityWithDone() {
+        guard let liveActivity = liveActivity else { return }
+        let doneState = LecsyWidgetAttributes.ContentState(
+            recordingDuration: currentDuration,
+            isRecording: false,
+            recordingStartDate: nil,
+            isPaused: false,
+            phase: .done
+        )
+        Task { @MainActor in
+            await liveActivity.update(using: doneState, alertConfiguration: nil)
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            await liveActivity.end(using: doneState, dismissalPolicy: .immediate)
+        }
+        self.liveActivity = nil
+    }
     
     // MARK: - Background Task
 
@@ -958,6 +1272,26 @@ class RecordingService: NSObject, ObservableObject {
         }
     }
     
+    /// AVAudioRecorder.stop() の m4a finalize 完了を待ってから AVAudioSession を
+    /// deactivate するための fail-safe timeout。delegate
+    /// (audioRecorderDidFinishRecording) が呼ばれれば即解除されるが、呼ばれない
+    /// 異常系のために 1.5s 後に必ず deactivate する。`deactivateAudioSessionIfNeeded()`
+    /// は冪等なので、delegate と timeout の両方が走っても二重解除にならない。
+    private func scheduleAudioSessionDeactivation() {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            self?.deactivateAudioSessionIfNeeded()
+        }
+    }
+
+    /// 冪等に AVAudioSession を deactivate する。`isAudioSessionPrepared` を
+    /// 「まだ解除していない」フラグに兼用しているので、2 回目以降の呼び出しは no-op。
+    private func deactivateAudioSessionIfNeeded() {
+        guard isAudioSessionPrepared else { return }
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        isAudioSessionPrepared = false
+    }
+
     /// Recording error
     enum RecordingError: LocalizedError {
         case permissionDenied
@@ -987,6 +1321,10 @@ extension RecordingService: AVAudioRecorderDelegate {
             // Ignore callbacks from old recorders or intentional stops
             if isStoppingIntentionally {
                 isStoppingIntentionally = false
+                // m4a の moov atom 書き込みが完了したシグナル → 安全に session を解除できる。
+                // stopRecording / autoSaveAndNotify は scheduleAudioSessionDeactivation()
+                // の fail-safe timeout だけ仕込んで、実際の解除をここに任せている。
+                deactivateAudioSessionIfNeeded()
                 return
             }
             guard recorder === audioRecorder else { return }

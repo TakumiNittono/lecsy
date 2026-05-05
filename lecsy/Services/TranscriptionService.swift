@@ -52,10 +52,25 @@ class TranscriptionService: ObservableObject {
     // — that's a separate entitlement Apple doesn't expose to third-party
     // apps. So we instead pause the chunk loop at safe boundaries when the
     // app resigns active, and resume it when the app becomes active again.
-    private var isAppActive: Bool = true
+    /// `Published` にしてあるのは、Live Activity が「transcription 中に
+    /// app が background に行った → GPU 投入できず chunked が pause した」
+    /// を表示で反映するため。RecordingService が観測して LA を "Paused"
+    /// 状態に切り替える。chunked の中身的な制御 (`awaitForegroundIfNeeded`)
+    /// はこの値の private な使われ方と独立。
+    @Published private(set) var isAppActive: Bool = true
     private var foregroundContinuation: CheckedContinuation<Void, Never>?
     private var backgroundObserverToken: NSObjectProtocol?
     private var foregroundObserverToken: NSObjectProtocol?
+
+    // MARK: - Memory pressure observer (jetsam preempt)
+    //
+    // iOS は app foreground budget (4GB iPad で ~1.4GB / 6GB iPad で ~3GB) を
+    // 超えると jetsam で sudden-kill する。signal handler を経由しないので
+    // Sentry にすら届かない。kill が起きる前に DispatchSource からの
+    // .warning / .critical を受け取り、最も重い消費者である whisperKit2
+    // (dual instance、+460MB) を nil 化して single instance に runtime
+    // downgrade する。Peter Ullsperger 2026-05-05 incident の構造的対策。
+    private var memoryPressureSource: DispatchSourceMemoryPressure?
 
     // Timeout settings
     private let modelLoadTimeout: TimeInterval = 600 // 10 minutes (460MB needs time on slower connections)
@@ -144,6 +159,37 @@ class TranscriptionService: ObservableObject {
         // Observe foreground/background transitions so the chunked
         // transcription loop can pause when iOS revokes GPU access.
         setupAppStateObservers()
+        // Observe memory pressure so we can shed whisperKit2 before iOS
+        // jetsam-kills the whole process.
+        setupMemoryPressureObserver()
+    }
+
+    private func setupMemoryPressureObserver() {
+        let source = DispatchSource.makeMemoryPressureSource(
+            eventMask: [.warning, .critical],
+            queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            guard let self = self else { return }
+            let event = source.data
+            let level: String
+            if event.contains(.critical) {
+                level = "critical"
+            } else if event.contains(.warning) {
+                level = "warning"
+            } else {
+                level = "normal"
+            }
+            AppLogger.warning("Memory pressure: \(level) — shedding dual WhisperKit instance", category: .transcription)
+            AppLogger.breadcrumb("memory_pressure: \(level)", category: .transcription)
+            // dual instance を解放。次の chunk iteration で `whisperKit2 != nil`
+            // が false になり、自動的に single instance path に降格する。
+            // 重い CoreML graph + ANE buffer がまとめて解放されるので、jetsam
+            // 直前の bailout として効果が大きい。
+            self.whisperKit2 = nil
+        }
+        source.resume()
+        memoryPressureSource = source
     }
 
     deinit {
@@ -542,6 +588,7 @@ class TranscriptionService: ObservableObject {
 
     private func loadModelInternal() async throws {
         AppLogger.debug("Loading WhisperKit model (\(preferredModel))", category: .transcription)
+        AppLogger.breadcrumb("model: load start \(preferredModel) bundled=\(isModelBundled)", category: .transcription)
 
         // Use ANE (Apple Neural Engine) for faster model loading & inference
         // ANE for encoder (compute-heavy), GPU for decoder (faster compile, good perf)
@@ -551,13 +598,19 @@ class TranscriptionService: ObservableObject {
         )
 
         if let bundledPath = bundledModelPath {
-            downloadStatusText = "Loading bundled model..."
+            // Bundled モデルでも実機 cold start で CoreML JIT compile が
+            // 80-130s 走る。LectureDetailView の "Preparing AI model..." UI は
+            // downloadElapsedSeconds > 0 で経過時間を出す設計なので、bundled
+            // でも timer を回しておかないと「無音 80s 待ち」になり UX が悪い。
+            downloadStatusText = "Preparing AI model on this device..."
+            startElapsedTimer()
             let loadStart = CFAbsoluteTimeGetCurrent()
             AppLogger.debug("Using bundled model at: \(bundledPath)", category: .transcription)
             whisperKit = try await WhisperKit(WhisperKitConfig(
                 modelFolder: bundledPath,
                 computeOptions: compute
             ))
+            stopElapsedTimer()
         } else {
             let cached = isModelAvailable()
             downloadStatusText = cached ? "Loading AI model..." : "Downloading AI model (~460 MB)..."
@@ -589,6 +642,7 @@ class TranscriptionService: ObservableObject {
         UserDefaults.standard.set(true, forKey: "lecsy.hasCompletedFirstModelLoad")
         updateMultilingualKitStatus()
         AppLogger.info("WhisperKit model loading completed (\(preferredModel))", category: .transcription)
+        AppLogger.breadcrumb("model: load done", category: .transcription)
 
         // Load second instance for parallel chunk processing on capable devices (>=6GB RAM).
         // ~244MB extra footprint for the small model — safe on A16+/iPhone 14 Pro and newer.
@@ -599,9 +653,14 @@ class TranscriptionService: ObservableObject {
         }
     }
 
-    /// Capable-device check: skip second instance on iPhone 12 and below.
+    /// Capable-device check: skip second instance on memory-tight devices.
+    /// 6GB threshold は楽観的すぎた。`physicalMemory` は total RAM で、app の
+    /// foreground budget はその約半分なので、6GB iPad だと dual instance + 全 PCM
+    /// alloc で iOS jetsam に直撃する。Peter Ullsperger 2026-05-05 incident で
+    /// Sentry に何も飛ばない silent kill が確認されたため 8GB に引き上げ。
+    /// 8GB+ = M1/M2 iPad Pro / iPad Air 5+ / iPhone 15 Pro+ のみが dual を使う。
     private static var shouldUseDualInstance: Bool {
-        ProcessInfo.processInfo.physicalMemory >= 6_000_000_000
+        ProcessInfo.processInfo.physicalMemory >= 8_000_000_000
     }
 
     /// Load the second WhisperKit instance (best-effort; failure is non-fatal).
@@ -696,7 +755,13 @@ class TranscriptionService: ObservableObject {
     /// Execute transcription
     private var activeTranscriptionURL: URL?
 
-    func transcribe(audioURL: URL, lectureId: UUID? = nil) async throws -> TranscriptionResult {
+    /// - Parameter skipPreprocess: caller が既に音声を正規化済 (例: LectureDetailView の
+    ///   再文字起こし path で `AudioEnhancementService.enhance` を通った後) のときに `true`。
+    ///   `preprocessAudioIfBeneficial` は **ファイル全体を Float32 PCM buffer に load** する
+    ///   ため、長尺 (1 hr 級) の音声で iPad の foreground memory budget を超えて
+    ///   silent-kill される事故が出ていた (2026-05-05 Peter Ullsperger incident)。
+    ///   既に enhance 済の path では HPF + RMS を二重がけする意味も無いので skip する。
+    func transcribe(audioURL: URL, lectureId: UUID? = nil, skipPreprocess: Bool = false) async throws -> TranscriptionResult {
         // Prevent duplicate transcription of the same file
         if activeTranscriptionURL == audioURL {
             AppLogger.warning("Transcription already in progress for: \(audioURL.lastPathComponent)", category: .transcription)
@@ -705,6 +770,8 @@ class TranscriptionService: ObservableObject {
         activeTranscriptionURL = audioURL
         defer { activeTranscriptionURL = nil }
 
+        AppLogger.breadcrumb("transcribe: enter (skipPreprocess=\(skipPreprocess))", category: .transcription)
+
         // #1: Pre-process audio — high-pass filter + RMS normalization.
         // Removes low-frequency HVAC rumble and boosts quiet recordings so
         // Whisper hallucinates less.
@@ -712,19 +779,27 @@ class TranscriptionService: ObservableObject {
         // SAFETY GUARDS:
         //  - Run on a detached background task so the per-sample loop
         //    never blocks the main actor (this service is @MainActor).
-        //  - Skip preprocessing for recordings longer than 15 minutes:
-        //    loading a 60-min PCM buffer into RAM would OOM-kill the app.
+        //  - Skip preprocessing when caller has already normalized (skipPreprocess).
+        //  - Skip preprocessing for files >10MB (≈ 21 min mono @ 64kbps AAC):
+        //    loading the full PCM buffer into RAM would OOM-kill the app.
+        //    旧来は 50MB だったが、Peter Ullsperger の iPad で sudden-death
+        //    crash が出たため、安全側に倒した (2026-05-05)。
         //  - Any failure silently falls back to the original audio.
         let workingURL: URL
-        if let size = try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? Int64,
-           size < 50_000_000 { // ~15 min @ 64kbps AAC ≈ 7 MB; cap at 50 MB for safety
+        if skipPreprocess {
+            AppLogger.info("Skipping audio preprocessing — caller already normalized", category: .transcription)
+            workingURL = audioURL
+        } else if let size = try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? Int64,
+           size < 10_000_000 {
+            AppLogger.breadcrumb("transcribe: preprocess start (\(size / 1024 / 1024)MB)", category: .transcription)
             let processed = await Task.detached(priority: .userInitiated) { [weak self] () -> URL? in
                 guard let self = self else { return nil }
                 return try? await self.preprocessAudioIfBeneficial(sourceURL: audioURL)
             }.value
             workingURL = processed ?? audioURL
+            AppLogger.breadcrumb("transcribe: preprocess done", category: .transcription)
         } else {
-            AppLogger.info("Skipping audio preprocessing for large file (>50MB)", category: .transcription)
+            AppLogger.info("Skipping audio preprocessing for large file (>10MB)", category: .transcription)
             workingURL = audioURL
         }
         defer {
@@ -799,7 +874,12 @@ class TranscriptionService: ObservableObject {
         decodeOptions.compressionRatioThreshold = 2.8 // Less eager to flag as "repetition"
         decodeOptions.logProbThreshold = -1.5 // Keep more lower-confidence segments
         decodeOptions.noSpeechThreshold = 0.8 // Only drop clearly-silent audio
-        decodeOptions.temperatureFallbackCount = 3 // More retries → better recovery when fallback fires
+        // fallback 回数は 3 → 1 へ削減。極小音量 (RMS < 0.01) や強ノイズで
+        // 第一パス (temp=0) が hallucination を吐くと、fallback の temp 上げ
+        // (0.2 / 0.4 / 0.6) でも根本の SNR 問題は解決しない → 60-180s/chunk を
+        // 浪費して 5min 録音が 7-12 分かかる事故が出た。1 fallback だけ
+        // 残し、それでもダメなら捨てる方が体感速度に効く。
+        decodeOptions.temperatureFallbackCount = 1
         decodeOptions.temperature = 0 // Start greedy; fallback bumps temperature
 
         // Lecture context prompt — helps Whisper with academic vocabulary,
@@ -922,8 +1002,39 @@ class TranscriptionService: ObservableObject {
         // transcription can continue running even when the user switches to
         // another app or locks the screen. Stopped automatically via defer.
         BackgroundKeepAlive.shared.begin()
+        // Keep the display awake while we crunch chunks. iOS pauses the
+        // GPU command queue once the screen sleeps and the app resigns
+        // active, which strands the chunk loop at the next safe boundary.
+        ScreenAwakeLock.shared.begin()
+
+        // Memory pressure observer: 8GB threshold で dual instance を有効に
+        // していても、in-field では予期しない第三者プロセス (写真アプリの
+        // バックグラウンド処理 / メール indexing など) で free memory が
+        // 急激に縮むことがある。warning を受けた瞬間に whisperKit2 を nil に
+        // 落として dual → single 縮退する。chunk loop の `useDual` ガードが
+        // 次のイテレーションで自動的に single 経路に切り替わる (memory
+        // `project_low_spec_devices_constraint.md` の fail-safe)。
+        // 1 度 dual を捨てたら同じ run 内では再ロードしない (oscillation 回避)。
+        let memSource = DispatchSource.makeMemoryPressureSource(
+            eventMask: [.warning, .critical],
+            queue: DispatchQueue.global(qos: .userInitiated)
+        )
+        memSource.setEventHandler { [weak self] in
+            guard let self = self else { return }
+            Task { @MainActor in
+                if self.whisperKit2 != nil {
+                    AppLogger.warning("Memory pressure detected — dropping dual instance to single", category: .transcription)
+                    AppLogger.breadcrumb("chunked: memory pressure → drop whisperKit2", category: .transcription)
+                    self.whisperKit2 = nil
+                }
+            }
+        }
+        memSource.resume()
+
         defer {
+            memSource.cancel()
             BackgroundKeepAlive.shared.end()
+            ScreenAwakeLock.shared.end()
             if bgTaskId != .invalid {
                 UIApplication.shared.endBackgroundTask(bgTaskId)
             }
@@ -972,6 +1083,9 @@ class TranscriptionService: ObservableObject {
 
         let totalChunks = chunks.count
         AppLogger.info("Chunked transcription: \(totalChunks) chunks for \(String(format: "%.0f", totalDuration))s audio", category: .transcription)
+        AppLogger.breadcrumb("chunked: start totalChunks=\(totalChunks) duration=\(String(format: "%.0f", totalDuration))s dual=\(whisperKit2 != nil)", category: .transcription)
+        AppLogger.setSentryTag("subsystem", value: "whisperkit_chunked")
+        AppLogger.setSentryTag("lecsy.dual_instance_active", value: whisperKit2 != nil ? "true" : "false")
 
         var allSegments: [TranscriptionResult.TranscriptionSegment] = []
         // Running transcript text accumulated incrementally. This replaces
@@ -1043,6 +1157,19 @@ class TranscriptionService: ObservableObject {
             // do but wait for the user to return.
             await awaitForegroundIfNeeded()
             try Task.checkCancellation()
+
+            // Surface chunk progress to the UI / Live Activity at the top
+            // of each iteration. Doing it here covers both dual-instance
+            // pairs and cache-hit fast paths uniformly. The first push
+            // also stamps the start time used to compute the ETA.
+            if let lectureId = lectureId {
+                TranscriptionProgressService.shared.setChunkProgress(
+                    index + 1,
+                    of: totalChunks,
+                    for: lectureId
+                )
+            }
+            AppLogger.breadcrumb("chunked: iter \(index + 1)/\(totalChunks)", category: .transcription)
 
             let useDual = (whisperKit2 != nil) && (index + 1 < totalChunks)
 
@@ -1585,6 +1712,7 @@ class TranscriptionService: ObservableObject {
         label: String
     ) async -> (segments: [(start: Float, end: Float, text: String)], language: String?)? {
         // Export chunk
+        AppLogger.breadcrumb("\(label): export start \(String(format: "%.0f", start))-\(String(format: "%.0f", end))s", category: .transcription)
         let chunkURL: URL
         do {
             chunkURL = try await exportAudioChunk(from: audioURL, start: start, end: end, chunkIndex: Int(start))
@@ -1596,6 +1724,7 @@ class TranscriptionService: ObservableObject {
         defer { try? FileManager.default.removeItem(at: chunkURL) }
 
         // Transcribe with timeout
+        AppLogger.breadcrumb("\(label): whisper start", category: .transcription)
         do {
             let whisperResults = try await withTimeout(seconds: timeout) {
                 try await whisperKit.transcribe(
@@ -1603,6 +1732,7 @@ class TranscriptionService: ObservableObject {
                     decodeOptions: decodeOptions
                 )
             }
+            AppLogger.breadcrumb("\(label): whisper done", category: .transcription)
 
             guard let whisperResult = whisperResults.first else {
                 AppLogger.warning("\(label) returned no results", category: .transcription)
@@ -1704,7 +1834,14 @@ class TranscriptionService: ObservableObject {
         let targetRMS: Double = 0.1 // -20 dBFS
         if rms > 0.001 && rms < targetRMS {
             let rawGain = targetRMS / rms
-            let gain = Float(min(rawGain, 6.0)) // cap at +15.6 dB
+            // 旧来は 6x cap (+15.6 dB) だったが、講義室遠めの距離録音 (RMS 0.005
+            // 相当 / -46 dBFS) で whisper が hallucination を量産し、fallback
+            // ループに突入して chunk あたり 60-180s 持っていかれる事例が出た。
+            // 12x (+21.6 dB) まで許容することで、極小音量の入力でも -24 dBFS
+            // 程度まで持ち上がり whisper が解釈可能なレンジに入る。下の soft-clip
+            // が [-1, 1] にクリップするので過大入力でも safe。clip 由来の
+            // 高調波歪みは whisper の認識にほぼ影響しない (実測)。
+            let gain = Float(min(rawGain, 12.0)) // cap at +21.6 dB
             for ch in 0..<channelCount {
                 let data = channelData[ch]
                 for i in 0..<frames {
@@ -1769,6 +1906,17 @@ class TranscriptionService: ObservableObject {
             return []
         }
         return entries
+    }
+
+    /// Internal にしてテストから直接 chunk を仕込めるようにする (Phase B 用)。
+    /// 本番経路では decodeLiveChunk と runChunkedTranscription からのみ呼ばれる。
+    func appendToChunkCachePublic(
+        lectureId: UUID,
+        start: Double,
+        end: Double,
+        segments: [TranscriptionResult.TranscriptionSegment]
+    ) {
+        appendToChunkCache(lectureId: lectureId, start: start, end: end, segments: segments)
     }
 
     private func appendToChunkCache(
@@ -1898,6 +2046,235 @@ class TranscriptionService: ObservableObject {
         whisperKit = nil
         whisperKit2 = nil
         isModelLoaded = false
+    }
+
+    // MARK: - Live decode hook (for WhisperLiveDecoder, Free plan only)
+    //
+    // 録音中の WhisperLiveDecoder は AVAudioEngine tap で 16kHz mono Float[]
+    // を 45秒ぶん溜めて、これを叩いてくる。WhisperKit / DecodingOptions の型を
+    // WhisperLiveDecoder に持たせないため、decode + cache 書き込みは全部こちら
+    // で完結させる。
+    //
+    // Pro 経路は呼ばれない (WhisperLiveDecoder.start が isPaid で即 return する)。
+    // 仮に Pro が誤って呼んでも cache 書き込みが起きるだけで、Pro の Deepgram
+    // path は cache を参照しないので影響ゼロ。
+
+    enum LiveDecodeOutcome {
+        case success(segmentCount: Int, text: String)
+        case empty
+        case failure(String)
+    }
+
+    /// 単一 chunk (16kHz mono Float[]) を decode して chunkCache に書き込む。
+    /// WhisperLiveDecoder の decodeChunk から呼ばれる。
+    func decodeLiveChunk(
+        samples: [Float],
+        startSeconds: TimeInterval,
+        endSeconds: TimeInterval,
+        lectureId: UUID,
+        language: TranscriptionLanguage
+    ) async -> LiveDecodeOutcome {
+        guard let kit = whisperKit else {
+            return .failure("WhisperKit not loaded")
+        }
+
+        // 背景時 (画面ロック含む) は GPU 投入できない (BackgroundExecutionNotPermitted)。
+        // 前面復帰まで suspend する。queue の OOM 防止は WhisperLiveDecoder 側で
+        // 上限を切って古い chunk を drop する設計 — drop された分は m4a 経由で
+        // post-stop の chunked path が復元する。
+        await awaitForegroundIfNeeded()
+
+        var decodeOptions = DecodingOptions()
+        decodeOptions.language = language.rawValue
+        decodeOptions.usePrefillPrompt = true
+        decodeOptions.detectLanguage = false
+        decodeOptions.compressionRatioThreshold = 2.8
+        decodeOptions.logProbThreshold = -1.5
+        decodeOptions.noSpeechThreshold = 0.8
+        // fallback は 1 で十分 (詳しい根拠は chunked path 側のコメント参照)。
+        // live decoder は短い chunk (5-15s) なので fallback ループに入ると
+        // 録音中の体感が一気に悪化する。1 で打ち切って次に進む。
+        decodeOptions.temperatureFallbackCount = 1
+        decodeOptions.temperature = 0
+        // VAD chunking: 沈黙区間を skip して decode 時間を短縮。
+        // 講義録音は 20-40% が間/沈黙なので体感 30%+ の高速化。
+        // chunk が 15s と短いので VAD が極小区間を生むリスクは低い。
+        decodeOptions.chunkingStrategy = .vad
+        if let tokenizer = kit.tokenizer {
+            let prompt = language.lecturePrompt
+            decodeOptions.promptTokens = tokenizer.encode(text: prompt)
+                .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+        }
+
+        // Float[] → 一時 WAV → audioPath transcribe。
+        // audioArray オーバーロードは現行版 (4引数) と deprecated 版 (3引数) が
+        // 両方とも 3引数 call にマッチして ambiguous になる。型注釈による
+        // 解決も `WhisperKit.TranscriptionResult` が module 名と class 名の衝突で
+        // 書けないので、既存 runSingleTranscription と同じ audioPath 経路に
+        // 揃える。WAV 書き込み <50ms、I/O のオーバーヘッドは無視できる。
+        let tempURL: URL
+        do {
+            tempURL = try writeFloatSamplesToWAV(samples)
+        } catch {
+            return .failure("Failed to write temp WAV: \(error.localizedDescription)")
+        }
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let whisperResults = try? await withTimeout(seconds: perChunkTimeout) {
+            try await kit.transcribe(audioPath: tempURL.path, decodeOptions: decodeOptions)
+        }
+        guard let results = whisperResults, let whisperResult = results.first else {
+            return .failure("Decode failed or empty")
+        }
+
+        let segments: [TranscriptionResult.TranscriptionSegment] = whisperResult.segments.compactMap { segment -> TranscriptionResult.TranscriptionSegment? in
+            let cleaned = TranscriptionResult.TranscriptionSegment.stripWhisperTokens(segment.text)
+            let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { return nil }
+            return TranscriptionResult.TranscriptionSegment(
+                startTime: TimeInterval(segment.start) + startSeconds,
+                endTime: TimeInterval(segment.end) + startSeconds,
+                text: trimmed
+            )
+        }
+
+        // hallucination 抑制 (long repetition)
+        let joinedText = segments.map(\.text).joined(separator: " ")
+        if isRepetitive(joinedText) {
+            AppLogger.warning("Live decode chunk \(Int(startSeconds))-\(Int(endSeconds))s repetitive — discarding", category: .transcription)
+            return .empty
+        }
+
+        appendToChunkCache(
+            lectureId: lectureId,
+            start: startSeconds,
+            end: endSeconds,
+            segments: segments
+        )
+
+        return .success(segmentCount: segments.count, text: joinedText)
+    }
+
+    /// post-stop 経路で「live decode で既に決着した範囲」を読み出す。
+    /// 戻り値は (start, end, segments) を start 昇順でソートした配列。
+    func loadLiveDecodedChunks(lectureId: UUID) -> [(start: Double, end: Double, segments: [TranscriptionResult.TranscriptionSegment])] {
+        let entries = loadChunkCache(lectureId: lectureId)
+        return entries
+            .sorted { $0.start < $1.start }
+            .map { (start: $0.start, end: $0.end, segments: $0.segments) }
+    }
+
+    /// Live decode cache の完成度を評価する単一の真実。
+    /// `cacheIsComplete` が true なら post-stop 経路は WhisperKit を呼ばず stitch
+    /// で即完成にできる。RecordView.startTranscription と LectureDetailView の
+    /// retryTranscription、起動時の recoverStuckTranscriptions が同じロジックで
+    /// 判断できるようここに集約。
+    ///
+    /// 完成判定:
+    ///   - chunks 1個以上
+    ///   - maxEnd >= max(totalDuration - 60, totalDuration * 0.95)
+    ///   - 隣接 chunk 間の gap が 5s 以下 (overlap 込みで負値になる方は OK)
+    ///   - 最初の chunk の start が 5s 以下 (録音先頭が抜けてないか)
+    ///
+    /// gap が大きい場合は false → 呼び出し側は WhisperKit chunked path に落とす。
+    /// 既存 chunked path の cachedSegments lookup でこの cache を resume として
+    /// 拾えるので、live decode した分は retry でも完全に無駄にならない。
+    func liveCacheCompletion(
+        lectureId: UUID,
+        totalDuration: TimeInterval
+    ) -> (isComplete: Bool, chunks: [(start: Double, end: Double, segments: [TranscriptionResult.TranscriptionSegment])], coverage: TimeInterval, gapCount: Int) {
+        let chunks = loadLiveDecodedChunks(lectureId: lectureId)
+        guard !chunks.isEmpty, totalDuration > 0 else {
+            return (false, chunks, 0, 0)
+        }
+
+        let maxEnd = chunks.last?.end ?? 0
+        let firstStart = chunks.first?.start ?? 0
+
+        // gap 検出: 隣接 chunk の (next.start - prev.end) > 5s なら gap
+        var gapCount = 0
+        for i in 1..<chunks.count {
+            let prevEnd = chunks[i - 1].end
+            let nextStart = chunks[i].start
+            if nextStart - prevEnd > 5.0 {
+                gapCount += 1
+            }
+        }
+
+        let coverageThreshold = max(totalDuration - 60, totalDuration * 0.95)
+        let isComplete = maxEnd >= coverageThreshold
+            && firstStart <= 5.0
+            && gapCount == 0
+
+        return (isComplete, chunks, maxEnd, gapCount)
+    }
+
+    /// Live cache の chunk 群を 1 本の transcript に縫い合わせる共通実装。
+    /// RecordView / LectureDetailView / 起動時 recovery から呼ぶ。
+    /// chunk 内 segment は既に絶対時刻になっている前提。overlap 帯の重複は
+    /// 時刻 + テキスト一致で drop。
+    func stitchLiveCachedChunks(
+        _ chunks: [(start: Double, end: Double, segments: [TranscriptionResult.TranscriptionSegment])]
+    ) -> (text: String, segments: [TranscriptionResult.TranscriptionSegment]) {
+        var allSegments: [TranscriptionResult.TranscriptionSegment] = []
+        for chunk in chunks {
+            for seg in chunk.segments {
+                let trimmed = seg.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty { continue }
+                if let last = allSegments.last {
+                    let textEqual = last.text.lowercased() == trimmed.lowercased()
+                    let startsBeforePriorEnd = seg.startTime < last.endTime - 0.1
+                    if textEqual && startsBeforePriorEnd {
+                        continue
+                    }
+                }
+                allSegments.append(
+                    TranscriptionResult.TranscriptionSegment(
+                        startTime: seg.startTime,
+                        endTime: seg.endTime,
+                        text: trimmed
+                    )
+                )
+            }
+        }
+        let text = allSegments.map(\.text).joined(separator: " ")
+        return (text: text, segments: allSegments)
+    }
+
+    /// WhisperLiveDecoder から渡される 16kHz mono Float[] を一時 WAV ファイルに
+    /// 書き出す。WhisperKit の audioPath transcribe に食わせるための薄い橋渡し。
+    /// 戻り値は呼び出し側が `removeItem` する前提（caller の defer で消す）。
+    private func writeFloatSamplesToWAV(_ samples: [Float]) throws -> URL {
+        let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        )!
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("live_chunk_\(UUID().uuidString).wav")
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: format.settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(samples.count)
+        ) else {
+            throw TranscriptionError.audioLoadFailed
+        }
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        if let dst = buffer.floatChannelData {
+            samples.withUnsafeBufferPointer { srcPtr in
+                if let base = srcPtr.baseAddress {
+                    dst[0].update(from: base, count: samples.count)
+                }
+            }
+        }
+        try file.write(from: buffer)
+        return url
     }
 }
 

@@ -48,6 +48,11 @@ struct Lecture: Identifiable, Codable, Equatable {
     /// nil = 未対象 / 既に送信済 / WhisperKit のためそもそも送らない (意味同値)。
     var pendingCloudSync: Bool?
 
+    /// 録音中に audioLevel が low-audio 閾値を下回った累積秒数 (1Hz サンプリング、pause 時は加算しない)。
+    /// LectureDetailView の "Re-transcribe with audio boost" 自動サジェスト判定に使う。
+    /// nil = legacy 録音 / 未計測。boost retry を実行したらクリアしてバナーを引っ込める。
+    var lowAudioSeconds: Double?
+
     /// Resolved audio file URL (reconstructed from filename + Documents directory)
     var audioPath: URL? {
         guard let fileName = audioFileName,
@@ -72,7 +77,8 @@ struct Lecture: Identifiable, Codable, Equatable {
         cachedSummary: SummaryService.SummaryResult? = nil,
         cachedSummaryLanguage: String? = nil,
         ownerUserID: UUID? = nil,
-        pendingCloudSync: Bool? = nil
+        pendingCloudSync: Bool? = nil,
+        lowAudioSeconds: Double? = nil
     ) {
         self.id = id
         self.title = title
@@ -90,6 +96,7 @@ struct Lecture: Identifiable, Codable, Equatable {
         self.cachedSummaryLanguage = cachedSummaryLanguage
         self.ownerUserID = ownerUserID
         self.pendingCloudSync = pendingCloudSync
+        self.lowAudioSeconds = lowAudioSeconds
     }
 
     // MARK: - Custom Codable (handles migration from old audioPath URL to new audioFileName)
@@ -104,6 +111,7 @@ struct Lecture: Identifiable, Codable, Equatable {
         case cachedSummary, cachedSummaryLanguage
         case ownerUserID
         case pendingCloudSync
+        case lowAudioSeconds
     }
 
     init(from decoder: Decoder) throws {
@@ -142,6 +150,7 @@ struct Lecture: Identifiable, Codable, Equatable {
         cachedSummaryLanguage = try container.decodeIfPresent(String.self, forKey: .cachedSummaryLanguage)
         ownerUserID = try container.decodeIfPresent(UUID.self, forKey: .ownerUserID)
         pendingCloudSync = try container.decodeIfPresent(Bool.self, forKey: .pendingCloudSync)
+        lowAudioSeconds = try container.decodeIfPresent(Double.self, forKey: .lowAudioSeconds)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -163,6 +172,7 @@ struct Lecture: Identifiable, Codable, Equatable {
         try container.encodeIfPresent(cachedSummaryLanguage, forKey: .cachedSummaryLanguage)
         try container.encodeIfPresent(ownerUserID, forKey: .ownerUserID)
         try container.encodeIfPresent(pendingCloudSync, forKey: .pendingCloudSync)
+        try container.encodeIfPresent(lowAudioSeconds, forKey: .lowAudioSeconds)
     }
 
     // MARK: - Computed properties

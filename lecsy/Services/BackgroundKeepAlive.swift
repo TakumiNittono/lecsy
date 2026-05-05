@@ -94,6 +94,18 @@ final class BackgroundKeepAlive {
         if engine.isRunning {
             engine.stop()
         }
+        // 旧コードは player を detach せずに `playerNode = nil` していたため、
+        // 同一 process で begin/end を繰り返す user (再文字起こし retry の
+        // 多回試行など) で、孤立した AVAudioPlayerNode が engine 内部の
+        // graph に積み上がっていた。次の startEngine が新しい node を attach +
+        // connect するたびに mainMixerNode の input 数が増えていき、
+        // iPad の AU graph で音声 routing 異常を起こす疑いがあった
+        // (Peter Ullsperger 2026-05-05 incident の構造的容疑の 1 つ)。
+        // detach + reset で graph をクリーンに戻す。
+        if let player = playerNode {
+            engine.detach(player)
+        }
+        engine.reset()
         playerNode = nil
         // Don't deactivate the session here — RecordingService may still
         // need it. iOS will clean it up when nothing's playing.
