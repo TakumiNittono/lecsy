@@ -116,6 +116,11 @@ struct lecsyApp: App {
             scope.setTag(value: shortVersion, key: "app.version")
             scope.setTag(value: buildVersion, key: "app.build")
         }
+        // 後段の AppLogger.breadcrumb / capture が `[Sentry] [fatal] SDK is
+        // disabled` の log spam を出さないよう、ここで初期化完了 flag を立てる。
+        // SENTRY_DSN 未設定 build では `guard let dsn` で早期 return しているので
+        // この行に到達しない = flag false のまま = breadcrumb は no-op。
+        AppLogger.markSentryStarted()
     }
 
     var body: some Scene {

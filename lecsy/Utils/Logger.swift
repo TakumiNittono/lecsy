@@ -36,6 +36,17 @@ enum LogCategory: String {
 struct AppLogger {
     private static let subsystem: String = Bundle.main.bundleIdentifier ?? "com.lecsy.app"
 
+    /// Sentry が `SentrySDK.start` で初期化済かを示す flag。SENTRY_DSN が
+    /// Info.plist に未設定の build (Debug / 個人開発の simulator 動作確認等)
+    /// では Sentry は起動しない。その状態で `SentrySDK.addBreadcrumb` を
+    /// 呼ぶと `[Sentry] [fatal] The SDK is disabled` という fatal 級の
+    /// log spam が出てログが読めなくなる。`lecsyApp.bootSentry` の最後で
+    /// `markSentryStarted()` を呼んで true に上げ、`breadcrumb` / `capture`
+    /// 系はこの flag を見て早期 return する。
+    nonisolated(unsafe) private static var _sentryStarted: Bool = false
+    nonisolated static var isSentryStarted: Bool { _sentryStarted }
+    nonisolated static func markSentryStarted() { _sentryStarted = true }
+
     /// デバッグログ（DEBUGビルドのみ出力、Sentry 送出なし）
     nonisolated static func debug(_ message: String, category: LogCategory = .general) {
         #if DEBUG
@@ -101,6 +112,9 @@ struct AppLogger {
         logger.info("🍞 \(message)")
         #endif
         #if canImport(Sentry)
+        // SDK 未起動 (SENTRY_DSN 未設定 build) では fatal 級の log spam を吐く
+        // ので gate する。
+        guard isSentryStarted else { return }
         let crumb = Breadcrumb()
         crumb.level = .info
         crumb.category = category.rawValue
